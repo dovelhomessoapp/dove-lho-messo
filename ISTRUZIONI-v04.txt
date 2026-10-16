@@ -1,0 +1,7 @@
+DOVE L'HO MESSO? — v0.4 (cataloghi libri e logo)
+Carica tutti i file di questa cartella nel repository GitHub, nella directory principale.
+I file con lo stesso nome vengono aggiornati. Conserva i dati del sito in Safari.
+Novità: Google Books, Open Library ISBN, Open Library Search con gestione errori.
+Il logo interno ora mostra la stessa icona scelta per la schermata Home.
+Prova con ISBN 9788891839268: se un catalogo pubblico non risponde o non contiene il libro, la ricerca può non riuscire.
+Questa versione non introduce account condivisi né sincronizzazione online.
