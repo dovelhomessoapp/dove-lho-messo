@@ -1,0 +1,5 @@
+Dove l’ho messo? v0.3 — Test lettore ISBN
+
+Carica i file nella radice dello stesso repository GitHub. NON cancellare i dati del sito dal telefono.
+Novità: motore ZXing alternativo, lettura da foto, tentativo di ricerca dati online per ISBN dopo la scansione. Richiede una connessione internet per caricare il lettore (e per i dati dei libri). La riuscita su iPhone e Android resta da verificare.
+I file locali dell’archivio continuano a usare la stessa chiave. Usa dati di test finché non sarà disponibile il backup.
