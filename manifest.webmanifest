@@ -1,0 +1,1 @@
+{"name": "Dove l’ho messo?", "short_name": "Dove l’ho messo", "description": "La tua memoria, a portata di mano", "start_url": "./", "display": "standalone", "background_color": "#fcf7ff", "theme_color": "#e9d9f6", "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"}, {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"}]}
