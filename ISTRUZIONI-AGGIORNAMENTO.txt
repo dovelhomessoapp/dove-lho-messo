@@ -1,0 +1,11 @@
+Dove l’ho messo? 0.2 - aggiornamento icona
+
+1. Su GitHub apri il repository dove-lho-messo (dovelhomessoapp/dove-lho-messo).
+2. Code > Add file > Upload files. Seleziona tutti i file presenti in questa cartella (non lo ZIP).
+3. Conferma il sovrascrivere i file esistenti, se richiesto, quindi Commit changes su main.
+4. Attendi qualche minuto e aggiorna il sito in Safari.
+5. Per aggiornare l’icona sulla schermata Home iPhone, rimuovi SOLO l’icona dalla schermata Home e poi riaggiungi il sito usando Safari > Condividi > Aggiungi alla schermata Home. NON cancellare dati dei siti web né svuotare Safari.
+
+Nota: la versione 0.2 mantiene la stessa chiave di archivio locale usata dalla 0.1. Non garantiamo tuttavia la conservazione dei dati senza backup: utilizzare soltanto oggetti di prova fino a un’esportazione/backup verificato.
+
+La grafica illustrata è la seconda icona scelta.
