@@ -65,8 +65,45 @@ async function lookupISBN(){
   toast(photoData?'Libro trovato con copertina: controlla che sia la tua edizione 💜':'Libro trovato! Copertina non verificata: aggiungi una foto.');
  }catch(e){console.warn('Errore ricerca ISBN:',e);toast('Ricerca non riuscita. Riprova.')}finally{isbnLookupBtn.disabled=false;isbnLookupBtn.textContent='📖 Cerca ISBN online'}
 }
-isbnLookupBtn.addEventListener('click',lookupISBN);
-let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;$('#scanBack').hidden=false;page('scan')};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){code=code.trim();if(!code)return;stopCamera();if(code.startsWith('DLM-P-')){let p=db.places.find(x=>x.id===code.slice(6));if(!p){$('#scanResult').innerHTML='<div class="panel">Posizione non presente in questo archivio.</div>';return}let items=db.items.filter(i=>i.place===p.id);$('#scanResult').innerHTML=`<div class="panel"><h3>📍 ${safe(p.name)}</h3><p>${items.length} oggetti in questa posizione</p>${items.map(i=>`<p>📦 ${safe(i.name)}</p>`).join('')}<button class="primary full" onclick="assignScannedPlace('${p.id}')">Aggiungi qui un oggetto</button></div>`;return}if(scanForItem){scanForItem=false;page('add');restoreDraft(false);$('#barcode').value=code;saveDraft();toast('Codice inserito nel modulo');if($('#kind').value==='book'&&/^97[89]\d{10}$/.test(code))$('#lookupBook').click();return}let item=db.items.find(i=>i.barcode===code);if(item)showItem(item.id);else $('#scanResult').innerHTML='<div class="panel">Nessun oggetto associato a questo codice. Puoi aggiungerlo manualmente.</div>'}window.assignScannedPlace=id=>{editing=null;resetForm();$('#itemPlace').value=id;page('add')};$('#manualGo').onclick=()=>resolveScan($('#manualScan').value);let html5scanner=null,zxReader=null,zxControls=null,scanBusy=false,scanTimeout=null,scanHandled=false,zxingLoading=null;
+// Ricerca EAN tramite Open Products Facts: conserva il codice anche se la scheda non esiste.
+function isEAN(code){return /^\d{13}$/.test(code)&&checkISBN(code)}
+let catalogSearchBusy=false;
+async function lookupEAN(){
+ const code=normISBN($('#barcode').value);
+ if(!isEAN(code)){toast('Inserisci un codice EAN a 13 cifre valido');return}
+ if(!navigator.onLine){toast('Serve Internet per cercare il codice');return}
+ if(catalogSearchBusy)return;
+ catalogSearchBusy=true;
+ const btn=$('#lookupBook'),oldText=btn.textContent;
+ btn.disabled=true;btn.textContent='🔎 Cerco il codice EAN…';
+ try{
+  const data=await getCatalogJSON('https://world.openproductsfacts.org/api/v2/product/'+encodeURIComponent(code)+'?fields=code,product_name,product_name_it,generic_name,brands,description,image_front_url,image_url,categories');
+  const p=data?.status===1?data.product:null;
+  const name=String(p?.product_name_it||p?.product_name||p?.generic_name||'').trim();
+  if(!p||!name){toast('EAN non presente nell’archivio. Puoi inserire titolo e autore manualmente.');return}
+  // Non sovrascrive dati già inseriti dall'utente.
+  if(!$('#itemName').value.trim())$('#itemName').value=name;
+  const notes=[p.brands&&'Marca/Editore: '+p.brands,p.description||p.categories].filter(Boolean).join(' · ');
+  if(notes&&!$('#desc').value.trim())$('#desc').value=notes;
+  if(!photoData){
+   const cover=await coverToPhoto(p.image_front_url||p.image_url||'');
+   if(cover){photoData=cover;lastAutoBookCover=cover;$('#photoPreview').src=cover;$('#photoPreview').hidden=false}
+  }
+  saveDraft();toast('Prodotto trovato tramite EAN! Controlla i dati 💜');
+ }catch(e){console.warn('Ricerca EAN:',e);toast('Archivio EAN non raggiungibile. Puoi inserire i dati manualmente.')}
+ finally{catalogSearchBusy=false;btn.disabled=false;btn.textContent=oldText;updateCodeLookupLabel()}
+}
+async function lookupCode(){
+ const code=normISBN($('#barcode').value);
+ if(!code){toast('Prima scansiona o inserisci un codice');return}
+ // ISBN-13: soltanto 978 / 979, non un qualsiasi EAN a 13 cifre.
+ if((/^97[89]\d{10}$/.test(code)||/^(?:\d{9}[\dX])$/.test(code))&&checkISBN(code))return lookupISBN();
+ if(isEAN(code))return lookupEAN();
+ toast('Codice non valido: controlla le cifre inserite');
+}
+isbnLookupBtn.addEventListener('click',lookupCode);
+
+let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;$('#scanBack').hidden=false;page('scan')};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){code=code.trim();if(!code)return;stopCamera();if(code.startsWith('DLM-P-')){let p=db.places.find(x=>x.id===code.slice(6));if(!p){$('#scanResult').innerHTML='<div class="panel">Posizione non presente in questo archivio.</div>';return}let items=db.items.filter(i=>i.place===p.id);$('#scanResult').innerHTML=`<div class="panel"><h3>📍 ${safe(p.name)}</h3><p>${items.length} oggetti in questa posizione</p>${items.map(i=>`<p>📦 ${safe(i.name)}</p>`).join('')}<button class="primary full" onclick="assignScannedPlace('${p.id}')">Aggiungi qui un oggetto</button></div>`;return}if(scanForItem){scanForItem=false;page('add');restoreDraft(false);$('#barcode').value=code;saveDraft();toast('Codice inserito nel modulo');if(/^\d{13}$/.test(code)&&isEAN(code))lookupCode();return}let item=db.items.find(i=>i.barcode===code);if(item)showItem(item.id);else $('#scanResult').innerHTML='<div class="panel">Nessun oggetto associato a questo codice. Puoi aggiungerlo manualmente.</div>'}window.assignScannedPlace=id=>{editing=null;resetForm();$('#itemPlace').value=id;page('add')};$('#manualGo').onclick=()=>resolveScan($('#manualScan').value);let html5scanner=null,zxReader=null,zxControls=null,scanBusy=false,scanTimeout=null,scanHandled=false,zxingLoading=null;
 async function loadZXing(){
  if(window.ZXing?.BrowserMultiFormatReader)return true;
  if(!navigator.onLine)return false;
@@ -117,4 +154,6 @@ $('#scanImageFile').addEventListener('change',async e=>{
   }catch(e){scanStatus('Codice non riconosciuto nella foto. Riprova con un’immagine nitida, oppure inserisci il numero sotto il codice.');toast('Codice non trovato nella foto')}
   finally{e.target.value=''}
 });
-$('#startScan').onclick=startCamera;$('#stopScan').onclick=stopCamera;if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});function updateKind(){$('#authorWrap').hidden=$('#kind').value!=='book';$('#lookupBook').hidden=$('#kind').value!=='book'}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}$('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
+$('#startScan').onclick=startCamera;$('#stopScan').onclick=stopCamera;if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});function updateKind(){$('#authorWrap').hidden=$('#kind').value!=='book';$('#lookupBook').hidden=$('#kind').value!=='book'}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=isEAN(code)&&!/^97[89]/.test(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
+$('#barcode').addEventListener('input',updateCodeLookupLabel);
+$('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
