@@ -202,7 +202,7 @@ $('#barcode').addEventListener('input',updateCodeLookupLabel);
 $('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
 
 /* Aggiornamento PWA: conserva archivio e bozze nel localStorage. */
-const DLM_VERSION='08';
+const DLM_VERSION='10';
 let dlmUpdateInProgress=false;
 let dlmLastUpdateCheck=0;
 async function dlmCheckUpdate(showFeedback=false){
@@ -221,7 +221,7 @@ async function dlmCheckUpdate(showFeedback=false){
     const html=await resp.text();
     const match=html.match(/app\.js\?v=([\w.-]+)/);
     const latest=match?match[1]:null;
-    if(latest && latest!== 'v'+DLM_VERSION){
+    if(latest && latest!== 'v'+DLM_VERSION && showFeedback){
       if(showFeedback)toast('Nuova versione trovata: la carico…');
       if(document.querySelector('#add.page.active'))saveDraft();
       const address=new URL(location.href);address.searchParams.set('appv',latest);
@@ -238,8 +238,8 @@ const dlmUpdateButton=document.getElementById('updateAppBtn');
 if(dlmUpdateButton)dlmUpdateButton.addEventListener('click',()=>dlmCheckUpdate(true));
 const dlmVersionLabel=document.getElementById('appVersion');
 if(dlmVersionLabel)dlmVersionLabel.textContent='Versione '+DLM_VERSION;
-window.addEventListener('pageshow',()=>{if(Date.now()-dlmLastUpdateCheck>300000){dlmLastUpdateCheck=Date.now();dlmCheckUpdate(false)}});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-dlmLastUpdateCheck>300000){dlmLastUpdateCheck=Date.now();dlmCheckUpdate(false)}});
+// Controllo manuale: evita ricaricamenti spontanei mentre si scorre.
+// Il pulsante Aggiorna app resta disponibile quando necessario.
 
 
 /* Backup locale v07: mai cancellare i dati prima della validazione. */
