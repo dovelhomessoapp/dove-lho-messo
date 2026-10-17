@@ -202,7 +202,7 @@ $('#barcode').addEventListener('input',updateCodeLookupLabel);
 $('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
 
 /* Aggiornamento PWA: conserva archivio e bozze nel localStorage. */
-const DLM_VERSION='06';
+const DLM_VERSION='07';
 let dlmUpdateInProgress=false;
 let dlmLastUpdateCheck=0;
 async function dlmCheckUpdate(showFeedback=false){
@@ -240,3 +240,67 @@ const dlmVersionLabel=document.getElementById('appVersion');
 if(dlmVersionLabel)dlmVersionLabel.textContent='Versione '+DLM_VERSION;
 window.addEventListener('pageshow',()=>{if(Date.now()-dlmLastUpdateCheck>300000){dlmLastUpdateCheck=Date.now();dlmCheckUpdate(false)}});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-dlmLastUpdateCheck>300000){dlmLastUpdateCheck=Date.now();dlmCheckUpdate(false)}});
+
+
+/* Backup locale v07: mai cancellare i dati prima della validazione. */
+(function(){
+  const exportBtn=document.getElementById('exportArchiveBtn');
+  const importBtn=document.getElementById('importArchiveBtn');
+  const fileInput=document.getElementById('importArchiveFile');
+  const status=document.getElementById('archiveStatus');
+  if(!exportBtn||!importBtn||!fileInput)return;
+  function report(message){if(status)status.textContent=message;toast(message)}
+  function validText(v,max){return typeof v==='string'&&v.length<=max}
+  function validateArchive(data){
+    if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Formato backup non valido');
+    if(data.format!=='dove-lho-messo-backup'||data.schema!==1)throw Error('File non riconosciuto come backup di Dove l’ho messo?');
+    const content=data.archive;
+    if(!content||!Array.isArray(content.places)||!Array.isArray(content.items))throw Error('Archivio incompleto');
+    if(content.places.length>10000||content.items.length>30000)throw Error('Archivio troppo grande');
+    const placeIDs=new Set(),itemIDs=new Set();
+    for(const p of content.places){
+      if(!p||typeof p!=='object'||!validText(p.id,64)||!/^[a-zA-Z0-9_-]+$/.test(p.id)||placeIDs.has(p.id)||!validText(p.name,1000))throw Error('Posizione non valida o duplicata');
+      placeIDs.add(p.id);
+    }
+    for(const i of content.items){
+      if(!i||typeof i!=='object'||!validText(i.id,64)||!/^[a-zA-Z0-9_-]+$/.test(i.id)||itemIDs.has(i.id)||!['book','object'].includes(i.kind)||!validText(i.name,500)||!i.name.trim())throw Error('Oggetto o libro non valido');
+      itemIDs.add(i.id);
+      for(const prop of ['author','barcode','desc','place','value'])if(i[prop]!=null&&!validText(i[prop],50000))throw Error('Dati non validi in '+prop);
+      if(i.photo!=null){if(!validText(i.photo,12000000))throw Error('Foto troppo grande');if(i.photo&&!/^(data:image\/(?:jpeg|png|webp);base64,|https:\/\/)/i.test(i.photo))throw Error('Tipo di foto non supportato')}
+    }
+    return {places:content.places,items:content.items};
+  }
+  exportBtn.addEventListener('click',()=>{
+    try{
+      if(document.getElementById('add')?.classList.contains('active'))saveDraft();
+      const data={format:'dove-lho-messo-backup',schema:1,appVersion:DLM_VERSION,exportedAt:new Date().toISOString(),archive:db,draft:localStorage.getItem(DRAFT_KEY)};
+      const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download='dove-lho-messo-backup-'+new Date().toISOString().slice(0,10)+'.json';
+      document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+      report('Backup pronto: salvalo nell’app File e conservalo al sicuro 💜');
+    }catch(err){console.error(err);report('Backup non riuscito: controlla lo spazio disponibile')}
+  });
+  importBtn.addEventListener('click',()=>fileInput.click());
+  fileInput.addEventListener('change',async()=>{
+    const file=fileInput.files?.[0];fileInput.value='';if(!file)return;
+    try{
+      if(file.size>50000000)throw Error('Il file supera 50 MB');
+      const parsed=JSON.parse(await file.text());
+      const incoming=validateArchive(parsed);
+      const message='Il backup contiene '+incoming.items.length+' oggetti/libri e '+incoming.places.length+' posizioni.\n\nATTENZIONE: il ripristino SOSTITUIRÀ i '+db.items.length+' oggetti/libri e le '+db.places.length+' posizioni attualmente salvati su questo dispositivo.\n\nVuoi continuare?';
+      if(!confirm(message)){report('Ripristino annullato: nessun dato modificato');return}
+      const previousArchive=localStorage.getItem(KEY),previousDraft=localStorage.getItem(DRAFT_KEY);
+      try{
+        localStorage.setItem(KEY,JSON.stringify(incoming));
+        if(typeof parsed.draft==='string')localStorage.setItem(DRAFT_KEY,parsed.draft);
+        else localStorage.removeItem(DRAFT_KEY);
+      }catch(error){
+        try{if(previousArchive===null)localStorage.removeItem(KEY);else localStorage.setItem(KEY,previousArchive);if(previousDraft===null)localStorage.removeItem(DRAFT_KEY);else localStorage.setItem(DRAFT_KEY,previousDraft)}catch{}
+        throw Error('Spazio insufficiente: archivio precedente non modificato');
+      }
+      db=incoming;editing=null;resetForm();renderPlaces();renderItems();renderStats();page('home');
+      report('Backup ripristinato! '+incoming.items.length+' oggetti/libri, '+incoming.places.length+' posizioni 💜');
+    }catch(error){console.error(error);report('Ripristino non riuscito: '+(error.message||'file non valido'))}
+  });
+})();
