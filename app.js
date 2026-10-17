@@ -200,3 +200,43 @@ $('#scanImageFile').addEventListener('change',async e=>{
 $('#startScan').onclick=startCamera;$('#stopScan').onclick=stopCamera;if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});function updateKind(){$('#authorWrap').hidden=$('#kind').value!=='book';$('#lookupBook').hidden=$('#kind').value!=='book'}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=isEAN(code)&&!/^97[89]/.test(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
 $('#barcode').addEventListener('input',updateCodeLookupLabel);
 $('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
+
+/* Aggiornamento PWA: conserva archivio e bozze nel localStorage. */
+const DLM_VERSION='06';
+let dlmUpdateInProgress=false;
+let dlmLastUpdateCheck=0;
+async function dlmCheckUpdate(showFeedback=false){
+  if(dlmUpdateInProgress)return;
+  if(!('serviceWorker' in navigator)){if(showFeedback)toast('Aggiornamento non supportato da questo browser');return}
+  if(!navigator.onLine){if(showFeedback)toast('Connettiti a Internet per aggiornare');return}
+  dlmUpdateInProgress=true;
+  const btn=document.getElementById('updateAppBtn');
+  if(btn){btn.disabled=true;btn.textContent='↻ Controllo aggiornamenti…'}
+  try{
+    const registration=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
+    await registration.update();
+    // Aggiorna anche i documenti principali senza eliminare le cache offline.
+    const resp=await fetch('./index.html?update='+Date.now(),{cache:'no-store'});
+    if(!resp.ok)throw Error('Non raggiungibile');
+    const html=await resp.text();
+    const match=html.match(/app\.js\?v=([\w.-]+)/);
+    const latest=match?match[1]:null;
+    if(latest && latest!== 'v'+DLM_VERSION){
+      if(showFeedback)toast('Nuova versione trovata: la carico…');
+      if(document.querySelector('#add.page.active'))saveDraft();
+      const address=new URL(location.href);address.searchParams.set('appv',latest);
+      location.replace(address.toString());
+      return;
+    }
+    if(showFeedback)toast('App aggiornata! Versione '+DLM_VERSION+' 💜');
+  }catch(error){
+    console.warn('Aggiornamento non riuscito',error);
+    if(showFeedback)toast('Impossibile controllare gli aggiornamenti. Riprova online.');
+  }finally{dlmUpdateInProgress=false;if(btn){btn.disabled=false;btn.textContent='↻ Aggiorna app'}}
+}
+const dlmUpdateButton=document.getElementById('updateAppBtn');
+if(dlmUpdateButton)dlmUpdateButton.addEventListener('click',()=>dlmCheckUpdate(true));
+const dlmVersionLabel=document.getElementById('appVersion');
+if(dlmVersionLabel)dlmVersionLabel.textContent='Versione '+DLM_VERSION;
+window.addEventListener('pageshow',()=>{if(Date.now()-dlmLastUpdateCheck>300000){dlmLastUpdateCheck=Date.now();dlmCheckUpdate(false)}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-dlmLastUpdateCheck>300000){dlmLastUpdateCheck=Date.now();dlmCheckUpdate(false)}});
