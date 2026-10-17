@@ -202,7 +202,7 @@ $('#barcode').addEventListener('input',updateCodeLookupLabel);
 $('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
 
 /* Aggiornamento PWA: conserva archivio e bozze nel localStorage. */
-const DLM_VERSION='10';
+const DLM_VERSION='11';
 let dlmUpdateInProgress=false;
 let dlmLastUpdateCheck=0;
 async function dlmCheckUpdate(showFeedback=false){
@@ -399,30 +399,26 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
 `;document.head.appendChild(style)})();
 
 
-/* v09 - Ricerca manuale copertine in Google Immagini (senza chiavi API). */
+/* v11: pulsante stabile nell'HTML; nessun aggiornamento automatico. */
 (()=>{
-  const anchor=document.getElementById('findCoversBtn');
-  if(!anchor)return;
-  const btn=document.createElement('button');
-  btn.type='button';btn.id='googleCoverSearchBtn';btn.className='secondary full';
-  btn.textContent='🔎 Cerca copertina su Google';
-  btn.style.marginTop='12px';
-  anchor.insertAdjacentElement('afterend',btn);
+  const btn=document.getElementById('googleCoverSearchBtn');
+  if(!btn)return;
   const sync=()=>{btn.hidden=document.getElementById('kind')?.value!=='book'};
   document.getElementById('kind')?.addEventListener('change',sync);
-  document.querySelectorAll('[data-page]')?.forEach(el=>el.addEventListener('click',()=>setTimeout(sync,0)));
+  document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>setTimeout(sync,0)));
   btn.addEventListener('click',()=>{
     const title=document.getElementById('itemName')?.value.trim()||'';
     const author=document.getElementById('author')?.value.trim()||'';
     const isbn=normISBN(document.getElementById('barcode')?.value||'');
     const desc=document.getElementById('desc')?.value||'';
     const publisher=(desc.match(/Editore:\s*([^·\n]+)/i)||[])[1]||'';
-    const terms=[isbn,title,author,publisher,'copertina libro'].filter(Boolean).join(' ');
-    if(!title&&!isbn){toast('Inserisci prima un titolo o un ISBN');return}
+    if(!title&&!isbn){toast('Inserisci prima il titolo o un ISBN');return}
     saveDraft();
-    const url='https://www.google.com/search?tbm=isch&q='+encodeURIComponent(terms);
-    const opened=window.open(url,'_blank','noopener,noreferrer');
-    if(!opened){window.location.href=url}
+    const terms=[isbn,title,author,publisher,'copertina libro'].filter(Boolean).join(' ');
+    // Azione diretta da un tocco dell'utente: funziona anche su Safari iOS.
+    const url='https://www.google.com/search?udm=2&q='+encodeURIComponent(terms);
+    const opened=window.open(url,'_blank');
+    if(!opened)window.location.assign(url);
   });
   sync();
 })();

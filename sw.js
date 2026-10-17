@@ -1,5 +1,5 @@
-/* Dove l'ho messo? - aggiornamento PWA v10 */
-const CACHE='dlm-v10-app-shell';
+/* Dove l'ho messo? - aggiornamento PWA v11 */
+const CACHE='dlm-v11-app-shell';
 const APP_SHELL=['./','./index.html','./style.css','./app.js','./qr.js','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png'];
 self.addEventListener('install',event=>{event.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(APP_SHELL);await self.skipWaiting()})())});
 self.addEventListener('activate',event=>{event.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(k=>k.startsWith('dlm-')&&k!==CACHE).map(k=>caches.delete(k)));await self.clients.claim()})())});
