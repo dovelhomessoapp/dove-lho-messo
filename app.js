@@ -202,7 +202,7 @@ $('#barcode').addEventListener('input',updateCodeLookupLabel);
 $('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
 
 /* Aggiornamento PWA: conserva archivio e bozze nel localStorage. */
-const DLM_VERSION='11';
+const DLM_VERSION='12';
 let dlmUpdateInProgress=false;
 let dlmLastUpdateCheck=0;
 async function dlmCheckUpdate(showFeedback=false){
@@ -421,4 +421,58 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
     if(!opened)window.location.assign(url);
   });
   sync();
+})();
+
+
+/* v12 - incolla immagine dagli appunti iOS/WebKit, solo con tocco esplicito. */
+(()=>{
+  const button=document.getElementById('pasteBookCoverBtn');
+  const help=document.getElementById('pasteCoverHelp');
+  const kind=document.getElementById('kind');
+  if(!button||!kind)return;
+  const sync=()=>{const isBook=kind.value==='book';button.hidden=!isBook;if(help)help.hidden=!isBook};
+  kind.addEventListener('change',sync);
+  document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>setTimeout(sync,0)));
+  sync();
+  button.addEventListener('click',async()=>{
+    if(!navigator.clipboard?.read){
+      toast('Il tuo browser non consente di incollare immagini: usa Galleria.');return;
+    }
+    button.disabled=true;
+    try{
+      // La lettura degli appunti avviene esclusivamente dopo il tocco sul pulsante.
+      const entries=await navigator.clipboard.read();
+      let imageBlob=null;
+      for(const entry of entries){
+        const mime=entry.types.find(t=>t.startsWith('image/'));
+        if(mime){imageBlob=await entry.getType(mime);break}
+      }
+      if(!imageBlob){
+        toast('Negli appunti non c’è una foto. Copia l’immagine, non il link, oppure usa Galleria.');return;
+      }
+      if(imageBlob.size>12000000){toast('Immagine troppo grande: usa Galleria.');return}
+      const url=URL.createObjectURL(imageBlob);
+      try{
+        const img=new Image();
+        await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+        if(!img.naturalWidth||!img.naturalHeight)throw new Error('Immagine non valida');
+        const scale=Math.min(1,720/Math.max(img.naturalWidth,img.naturalHeight));
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+        canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+        canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+        const newPhoto=canvas.toDataURL('image/jpeg',.68);
+        // Conserva la foto precedente se il caricamento/convertitore fallisce.
+        photoData=newPhoto;
+        lastAutoBookCover='';
+        const preview=document.getElementById('photoPreview');
+        preview.src=newPhoto;preview.hidden=false;
+        saveDraft();
+        toast('Copertina incollata! Premi Salva per confermare 💜');
+      }finally{URL.revokeObjectURL(url)}
+    }catch(error){
+      console.warn('Incolla copertina:',error);
+      toast('Impossibile incollare: autorizza gli appunti o usa Galleria.');
+    }finally{button.disabled=false}
+  });
 })();
