@@ -397,3 +397,32 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
 #coverChoices .cover-unavailable{opacity:.7;border:1px solid #d9bfe9;border-radius:14px;background:#faf7fd;}
 #coverChoices .cover-option:disabled{cursor:default;opacity:.7;}
 `;document.head.appendChild(style)})();
+
+
+/* v09 - Ricerca manuale copertine in Google Immagini (senza chiavi API). */
+(()=>{
+  const anchor=document.getElementById('findCoversBtn');
+  if(!anchor)return;
+  const btn=document.createElement('button');
+  btn.type='button';btn.id='googleCoverSearchBtn';btn.className='secondary full';
+  btn.textContent='🔎 Cerca copertina su Google';
+  btn.style.marginTop='12px';
+  anchor.insertAdjacentElement('afterend',btn);
+  const sync=()=>{btn.hidden=document.getElementById('kind')?.value!=='book'};
+  document.getElementById('kind')?.addEventListener('change',sync);
+  document.querySelectorAll('[data-page]')?.forEach(el=>el.addEventListener('click',()=>setTimeout(sync,0)));
+  btn.addEventListener('click',()=>{
+    const title=document.getElementById('itemName')?.value.trim()||'';
+    const author=document.getElementById('author')?.value.trim()||'';
+    const isbn=normISBN(document.getElementById('barcode')?.value||'');
+    const desc=document.getElementById('desc')?.value||'';
+    const publisher=(desc.match(/Editore:\s*([^·\n]+)/i)||[])[1]||'';
+    const terms=[isbn,title,author,publisher,'copertina libro'].filter(Boolean).join(' ');
+    if(!title&&!isbn){toast('Inserisci prima un titolo o un ISBN');return}
+    saveDraft();
+    const url='https://www.google.com/search?tbm=isch&q='+encodeURIComponent(terms);
+    const opened=window.open(url,'_blank','noopener,noreferrer');
+    if(!opened){window.location.href=url}
+  });
+  sync();
+})();
