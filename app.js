@@ -324,6 +324,16 @@ document.getElementById('booksListBtn')?.addEventListener('click',()=>{dlmBookVi
 document.getElementById('bookFilter')?.addEventListener('input',dlmRenderBooks);
 
 let dlmCoverCandidates=[];
+async function dlmCheckCoverCandidate(candidate){
+ return new Promise(resolve=>{
+  const img=new Image();let finished=false;
+  const timeout=setTimeout(()=>finish(false),4500);
+  function finish(ok){if(finished)return;finished=true;clearTimeout(timeout);img.onload=null;img.onerror=null;resolve({...candidate,valid:ok})}
+  img.onload=()=>finish(img.naturalWidth>=70&&img.naturalHeight>=90);
+  img.onerror=()=>finish(false);
+  img.src=candidate.url;
+ });
+}
 async function dlmSuggestCovers(){
  const target=document.getElementById('coverChoices');const button=document.getElementById('findCoversBtn');
  if(!target||!button)return;
@@ -331,7 +341,7 @@ async function dlmSuggestCovers(){
  const title=document.getElementById('itemName').value.trim();
  if(!checkISBN(isbn)&&!title){toast('Inserisci prima un ISBN o un titolo');return}
  if(!navigator.onLine){toast('Serve Internet per cercare le copertine');return}
- button.disabled=true;target.textContent='Cerco possibili copertine…';dlmCoverCandidates=[];
+ button.disabled=true;target.textContent='Cerco e verifico le copertine…';dlmCoverCandidates=[];
  try{
    const urls=[];
    if(checkISBN(isbn)){
@@ -343,16 +353,25 @@ async function dlmSuggestCovers(){
      const d=await getCatalogJSON('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent(query)+'&maxResults=6');
      for(const item of (d.items||[])){
        const v=item.volumeInfo||{};
-       if(checkISBN(isbn)&&!(v.industryIdentifiers||[]).some(x=>normISBN(x.identifier)===isbn))continue;
+       if(checkISBN(isbn)&&!exactVolume(v,isbn))continue;
        const url=v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail;
        if(url)urls.push({url:url.replace(/^http:/,'https:'),source:'Google Books · da verificare'});
      }
    }catch{}
    const unique=[...new Map(urls.map(c=>[c.url,c])).values()].slice(0,8);
-   dlmCoverCandidates=unique;
    if(!unique.length){target.textContent='Nessuna copertina disponibile. Puoi fotografare quella del tuo libro.';return}
-   target.innerHTML='<p class="hint">Controlla che la copertina sia identica alla tua edizione prima di selezionarla.</p><div class="cover-options">'+unique.map((c,n)=>`<button class="cover-option" type="button" data-cover-index="${n}"><img loading="lazy" src="${safe(c.url)}" alt="Proposta copertina ${n+1}" onerror="this.closest('button').hidden=true"><small>${safe(c.source)} · Usa questa</small></button>`).join('')+'</div>';
- }catch(e){target.textContent='Cataloghi momentaneamente non disponibili. Puoi aggiungere la foto manualmente.'}
+   const results=await Promise.all(unique.map(dlmCheckCoverCandidate));
+   dlmCoverCandidates=results;
+   const count=results.filter(c=>c.valid).length;
+   target.innerHTML='<p class="hint">'+(count?'Confronta le copertine con la tua edizione prima di scegliere.':'Nessuna immagine valida recuperata; puoi usare Scatta foto o Galleria.')+'</p><div class="cover-options">'+results.map((c,n)=>c.valid?`<button class="cover-option" type="button" data-cover-index="${n}"><img src="${safe(c.url)}" alt="Copertina proposta ${n+1}"><small>${safe(c.source)} · Usa questa</small></button>`:`<div class="cover-option cover-unavailable" aria-label="Immagine non disponibile"><span style="display:block;padding:24px 8px;text-align:center">📖<br>Anteprima non disponibile</span><small>${safe(c.source)}</small></div>`).join('')+'</div>';
+   // Se il browser perde la connessione dopo il controllo, non nascondere la scheda.
+   target.querySelectorAll('button.cover-option img').forEach(img=>img.addEventListener('error',()=>{
+      const btn=img.closest('button');if(!btn)return;
+      btn.disabled=true;btn.removeAttribute('data-cover-index');
+      img.replaceWith(Object.assign(document.createElement('span'),{textContent:'📖 Anteprima non disponibile'}));
+      const label=btn.querySelector('small');if(label)label.textContent='Immagine non disponibile';
+   }));
+ }catch(e){console.warn('Ricerca copertine:',e);target.textContent='Cataloghi momentaneamente non disponibili. Puoi aggiungere la foto manualmente.'}
  finally{button.disabled=false}
 }
 document.getElementById('findCoversBtn')?.addEventListener('click',dlmSuggestCovers);
@@ -368,3 +387,13 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
  document.getElementById('coverChoices').innerHTML='<p class="hint">✅ Copertina selezionata. Puoi cambiarla in qualsiasi momento.</p>';
  saveDraft();toast('Copertina aggiunta! 💜');
 });
+
+/* Correzione impaginazione libri: separa sempre titolo e autore. */
+(()=>{const style=document.createElement('style');style.textContent=`
+#bookList .book-tile .book-text{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0;width:100%;}
+#bookList .book-tile .book-text strong{display:block;width:100%;line-height:1.3;overflow-wrap:anywhere;}
+#bookList .book-tile .book-text small{display:block;width:100%;line-height:1.4;overflow-wrap:anywhere;}
+#coverChoices .cover-option{overflow:hidden;min-width:0;}
+#coverChoices .cover-unavailable{opacity:.7;border:1px solid #d9bfe9;border-radius:14px;background:#faf7fd;}
+#coverChoices .cover-option:disabled{cursor:default;opacity:.7;}
+`;document.head.appendChild(style)})();
