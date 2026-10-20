@@ -131,7 +131,7 @@ async function syncPlacePhotos(){
  renderPlaces();
 }
 async function load(){
- const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,description,image_url,location_id,estimated_value,created_at,created_by&home_id=eq.'+house.id,token);
+ const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,description,image_url,location_id,estimated_value,created_at,created_by,updated_by&home_id=eq.'+house.id,token);
  const places=await get('/rest/v1/locations?select=id,name&home_id=eq.'+house.id,token);
  const members=await get('/rest/v1/home_members?select=user_id,nickname&home_id=eq.'+house.id,token);
  familyNicknames=new Map(members.map(m=>[m.user_id,m.nickname]).filter(x=>x[1]));
@@ -140,7 +140,7 @@ async function load(){
  cloudIds.clear();objects.forEach(i=>{cloudIds.add(i.id);seenIds.add(i.id);if(pendingCreates.delete(i.id))saveCreates()});saveSeen();
  places.forEach(p=>cloudPlaceIds.add(p.id));
  const pending=db.items.filter(i=>(pendingCreates.has(i.id)&&!seenIds.has(i.id))||pendingPhotos.has(i.id)||pendingEdits.has(i.id));
- db.items=[...objects.filter(i=>!pendingPhotos.has(i.id)&&!pendingEdits.has(i.id)).map(i=>({id:i.id,kind:i.kind,name:i.title,author:i.author||'',barcode:i.isbn||'',desc:i.description||'',photo:i.image_url||'',place:i.location_id||'',value:i.estimated_value??'',created:Date.parse(i.created_at)||Date.now(),createdBy:i.created_by||null,createdByName:familyNicknames.get(i.created_by)||null})),...pending];
+ db.items=[...objects.filter(i=>!pendingPhotos.has(i.id)&&!pendingEdits.has(i.id)).map(i=>({id:i.id,kind:i.kind,name:i.title,author:i.author||'',barcode:i.isbn||'',desc:i.description||'',photo:i.image_url||'',place:i.location_id||'',value:i.estimated_value??'',created:Date.parse(i.created_at)||Date.now(),createdBy:i.created_by||null,createdByName:familyNicknames.get(i.created_by)||null,updatedBy:i.updated_by||null,updatedByName:familyNicknames.get(i.updated_by)||null})),...pending];
  db.places=[...places.map(p=>{const local=db.places.find(x=>x.id===p.id);return {id:p.id,name:p.name,...(local?.photo?{photo:local.photo}:{})}}),...db.places.filter(p=>!places.some(c=>c.id===p.id))];
  localStorage.setItem('dlm-casa-dolce-casa-v1',JSON.stringify(db));
  renderStats();renderPlaces();renderItems();
@@ -197,7 +197,7 @@ async function syncEdits(){
  if(!token||!house||!navigator.onLine)return;
  for(const [id,edit] of pendingEdits){
   try{
-   const r=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({title:edit.name,description:edit.desc||null,location_id:edit.place||null})});
+   const r=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({title:edit.name,description:edit.desc||null,location_id:edit.place||null,updated_by:edit.updatedBy||null})});
    const rows=await r.json();
    if(!r.ok||!Array.isArray(rows)||rows.length!==1)throw Error(rows?.message||'Aggiornamento non confermato');
    pendingEdits.delete(id);saveEdits();notice('Modifica offline sincronizzata.');
@@ -207,13 +207,15 @@ async function syncEdits(){
 window.familySyncQueue=id=>{if(id&&!cloudIds.has(id)&&!pendingCreates.has(id)){pendingCreates.add(id);saveCreates()}if(token&&house){if(navigator.onLine)void syncEdits().then(uploadNew);else notice('Oggetto salvato sul telefono: sarà sincronizzato quando torni online.')}};
 window.addEventListener('online',()=>{if(token&&house){void syncEdits().then(uploadNew)}});
 window.familyUpdateItem=async item=>{
- pendingEdits.set(item.id,{name:item.name,desc:item.desc,place:item.place});saveEdits();
+ const editorId=currentFamilyUserId();
+ if(editorId){item.updatedBy=editorId;item.updatedByName=familyNicknames.get(editorId)||null;}
+ pendingEdits.set(item.id,{name:item.name,desc:item.desc,place:item.place,updatedBy:editorId});saveEdits();
  if(!token||!house||!cloudIds.has(item.id)){notice('Modifica salvata soltanto sul dispositivo di prova.');return}
  if(!navigator.onLine){notice('Modifica salvata sul telefono: sarà sincronizzata quando torni online.');return}
  try{
   const res=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(item.id)+'&home_id=eq.'+encodeURIComponent(house.id),{
    method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},
-   body:JSON.stringify({title:item.name,description:item.desc||null,location_id:item.place&&cloudPlaceIds.has(item.place)?item.place:null})
+   body:JSON.stringify({title:item.name,description:item.desc||null,location_id:item.place&&cloudPlaceIds.has(item.place)?item.place:null,updated_by:editorId})
   });
   const result=await res.json().catch(()=>null);
   if(!res.ok||!Array.isArray(result)||result.length!==1)throw Error(result?.message||'Conferma server non ricevuta');
@@ -298,5 +300,6 @@ window.showItem=function(id){
  line.append(label,document.createTextNode(showFamilyCreator(item)));
  const buttons=panel.querySelector('.row');
  if(buttons)panel.insertBefore(line,buttons);else panel.append(line);
+ if(item.updatedBy){const editLine=document.createElement('p'),editLabel=document.createElement('b');editLabel.textContent='✏️ Ultima modifica di: ';editLine.append(editLabel,document.createTextNode(item.updatedByName||familyNicknames.get(item.updatedBy)||'Non identificato'));if(buttons)panel.insertBefore(editLine,buttons);else panel.append(editLine);}
 };
 })();
