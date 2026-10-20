@@ -4,12 +4,34 @@ const base='https://ephdnunjudbwlgbxdadm.supabase.co';
 const key='sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT';
 const home=document.getElementById('home');
 const panel=document.createElement('section');panel.className='panel';
-panel.innerHTML='<h3>🏡 Casa dolce casa</h3><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>Crea un accesso personale</summary><form id="familySignup"><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Per entrare nella Casa dolce casa servirà anche un invito del proprietario.</p></details><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
+panel.innerHTML='<h3>🏡 Casa dolce casa</h3><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>Crea un accesso personale</summary><form id="familySignup"><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Per entrare nella Casa dolce casa servirà anche un invito del proprietario.</p></details><section id="familyOnline" hidden><p id="familyHouse"></p><label for="familyNickname">Il tuo nickname<input id="familyNickname" maxlength="40" placeholder="Es. Noemi, Chantal"></label><button type="button" class="secondary" id="familyNickSave">💜 Salva nickname</button><p id="familyNickStatus" class="hint" role="status"></p><p id="familyCount"></p><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
 home.append(panel);
 const el=id=>document.getElementById(id);
 let token=null,house=null,sending=false;
 let refreshToken=null;
+let myUserId=null;let nicknameByUser={};
 const SESSION_KEY='dlm-casa-dolce-casa-family-refresh-v1';
+function authenticatedUid(){try{return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).sub||null}catch{return null}}
+async function loadFamilyNicknames(){
+  myUserId=authenticatedUid();if(!house||!myUserId)return;
+  const rows=await get('/rest/v1/family_nicknames?select=user_id,nickname&home_id=eq.'+house.id,token);
+  nicknameByUser=Object.fromEntries(rows.map(r=>[r.user_id,r.nickname]));
+  el('familyNickname').value=nicknameByUser[myUserId]||'';
+  el('familyNickStatus').textContent=nicknameByUser[myUserId]?'Nickname attivo: '+nicknameByUser[myUserId]:'Scegli il tuo nickname personale.';
+}
+async function tryLoadFamilyNicknames(){try{await loadFamilyNicknames()}catch(e){el('familyNickStatus').textContent='Nickname non ancora disponibili: aggiornamento database necessario.'}}
+function nicknameFor(uid){return uid?(nicknameByUser[uid]||'Membro della famiglia'):'Autore non disponibile'}
+el('familyNickSave').onclick=async()=>{
+  if(!house||!token||!myUserId){el('familyNickStatus').textContent='Prima effettua l’accesso.';return}
+  const nickname=el('familyNickname').value.trim();
+  if(!nickname||nickname.length>40){el('familyNickStatus').textContent='Inserisci un nickname da 1 a 40 caratteri.';return}
+  try{
+    const res=await familyFetch(base+'/rest/v1/family_nicknames?on_conflict=home_id,user_id',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({home_id:house.id,user_id:myUserId,nickname})});
+    if(!res.ok)throw Error('Salvataggio non disponibile');
+    await loadFamilyNicknames();el('familyNickStatus').textContent='💜 Nickname salvato nella casa condivisa.';
+    if(typeof renderItems==='function')renderItems();
+  }catch(e){el('familyNickStatus').textContent='Non ancora salvato: il database va aggiornato.'}
+};
 const cloudIds=new Set();
 const cloudPlaceIds=new Set();
 const pendingPhotos=new Set();
@@ -128,14 +150,14 @@ async function syncPlacePhotos(){
  renderPlaces();
 }
 async function load(){
- const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,description,image_url,location_id,estimated_value,created_at&home_id=eq.'+house.id,token);
+ const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,description,image_url,location_id,estimated_value,created_at,created_by&home_id=eq.'+house.id,token);
  const places=await get('/rest/v1/locations?select=id,name,parent_id&home_id=eq.'+house.id,token);
  for(const i of objects){if(i.image_url&&i.image_url.startsWith(house.id+'/')){try{i.image_url=await signPhoto(i.image_url)}catch(e){i.image_url='';notice('Foto non disponibile')}}}
  // Aggiorna solo la copia locale usata dalle schermate dell'app di prova.
  cloudIds.clear();objects.forEach(i=>{cloudIds.add(i.id);seenIds.add(i.id);if(pendingCreates.delete(i.id))saveCreates()});saveSeen();
  places.forEach(p=>cloudPlaceIds.add(p.id));
  const pending=db.items.filter(i=>(pendingCreates.has(i.id)&&!seenIds.has(i.id))||pendingPhotos.has(i.id)||pendingEdits.has(i.id));
- db.items=[...objects.filter(i=>!pendingPhotos.has(i.id)&&!pendingEdits.has(i.id)).map(i=>({id:i.id,kind:i.kind,name:i.title,author:i.author||'',barcode:i.isbn||'',desc:i.description||'',photo:i.image_url||'',place:i.location_id||'',value:i.estimated_value??'',created:Date.parse(i.created_at)||Date.now()})),...pending];
+ db.items=[...objects.filter(i=>!pendingPhotos.has(i.id)&&!pendingEdits.has(i.id)).map(i=>({id:i.id,kind:i.kind,name:i.title,author:i.author||'',barcode:i.isbn||'',desc:i.description||'',photo:i.image_url||'',place:i.location_id||'',value:i.estimated_value??'',created:Date.parse(i.created_at)||Date.now(),created_by:i.created_by||null,createdByName:nicknameFor(i.created_by)})),...pending];
  db.places=[...places.map(p=>{const local=db.places.find(x=>x.id===p.id);return {id:p.id,name:p.name,parent_id:p.parent_id||null,...(local?.photo?{photo:local.photo}:{})}}),...db.places.filter(p=>!places.some(c=>c.id===p.id))];
  localStorage.setItem('dlm-casa-dolce-casa-v1',JSON.stringify(db));
  renderStats();renderPlaces();renderItems();
@@ -165,7 +187,7 @@ el('familyForm').onsubmit=async e=>{
  const houses=await get('/rest/v1/homes?select=id,name',d.access_token);
  if(houses.length!==1)throw Error('Questa prova richiede una sola casa');
  token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);house=houses[0];el('familyHouse').textContent='💜 Archivio familiare condiviso';
- await load();await syncEdits();await load();await uploadNew();el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
+ await tryLoadFamilyNicknames();await load();await syncEdits();await load();await uploadNew();el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
  }catch(err){notice('Errore: '+err.message)}finally{btn.disabled=false}
 };
 async function uploadNew(){
@@ -177,7 +199,7 @@ async function uploadNew(){
    let imagePath=null;
    if(i.photo){try{imagePath=await uploadPhoto(i)}catch(e){notice('Foto ancora sul telefono: '+e.message);continue}}
    if(i.place&&!cloudPlaceIds.has(i.place)){notice('Posizione locale da sincronizzare prima dell’oggetto.');continue}
-   const row={id:i.id,home_id:house.id,title:i.name,kind:i.kind==='book'?'book':'object',author:i.author||null,isbn:i.kind==='book'?i.barcode||null:null,description:i.desc||null,location_id:i.place||null,estimated_value:i.value===''?null:Number(i.value),created_by:null,image_url:imagePath};
+   const row={id:i.id,home_id:house.id,title:i.name,kind:i.kind==='book'?'book':'object',author:i.author||null,isbn:i.kind==='book'?i.barcode||null:null,description:i.desc||null,location_id:i.place||null,estimated_value:i.value===''?null:Number(i.value),created_by:myUserId||authenticatedUid(),image_url:imagePath};
    const res=await familyFetch(base+'/rest/v1/items?on_conflict=id',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(row)});
    if(!res.ok){const err=await res.json().catch(()=>({}));throw Error(err.message||'Errore salvataggio')}
    cloudIds.add(i.id);seenIds.add(i.id);saveSeen();pendingCreates.delete(i.id);saveCreates();
