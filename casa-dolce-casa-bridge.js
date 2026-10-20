@@ -164,7 +164,7 @@ el('familyForm').onsubmit=async e=>{
  const d=await r.json();el('familyPass').value='';if(!r.ok)throw Error(d.msg||d.message||'Accesso non riuscito');
  const houses=await get('/rest/v1/homes?select=id,name',d.access_token);
  if(houses.length!==1)throw Error('Questa prova richiede una sola casa');
- token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);house=houses[0];el('familyHouse').textContent='🏡 Casa dolce casa';
+ token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);house=houses[0];el('familyHouse').textContent='💜 Archivio familiare condiviso';
  await load();await syncEdits();await load();await uploadNew();el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
  }catch(err){notice('Errore: '+err.message)}finally{btn.disabled=false}
 };
@@ -269,7 +269,7 @@ async function restoreSession(){
   await renew();
   const houses=await get('/rest/v1/homes?select=id,name',token);
   if(houses.length!==1)throw Error('Casa non disponibile');
-  house=houses[0];el('familyHouse').textContent='🏡 Casa dolce casa';
+  house=houses[0];el('familyHouse').textContent='💜 Archivio familiare condiviso';
   await load();await syncEdits();await load();await uploadNew();el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
   notice('Accesso ripristinato.');
  }catch(e){
