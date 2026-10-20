@@ -4,7 +4,7 @@ const base='https://ephdnunjudbwlgbxdadm.supabase.co';
 const key='sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT';
 const home=document.getElementById('home');
 const panel=document.createElement('section');panel.className='panel';
-panel.innerHTML='<h3>🏡 Casa dolce casa</h3><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>Crea un accesso personale</summary><form id="familySignup"><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Per entrare nella Casa dolce casa servirà anche un invito del proprietario.</p></details><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyRename">Rinomina oggetto di prova</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
+panel.innerHTML='<h3>🏡 Casa dolce casa</h3><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>Crea un accesso personale</summary><form id="familySignup"><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Per entrare nella Casa dolce casa servirà anche un invito del proprietario.</p></details><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
 home.append(panel);
 const el=id=>document.getElementById(id);
 let token=null,house=null,sending=false;
@@ -257,23 +257,6 @@ window.familyDeleteItem=async id=>{
   return true;
  }catch(e){notice('Eliminazione non eseguita: '+e.message);return false}
  finally{setTimeout(()=>deletingIds.delete(id),1500)}
-};
-el('familyRename').onclick=async()=>{
- if(!token||!house)return;
- const row=db.items.find(i=>i.name==='Prova sincronizzazione'&&cloudIds.has(i.id));
- if(!row){notice('Oggetto di prova non trovato: nessuna modifica effettuata.');return}
- const newTitle='Prova sincronizzazione modificata';
- if(!confirm('Rinominare “Prova sincronizzazione” in “'+newTitle+'” sul database familiare?'))return;
- try{
-  const res=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(row.id)+'&home_id=eq.'+encodeURIComponent(house.id),{
-    method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},
-    body:JSON.stringify({title:newTitle})
-  });
-  const data=await res.json().catch(()=>[]);
-  if(!res.ok)throw Error(data.message||'Modifica non riuscita');
-  if(!Array.isArray(data)||data.length!==1)throw Error('Modifica non confermata dal server');
-  await load();notice('Nome modificato su Supabase: '+newTitle);
- }catch(e){notice('Errore modifica: '+e.message)}
 };
 el('familyReload').onclick=()=>syncEdits().then(load).then(uploadNew).catch(err=>notice(err.message));
 el('familyExit').onclick=()=>{localStorage.removeItem(SESSION_KEY);refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;notice('Disconnessa. I dati già caricati restano in questa copia di prova.')};
