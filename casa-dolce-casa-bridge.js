@@ -9,6 +9,9 @@ home.append(panel);
 const el=id=>document.getElementById(id);
 let token=null,house=null,sending=false;
 let refreshToken=null;
+let familyNicknames=new Map();
+function currentFamilyUserId(){try{return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).sub||null}catch{return null}}
+function showFamilyCreator(item){return item?.createdByName||familyNicknames.get(item?.createdBy)||'Non identificato'}
 const SESSION_KEY='dlm-casa-dolce-casa-family-refresh-v1';
 const cloudIds=new Set();
 const cloudPlaceIds=new Set();
@@ -128,14 +131,16 @@ async function syncPlacePhotos(){
  renderPlaces();
 }
 async function load(){
- const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,description,image_url,location_id,estimated_value,created_at&home_id=eq.'+house.id,token);
+ const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,description,image_url,location_id,estimated_value,created_at,created_by&home_id=eq.'+house.id,token);
  const places=await get('/rest/v1/locations?select=id,name&home_id=eq.'+house.id,token);
+ const members=await get('/rest/v1/home_members?select=user_id,nickname&home_id=eq.'+house.id,token);
+ familyNicknames=new Map(members.map(m=>[m.user_id,m.nickname]).filter(x=>x[1]));
  for(const i of objects){if(i.image_url&&i.image_url.startsWith(house.id+'/')){try{i.image_url=await signPhoto(i.image_url)}catch(e){i.image_url='';notice('Foto non disponibile')}}}
  // Aggiorna solo la copia locale usata dalle schermate dell'app di prova.
  cloudIds.clear();objects.forEach(i=>{cloudIds.add(i.id);seenIds.add(i.id);if(pendingCreates.delete(i.id))saveCreates()});saveSeen();
  places.forEach(p=>cloudPlaceIds.add(p.id));
  const pending=db.items.filter(i=>(pendingCreates.has(i.id)&&!seenIds.has(i.id))||pendingPhotos.has(i.id)||pendingEdits.has(i.id));
- db.items=[...objects.filter(i=>!pendingPhotos.has(i.id)&&!pendingEdits.has(i.id)).map(i=>({id:i.id,kind:i.kind,name:i.title,author:i.author||'',barcode:i.isbn||'',desc:i.description||'',photo:i.image_url||'',place:i.location_id||'',value:i.estimated_value??'',created:Date.parse(i.created_at)||Date.now()})),...pending];
+ db.items=[...objects.filter(i=>!pendingPhotos.has(i.id)&&!pendingEdits.has(i.id)).map(i=>({id:i.id,kind:i.kind,name:i.title,author:i.author||'',barcode:i.isbn||'',desc:i.description||'',photo:i.image_url||'',place:i.location_id||'',value:i.estimated_value??'',created:Date.parse(i.created_at)||Date.now(),createdBy:i.created_by||null,createdByName:familyNicknames.get(i.created_by)||null})),...pending];
  db.places=[...places.map(p=>{const local=db.places.find(x=>x.id===p.id);return {id:p.id,name:p.name,...(local?.photo?{photo:local.photo}:{})}}),...db.places.filter(p=>!places.some(c=>c.id===p.id))];
  localStorage.setItem('dlm-casa-dolce-casa-v1',JSON.stringify(db));
  renderStats();renderPlaces();renderItems();
@@ -177,7 +182,7 @@ async function uploadNew(){
    let imagePath=null;
    if(i.photo){try{imagePath=await uploadPhoto(i)}catch(e){notice('Foto ancora sul telefono: '+e.message);continue}}
    if(i.place&&!cloudPlaceIds.has(i.place)){notice('Posizione locale da sincronizzare prima dell’oggetto.');continue}
-   const row={id:i.id,home_id:house.id,title:i.name,kind:i.kind==='book'?'book':'object',author:i.author||null,isbn:i.kind==='book'?i.barcode||null:null,description:i.desc||null,location_id:i.place||null,estimated_value:i.value===''?null:Number(i.value),created_by:null,image_url:imagePath};
+   const row={id:i.id,home_id:house.id,title:i.name,kind:i.kind==='book'?'book':'object',author:i.author||null,isbn:i.kind==='book'?i.barcode||null:null,description:i.desc||null,location_id:i.place||null,estimated_value:i.value===''?null:Number(i.value),created_by:i.createdBy||currentFamilyUserId(),image_url:imagePath};
    const res=await familyFetch(base+'/rest/v1/items?on_conflict=id',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(row)});
    if(!res.ok){const err=await res.json().catch(()=>({}));throw Error(err.message||'Errore salvataggio')}
    cloudIds.add(i.id);seenIds.add(i.id);saveSeen();pendingCreates.delete(i.id);saveCreates();
@@ -280,4 +285,18 @@ async function restoreSession(){
 }
 window.addEventListener('online',()=>{if(!token&&refreshToken)void restoreSession()});
 void restoreSession();
+
+/* Mostra chi ha inserito l'oggetto nella scheda famiglia. */
+const originalShowItem=window.showItem;
+window.showItem=function(id){
+ originalShowItem(id);
+ const item=db.items.find(x=>x.id===id),detail=document.getElementById('detailBody');
+ const panel=detail?.querySelector('.panel');
+ if(!item||!panel)return;
+ const line=document.createElement('p'),label=document.createElement('b');
+ label.textContent='👤 Inserito da: ';
+ line.append(label,document.createTextNode(showFamilyCreator(item)));
+ const buttons=panel.querySelector('.row');
+ if(buttons)panel.insertBefore(line,buttons);else panel.append(line);
+};
 })();
