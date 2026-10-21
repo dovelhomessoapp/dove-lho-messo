@@ -134,6 +134,26 @@ async function lookupISBN(){
     if(matchedGoogle)v=matchedGoogle;
     if(matchedOpen)d=matchedOpen;
    }
+   // Prova anche l'ISBN-10 equivalente e la ricerca Google per il mercato italiano.
+   // I risultati vengono accettati solo quando l'identificativo dell'edizione coincide.
+   if(!e?.title&&!v?.title&&!d?.title){
+    const isbn10=isbn10of13(isbn);
+    const requests=[
+     getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:'isbn:'+isbn,country:'IT',maxResults:'40'})),
+     ...(isbn10?[
+      getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:'isbn:'+isbn10,maxResults:'40'})),
+      getCatalogJSON('https://openlibrary.org/search.json?'+new URLSearchParams({isbn:isbn10,limit:'20',fields:'title,author_name,first_publish_year,publisher,isbn,cover_i'}))
+     ]:[])
+    ];
+    const responses=await Promise.allSettled(requests);
+    for(const result of responses){
+     if(result.status!=='fulfilled')continue;
+     reachable=true;
+     const data=result.value;
+     if(!v?.title)v=(data?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
+     if(!d?.title)d=(data?.docs||[]).find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10));
+    }
+   }
    // Seconda possibilità: endpoint libri che può restituire schede assenti dalla ricerca.
    let alternate=null;
    if(!e?.title&&!v?.title&&!d?.title){
