@@ -273,15 +273,38 @@ function stopCamera(){clearTimeout(scanTimeout);scanTimeout=null;clearInterval(s
 }
 $('#scanImageBtn').onclick=()=>$('#scanImageFile').click();
 $('#scanImageFile').addEventListener('change',async e=>{
-  const file=e.target.files?.[0];if(!file)return;
-  scanStatus('Leggo il codice nella fotografia…');
-  try{
-    if(!await loadZXing())throw Error('Connessione richiesta per caricare il lettore');
-    const reader=new ZXing.BrowserMultiFormatReader();const url=URL.createObjectURL(file);
-    try{const result=await reader.decodeFromImageUrl(url);resolveScan(result.getText())}
-    finally{URL.revokeObjectURL(url);reader.reset()}
-  }catch(e){scanStatus('Codice non riconosciuto nella foto. Riprova con un’immagine nitida, oppure inserisci il numero sotto il codice.');toast('Codice non trovato nella foto')}
-  finally{e.target.value=''}
+ const file=e.target.files?.[0];if(!file)return;
+ scanStatus('Leggo il QR dalla fotografia…');
+ let url=null;
+ try{
+  url=URL.createObjectURL(file);
+  const img=new Image();img.src=url;await img.decode();
+  let code=null;
+  if('BarcodeDetector' in window){
+   try{
+    const supported=await BarcodeDetector.getSupportedFormats();
+    if(supported.includes('qr_code')){
+     const detector=new BarcodeDetector({formats:['qr_code']});
+     const found=await detector.detect(img);
+     if(found.length)code=found[0].rawValue;
+    }
+   }catch(err){console.warn('Lettura nativa non riuscita',err)}
+  }
+  if(!code){
+   if(!await loadZXing())throw Error('Lettore immagini non disponibile');
+   const reader=new ZXing.BrowserMultiFormatReader();
+   try{
+    const result=await reader.decodeFromImageElement(img);
+    code=result.getText();
+   }finally{reader.reset()}
+  }
+  if(code){resolveScan(code);toast('QR riconosciuto 💜')}
+  else throw Error('Nessun codice trovato');
+ }catch(err){
+  console.warn('Lettura immagine fallita',err);
+  scanStatus('Non riesco a leggere questo QR dalla foto. Prova a ritagliare lo screenshot lasciando il QR completo e un piccolo bordo bianco, oppure usa la fotocamera.');
+  toast('Codice non trovato nella foto');
+ }finally{if(url)URL.revokeObjectURL(url);e.target.value=''}
 });
 $('#startScan').onclick=startCamera;$('#stopScan').onclick=stopCamera;if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});function updateKind(){const isBook=$('#kind').value==='book';$('#authorWrap').hidden=!isBook;$('#lookupBook').hidden=!isBook;['googleCoverSearchBtn','pasteBookCoverBtn','pasteCoverHelp'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook})}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=isEAN(code)&&!/^97[89]/.test(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
 $('#barcode').addEventListener('input',updateCodeLookupLabel);
