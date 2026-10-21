@@ -8,9 +8,9 @@ const status=$('pantryStatus'),online=$('pantryOnline');
 let pantryStream=null,pantryTimer=null,pantryDetector=null,pantryScanning=false;
 function stopPantryCamera(){pantryScanning=false;if(pantryTimer)clearTimeout(pantryTimer);pantryTimer=null;if(pantryStream)pantryStream.getTracks().forEach(t=>t.stop());pantryStream=null;const v=$('pantryVideo');v.pause();v.srcObject=null;v.hidden=true;$('pantryStop').hidden=true}
 async function lookupFoodBarcode(){
- const code=$('pantryBarcode').value.trim().replace(/\\s/g,'');
+ const code=$('pantryBarcode').value.trim().replace(/\s/g,'');
  const info=$('pantryProductInfo');
- if(!/^\\d{8,14}$/.test(code)){info.textContent='Inserisci un codice a barre numerico da 8 a 14 cifre.';return}
+ if(!/^\d{8,14}$/.test(code)){info.textContent='Inserisci un codice a barre numerico da 8 a 14 cifre.';return}
  info.textContent='🔎 Cerco il prodotto…';
  try{
  const response=await fetch('https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(code)+'.json?fields=product_name,product_name_it,brands,quantity,image_front_small_url',{headers:{Accept:'application/json'}});
@@ -36,7 +36,7 @@ $('pantryCamera').onclick=async()=>{
  if(!('BarcodeDetector' in window)){info.textContent='Il lettore automatico non è supportato qui. Inserisci il codice manualmente.';stopPantryCamera();return}
  pantryDetector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']});
  info.textContent='Inquadra il codice a barre…';
- const tick=async()=>{if(!pantryScanning)return;try{const codes=await pantryDetector.detect(video);const found=codes.find(x=>/^\\d{8,14}$/.test(x.rawValue));if(found){$('pantryBarcode').value=found.rawValue;stopPantryCamera();await lookupFoodBarcode();return}}catch(e){}if(pantryScanning)pantryTimer=setTimeout(tick,350)};
+ const tick=async()=>{if(!pantryScanning)return;try{const codes=await pantryDetector.detect(video);const found=codes.find(x=>/^\d{8,14}$/.test(x.rawValue));if(found){$('pantryBarcode').value=found.rawValue;stopPantryCamera();await lookupFoodBarcode();return}}catch(e){}if(pantryScanning)pantryTimer=setTimeout(tick,350)};
  tick();
  }catch(e){stopPantryCamera();info.textContent='Impossibile avviare la fotocamera. Puoi inserire il codice manualmente.'}
 };
