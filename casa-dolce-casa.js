@@ -117,8 +117,23 @@ async function lookupISBN(){
    const e=eResult.status==='fulfilled'?eResult.value:null;
    const r=sResult.status==='fulfilled'?sResult.value:null;
    reachable=!!(g||e||r);
-   const v=(g?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
-   const d=r?.docs?.find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10of13(isbn)));
+   let v=(g?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
+   let d=r?.docs?.find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10of13(isbn)));
+   // Ulteriori ricerche automatiche, sempre con controllo dell'ISBN esatto.
+   // Alcuni cataloghi indicizzano il codice nella ricerca generale ma non in quella ISBN.
+   if(!e?.title&&!v?.title&&!d?.title){
+    const extra=await Promise.allSettled([
+     getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:isbn,maxResults:'20'})),
+     getCatalogJSON('https://openlibrary.org/search.json?'+new URLSearchParams({q:isbn,limit:'20',fields:'title,author_name,first_publish_year,publisher,isbn,cover_i'}))
+    ]);
+    const eg=extra[0].status==='fulfilled'?extra[0].value:null;
+    const eo=extra[1].status==='fulfilled'?extra[1].value:null;
+    reachable=reachable||!!(eg||eo);
+    const matchedGoogle=(eg?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
+    const matchedOpen=(eo?.docs||[]).find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10of13(isbn)));
+    if(matchedGoogle)v=matchedGoogle;
+    if(matchedOpen)d=matchedOpen;
+   }
    // Seconda possibilità: endpoint libri che può restituire schede assenti dalla ricerca.
    let alternate=null;
    if(!e?.title&&!v?.title&&!d?.title){
