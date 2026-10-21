@@ -132,7 +132,7 @@ async function syncPlacePhotos(){
 }
 async function load(){
  const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,description,image_url,location_id,estimated_value,created_at,created_by,updated_by&home_id=eq.'+house.id,token);
- const places=await get('/rest/v1/locations?select=id,name&home_id=eq.'+house.id,token);
+ const places=await get('/rest/v1/locations?select=id,name,parent_id&home_id=eq.'+house.id,token);
  const members=await get('/rest/v1/home_members?select=user_id,nickname&home_id=eq.'+house.id,token);
  familyNicknames=new Map(members.map(m=>[m.user_id,m.nickname]).filter(x=>x[1]));
  for(const i of objects){if(i.image_url&&i.image_url.startsWith(house.id+'/')){try{i.image_url=await signPhoto(i.image_url)}catch(e){i.image_url='';notice('Foto non disponibile')}}}
@@ -141,7 +141,7 @@ async function load(){
  places.forEach(p=>cloudPlaceIds.add(p.id));
  const pending=db.items.filter(i=>(pendingCreates.has(i.id)&&!seenIds.has(i.id))||pendingPhotos.has(i.id)||pendingEdits.has(i.id));
  db.items=[...objects.filter(i=>!pendingPhotos.has(i.id)&&!pendingEdits.has(i.id)).map(i=>({id:i.id,kind:i.kind,name:i.title,author:i.author||'',barcode:i.isbn||'',desc:i.description||'',photo:i.image_url||'',place:i.location_id||'',value:i.estimated_value??'',created:Date.parse(i.created_at)||Date.now(),createdBy:i.created_by||null,createdByName:familyNicknames.get(i.created_by)||null,updatedBy:i.updated_by||null,updatedByName:familyNicknames.get(i.updated_by)||null})),...pending];
- db.places=[...places.map(p=>{const local=db.places.find(x=>x.id===p.id);return {id:p.id,name:p.name,...(local?.photo?{photo:local.photo}:{})}}),...db.places.filter(p=>!places.some(c=>c.id===p.id))];
+ db.places=[...places.map(p=>{const local=db.places.find(x=>x.id===p.id);return {id:p.id,name:p.name,parentId:p.parent_id||null,...(local?.photo?{photo:local.photo}:{})}}),...db.places.filter(p=>!places.some(c=>c.id===p.id))];
  localStorage.setItem('dlm-casa-dolce-casa-v1',JSON.stringify(db));
  renderStats();renderPlaces();renderItems();
  for(const item of db.items)if(item.photo&&item.photo.startsWith('https://'))void cacheFamilyPhoto(item.id,item.photo);
@@ -238,7 +238,7 @@ window.familyUpdateItem=async item=>{
 window.familyCreatePlace=async place=>{
  if(!token||!house){notice('Posizione salvata solo in locale: accedi a Casa dolce casa.');return}
  try{
-  const result=await familyFetch(base+'/rest/v1/locations?on_conflict=id',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({id:place.id,home_id:house.id,name:place.name})});
+  const result=await familyFetch(base+'/rest/v1/locations?on_conflict=id',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({id:place.id,home_id:house.id,name:place.name,parent_id:place.parentId||null})});
   const rows=await result.json().catch(()=>null);
   if(!result.ok||!Array.isArray(rows)||rows.length!==1)throw Error(rows?.message||'Salvataggio non confermato');
   cloudPlaceIds.add(place.id);
