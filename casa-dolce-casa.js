@@ -90,6 +90,21 @@ $('#itemFilter').addEventListener('input',renderItems);$('#quickSearch').addEven
 const isbnLookupBtn=$('#lookupBook');
 function checkISBN(code){if(!/^(?:\d{13}|\d{9}[\dX])$/.test(code))return false;let sum=0;if(code.length===13){for(let n=0;n<12;n++)sum+=Number(code[n])*(n%2?3:1);return (10-sum%10)%10===Number(code[12])}for(let n=0;n<10;n++)sum+=(10-n)*(code[n]==='X'?10:Number(code[n]));return sum%11===0}
 async function getCatalogJSON(url){const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),8000);try{const response=await fetch(url,{signal:ctrl.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);return await response.json()}finally{clearTimeout(timer)}}
+// Google Books supports JSONP for browser clients when cross-origin fetch fails.
+function getGoogleBooksJSONP(query){
+ return new Promise((resolve,reject)=>{
+  const callback='dlmGoogleBooks'+Date.now()+'_'+Math.floor(Math.random()*100000);
+  const script=document.createElement('script');
+  let finished=false;
+  const cleanup=()=>{clearTimeout(timer);script.remove();try{delete window[callback]}catch{window[callback]=undefined}};
+  const done=(error,data)=>{if(finished)return;finished=true;cleanup();error?reject(error):resolve(data)};
+  const timer=setTimeout(()=>done(Error('Timeout Google Books JSONP')),9000);
+  window[callback]=data=>done(null,data);
+  script.onerror=()=>done(Error('Google Books JSONP unavailable'));
+  script.src='https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:query,maxResults:'40',callback});
+  document.head.appendChild(script);
+ });
+}
 function isbn10of13(code){if(!/^978\d{10}$/.test(code))return '';const nine=code.slice(3,12);let sum=0;for(let n=0;n<9;n++)sum+=(10-n)*Number(nine[n]);let check=(11-(sum%11))%11;return nine+(check===10?'X':check)}
 function normISBN(s){return String(s||'').replace(/[\s-]/g,'').toUpperCase()}
 function exactVolume(v,isbn){const a=v?.industryIdentifiers||[];const alternate=isbn10of13(isbn);return a.some(x=>{const id=normISBN(x.identifier);return id===isbn||(alternate&&id===alternate)})}
@@ -153,6 +168,17 @@ async function lookupISBN(){
      const data=result.value;
      if(!v?.title)v=(data?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
      if(!d?.title)d=(data?.docs||[]).find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10));
+    }
+   }
+   // Fallback JSONP: Google Books may be reachable even when Safari blocks fetch/CORS.
+   if(!v?.title){
+    for(const query of ['isbn:'+isbn,...(isbn10of13(isbn)?['isbn:'+isbn10of13(isbn)]:[])]){
+     try{
+      const data=await getGoogleBooksJSONP(query);
+      reachable=true;availableSources.push('Google Books JSONP');
+      const match=(data?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
+      if(match){v=match;break}
+     }catch(err){console.warn('Google Books JSONP:',err)}
     }
    }
    // Seconda possibilità: endpoint libri che può restituire schede assenti dalla ricerca.
