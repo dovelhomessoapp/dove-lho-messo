@@ -9,10 +9,10 @@ const dayCount=date=>{if(!date)return null;const d=new Date(date+'T12:00:00'),to
 function render(){
  const visible=lots.filter(l=>zone==='tutte'||l.zone===zone).sort((a,b)=>(a.expires_on||'9999').localeCompare(b.expires_on||'9999')||a.name.localeCompare(b.name));
  root.querySelectorAll('[data-zone]').forEach(b=>b.classList.toggle('primary',b.dataset.zone===zone));
- const expiring=lots.filter(l=>l.quantity>0&&l.expires_on&&dayCount(l.expires_on)<=5);
+ const expiring=lots.filter(l=>l.quantity>0&&((l.expires_on&&dayCount(l.expires_on)<=5)||(l.opened_on&&l.opened_until&&dayCount(l.opened_until)<=5)));
  $('pantryAlerts').innerHTML=expiring.length?'<div class="panel" style="background:#fff4e9;border:1px solid #f2d6b7"><strong>🔔 Da consumare prima: '+expiring.length+' lotti in scadenza o scaduti</strong></div>':'<p class="hint">💚 Nessun alimento in scadenza nei prossimi 5 giorni.</p>';
  $('pantryList').innerHTML=visible.length?visible.map(l=>{const days=dayCount(l.expires_on);const badge=days===null?'Senza scadenza':days<0?'⚠️ Scaduto da '+Math.abs(days)+' giorni':days===0?'⚠️ Scade oggi':days<=5?'🔔 Scade tra '+days+' giorni':'Scade il '+l.expires_on.split('-').reverse().join('/');
- return '<div class="panel" style="margin:10px 0"><strong>'+escape(l.name)+'</strong><p class="hint">'+({frigo:'🥬 Frigo',freezer:'🧊 Freezer',dispensa:'🥫 Dispensa'}[l.zone]||'')+' · '+escape(badge)+'</p><div class="row"><span>Quantità: <b>'+l.quantity+'</b></span><button type="button" class="secondary" data-consume="'+l.id+'">− 1 consumato</button><button type="button" class="secondary" data-delete="'+l.id+'">Elimina</button></div></div>'}).join(''):'<p class="hint">Non ci sono alimenti in questa sezione.</p>';
+ const opened=l.opened_on?'<p class="hint">📦 Aperta il '+escape(l.opened_on.split('-').reverse().join('/'))+(l.opened_until?' · Consumare entro '+escape(l.opened_until.split('-').reverse().join('/'))+(dayCount(l.opened_until)<=5?' 🔔':''):' · Termine dopo apertura non indicato')+'</p>':'';return '<div class="panel" style="margin:10px 0"><strong>'+escape(l.name)+'</strong><p class="hint">'+({frigo:'🥬 Frigo',freezer:'🧊 Freezer',dispensa:'🥫 Dispensa'}[l.zone]||'')+' · '+escape(badge)+'</p>'+opened+'<div class="row"><span>Quantità: <b>'+l.quantity+'</b></span><button type="button" class="secondary" data-consume="'+l.id+'">− 1 consumato</button>'+(l.opened_on?'':'<button type="button" class="secondary" data-open="'+l.id+'">📦 Apri 1</button>')+'<button type="button" class="secondary" data-delete="'+l.id+'">Elimina</button></div></div>'}).join(''):'<p class="hint">Non ci sono alimenti in questa sezione.</p>';
 }
 async function request(path,opts={}){
  if(!access)throw Error('Accedi prima alla tua casa');
@@ -23,7 +23,7 @@ async function request(path,opts={}){
 }
 async function refresh(){
  if(!access)return;
- try{status.textContent='Aggiorno la dispensa…';lots=await request('pantry_lots?select=id,name,zone,quantity,expires_on&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';render()}
+ try{status.textContent='Aggiorno la dispensa…';lots=await request('pantry_lots?select=id,name,zone,quantity,expires_on,opened_on,opened_until&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';render()}
  catch(e){status.textContent='Per attivare la dispensa condivisa, esegui prima pantry-setup.sql in Supabase. Dettaglio: '+e.message}
 }
 window.familyPantryConnect=(homeId,getToken)=>{access={homeId,token:getToken};online.hidden=false;refresh()};
@@ -36,8 +36,26 @@ $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;t
  await request('pantry_lots',{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(payload)});
  $('pantryForm').reset();await refresh();status.textContent='💜 Alimento salvato per tutta la famiglia';
  }catch(err){status.textContent='Non salvato: '+err.message}finally{busy=false}};
-$('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume],button[data-delete]');if(!b||busy)return;const id=b.dataset.consume||b.dataset.delete,l=lots.find(x=>x.id===id);if(!l)return;
+$('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume],button[data-delete],button[data-open]');if(!b||busy)return;const id=b.dataset.consume||b.dataset.delete||b.dataset.open,l=lots.find(x=>x.id===id);if(!l)return;
  if(b.dataset.delete&&!confirm('Eliminare questo lotto di '+l.name+'?'))return;
+ if(b.dataset.open){
+ const today=new Date(),localDate=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
+ const opened=prompt('📦 Data di apertura (AAAA-MM-GG)',localDate);if(opened===null)return;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(opened)||Number.isNaN(new Date(opened+'T12:00:00').getTime())){status.textContent='Inserisci una data valida, nel formato AAAA-MM-GG';return}
+ const until=prompt('📅 Consumare entro (AAAA-MM-GG). Controlla le indicazioni sulla confezione; puoi lasciare vuoto.','');if(until===null)return;
+ if(until&&(!/^\d{4}-\d{2}-\d{2}$/.test(until)||until<opened)){status.textContent='La data dopo apertura deve essere valida e non precedente all’apertura';return}
+ busy=true;try{
+  const payload={home_id:access.homeId,name:l.name,zone:l.zone,quantity:1,expires_on:l.expires_on,opened_on:opened,opened_until:until||null};
+  if(l.quantity===1){
+   await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({opened_on:opened,opened_until:until||null})});
+  }else{
+   await request('pantry_lots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+   await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:l.quantity-1})});
+  }
+  await refresh();status.textContent='💜 Confezione aperta registrata';
+ }catch(err){status.textContent='Apertura non riuscita: '+err.message}finally{busy=false}
+ return;
+ }
  busy=true;try{if(b.dataset.delete||l.quantity<=1){await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'DELETE'})}
  else{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:l.quantity-1})})}
  await refresh()}catch(err){status.textContent='Modifica non riuscita: '+err.message}finally{busy=false}};
