@@ -3,8 +3,43 @@ const root=document.getElementById('pantry');if(!root)return;
 const base='https://ephdnunjudbwlgbxdadm.supabase.co',apikey='sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT';
 let lots=[],access=null,zone='tutte',busy=false;
 const $=id=>document.getElementById(id),escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-root.innerHTML='<div class="panel"><h2>🍎 La mia dispensa</h2><p class="hint">Inventario condiviso della famiglia · avvisi 5 giorni prima della scadenza</p><p id="pantryStatus" role="status">Accedi alla tua Casa dolce casa per vedere la dispensa.</p><div id="pantryOnline" hidden><div class="pantry-tabs"><button type="button" data-zone="tutte">Tutti</button><button type="button" data-zone="dispensa">🥫 Dispensa</button><button type="button" data-zone="frigo">🥬 Frigo</button><button type="button" data-zone="freezer">🧊 Freezer</button></div><div id="pantryAlerts"></div><form id="pantryForm"><h3>➕ Aggiungi alimento</h3><label>Nome alimento<input id="pantryName" required maxlength="120" placeholder="Es. Yogurt alla fragola"></label><label>Dove si trova?<select id="pantryZone"><option value="dispensa">🥫 Dispensa</option><option value="frigo">🥬 Frigo</option><option value="freezer">🧊 Freezer</option></select></label><label>Quantità<input id="pantryQty" type="number" min="1" max="99999" value="1" required></label><label>Data di scadenza (facoltativa)<input id="pantryExpiry" type="date"></label><p class="hint">Se lo stesso prodotto ha scadenze diverse, aggiungilo una volta per ciascuna scadenza.</p><button class="primary full" type="submit">💜 Salva alimento</button></form><h3>📦 Alimenti in casa</h3><div id="pantryList"></div><button type="button" class="secondary full" id="pantryRefresh">↻ Aggiorna dispensa</button></div></div>';
+root.innerHTML='<div class="panel"><h2>🍎 La mia dispensa</h2><p class="hint">Inventario condiviso della famiglia · avvisi 5 giorni prima della scadenza</p><p id="pantryStatus" role="status">Accedi alla tua Casa dolce casa per vedere la dispensa.</p><div id="pantryOnline" hidden><div class="pantry-tabs"><button type="button" data-zone="tutte">Tutti</button><button type="button" data-zone="dispensa">🥫 Dispensa</button><button type="button" data-zone="frigo">🥬 Frigo</button><button type="button" data-zone="freezer">🧊 Freezer</button></div><div id="pantryAlerts"></div><form id="pantryForm"><h3>➕ Aggiungi alimento</h3><div class="panel" style="margin:12px 0;background:#faf5ff"><strong>📷 Riconosci dal codice a barre</strong><p class="hint">Cerca automaticamente nome, marca e formato. La scadenza va inserita dalla confezione.</p><label>Codice a barre<input id="pantryBarcode" inputmode="numeric" placeholder="Es. 8001234567890"></label><div class="row"><button type="button" class="secondary" id="pantryCamera">📷 Scansiona</button><button type="button" class="secondary" id="pantryLookup">🔎 Cerca prodotto</button></div><video id="pantryVideo" playsinline muted hidden style="width:100%;max-height:280px;border-radius:14px;margin-top:8px"></video><button type="button" class="secondary full" id="pantryStop" hidden>Chiudi fotocamera</button><p class="hint" id="pantryProductInfo" role="status"></p></div><label>Nome alimento<input id="pantryName" required maxlength="120" placeholder="Es. Yogurt alla fragola"></label><label>Dove si trova?<select id="pantryZone"><option value="dispensa">🥫 Dispensa</option><option value="frigo">🥬 Frigo</option><option value="freezer">🧊 Freezer</option></select></label><label>Quantità<input id="pantryQty" type="number" min="1" max="99999" value="1" required></label><label>Data di scadenza (facoltativa)<input id="pantryExpiry" type="date"></label><p class="hint">Se lo stesso prodotto ha scadenze diverse, aggiungilo una volta per ciascuna scadenza.</p><button class="primary full" type="submit">💜 Salva alimento</button></form><h3>📦 Alimenti in casa</h3><div id="pantryList"></div><button type="button" class="secondary full" id="pantryRefresh">↻ Aggiorna dispensa</button></div></div>';
 const status=$('pantryStatus'),online=$('pantryOnline');
+let pantryStream=null,pantryTimer=null,pantryDetector=null,pantryScanning=false;
+function stopPantryCamera(){pantryScanning=false;if(pantryTimer)clearTimeout(pantryTimer);pantryTimer=null;if(pantryStream)pantryStream.getTracks().forEach(t=>t.stop());pantryStream=null;const v=$('pantryVideo');v.pause();v.srcObject=null;v.hidden=true;$('pantryStop').hidden=true}
+async function lookupFoodBarcode(){
+ const code=$('pantryBarcode').value.trim().replace(/\\s/g,'');
+ const info=$('pantryProductInfo');
+ if(!/^\\d{8,14}$/.test(code)){info.textContent='Inserisci un codice a barre numerico da 8 a 14 cifre.';return}
+ info.textContent='🔎 Cerco il prodotto…';
+ try{
+ const response=await fetch('https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(code)+'.json?fields=product_name,product_name_it,brands,quantity,image_front_small_url',{headers:{Accept:'application/json'}});
+ if(!response.ok)throw Error('Ricerca temporaneamente non disponibile');
+ const data=await response.json(),p=data.product;
+ if(data.status!==1||!p){info.textContent='Prodotto non trovato. Puoi inserire il nome manualmente.';return}
+ const name=(p.product_name_it||p.product_name||'').trim(),brand=(p.brands||'').split(',')[0].trim(),qty=(p.quantity||'').trim();
+ if(!name){info.textContent='Codice trovato, ma nome mancante: inseriscilo manualmente.';return}
+ $('pantryName').value=[name,brand,qty].filter(Boolean).join(' · ').slice(0,120);
+ info.textContent='💜 Prodotto riconosciuto! Controlla il nome, poi scegli posizione, quantità e scadenza.';
+ }catch(e){info.textContent='Non riesco a cercare il prodotto: '+e.message+'. Puoi inserirlo manualmente.'}
+}
+$('pantryLookup').onclick=lookupFoodBarcode;
+$('pantryBarcode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();lookupFoodBarcode()}});
+$('pantryStop').onclick=stopPantryCamera;
+$('pantryCamera').onclick=async()=>{
+ const info=$('pantryProductInfo'),video=$('pantryVideo');
+ if(pantryScanning)stopPantryCamera();
+ if(!navigator.mediaDevices?.getUserMedia){info.textContent='Fotocamera non disponibile. Inserisci il codice manualmente.';return}
+ try{
+ pantryStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+ video.srcObject=pantryStream;video.hidden=false;$('pantryStop').hidden=false;await video.play();pantryScanning=true;
+ if(!('BarcodeDetector' in window)){info.textContent='Il lettore automatico non è supportato qui. Inserisci il codice manualmente.';stopPantryCamera();return}
+ pantryDetector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']});
+ info.textContent='Inquadra il codice a barre…';
+ const tick=async()=>{if(!pantryScanning)return;try{const codes=await pantryDetector.detect(video);const found=codes.find(x=>/^\\d{8,14}$/.test(x.rawValue));if(found){$('pantryBarcode').value=found.rawValue;stopPantryCamera();await lookupFoodBarcode();return}}catch(e){}if(pantryScanning)pantryTimer=setTimeout(tick,350)};
+ tick();
+ }catch(e){stopPantryCamera();info.textContent='Impossibile avviare la fotocamera. Puoi inserire il codice manualmente.'}
+};
 const dayCount=date=>{if(!date)return null;const d=new Date(date+'T12:00:00'),today=new Date();today.setHours(12,0,0,0);return Math.round((d-today)/86400000)};
 function render(){
  const visible=lots.filter(l=>zone==='tutte'||l.zone===zone).sort((a,b)=>Number(Boolean(b.opened_on))-Number(Boolean(a.opened_on))||((a.opened_on?(a.opened_until||a.expires_on):a.expires_on)||'9999').localeCompare((b.opened_on?(b.opened_until||b.expires_on):b.expires_on)||'9999')||a.name.localeCompare(b.name));
