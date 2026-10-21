@@ -272,6 +272,19 @@ function stopCamera(){clearTimeout(scanTimeout);scanTimeout=null;clearInterval(s
   $('#stopScan').hidden=true;$('#startScan').hidden=false;scanBusy=false
 }
 $('#scanImageBtn').onclick=()=>$('#scanImageFile').click();
+let jsQRLoading=null;
+async function loadJsQR(){
+ if(typeof window.jsQR==='function')return true;
+ if(!navigator.onLine)return false;
+ if(!jsQRLoading)jsQRLoading=new Promise(resolve=>{
+  const script=document.createElement('script');
+  script.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+  script.onload=()=>resolve(typeof window.jsQR==='function');
+  script.onerror=()=>resolve(false);
+  document.head.appendChild(script);
+ }).then(ok=>{if(!ok)jsQRLoading=null;return ok});
+ return jsQRLoading;
+}
 $('#scanImageFile').addEventListener('change',async e=>{
  const file=e.target.files?.[0];if(!file)return;
  scanStatus('Leggo il QR dalla fotografia…');
@@ -279,7 +292,7 @@ $('#scanImageFile').addEventListener('change',async e=>{
  try{
   url=URL.createObjectURL(file);
   const img=new Image();img.src=url;await img.decode();
-  let code=null;
+  let code=null,reason='';
   if('BarcodeDetector' in window){
    try{
     const supported=await BarcodeDetector.getSupportedFormats();
@@ -288,21 +301,43 @@ $('#scanImageFile').addEventListener('change',async e=>{
      const found=await detector.detect(img);
      if(found.length)code=found[0].rawValue;
     }
-   }catch(err){console.warn('Lettura nativa non riuscita',err)}
+   }catch(err){reason=String(err?.message||err)}
+  }
+  if(!code&&await loadJsQR()){
+   const canvas=document.createElement('canvas');
+   const maxSide=1600,scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+   canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+   canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+   const ctx=canvas.getContext('2d',{willReadFrequently:true});
+   ctx.drawImage(img,0,0,canvas.width,canvas.height);
+   const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+   let found=window.jsQR(pixels.data,canvas.width,canvas.height,{inversionAttempts:'attemptBoth'});
+   if(!found){
+    const pad=40;
+    const padded=document.createElement('canvas');
+    padded.width=canvas.width+pad*2;padded.height=canvas.height+pad*2;
+    const pctx=padded.getContext('2d',{willReadFrequently:true});
+    pctx.fillStyle='#fff';pctx.fillRect(0,0,padded.width,padded.height);
+    pctx.drawImage(canvas,pad,pad);
+    const px=pctx.getImageData(0,0,padded.width,padded.height);
+    found=window.jsQR(px.data,padded.width,padded.height,{inversionAttempts:'attemptBoth'});
+   }
+   if(found)code=found.data;
   }
   if(!code){
-   if(!await loadZXing())throw Error('Lettore immagini non disponibile');
-   const reader=new ZXing.BrowserMultiFormatReader();
-   try{
-    const result=await reader.decodeFromImageElement(img);
-    code=result.getText();
-   }finally{reader.reset()}
+   if(await loadZXing()){
+    const reader=new ZXing.BrowserMultiFormatReader();
+    try{const result=await reader.decodeFromImageElement(img);code=result.getText()}
+    catch(err){reason=String(err?.message||err)}
+    finally{reader.reset()}
+   }else reason='Lettori esterni non caricati';
   }
-  if(code){resolveScan(code);toast('QR riconosciuto 💜')}
-  else throw Error('Nessun codice trovato');
+  if(!code)throw Error(reason||'QR non riconosciuto');
+  resolveScan(code);toast('QR riconosciuto 💜');
  }catch(err){
+  const detail=String(err?.message||err).slice(0,140);
   console.warn('Lettura immagine fallita',err);
-  scanStatus('Non riesco a leggere questo QR dalla foto. Prova a ritagliare lo screenshot lasciando il QR completo e un piccolo bordo bianco, oppure usa la fotocamera.');
+  scanStatus('Non sono riuscito a leggere il QR dalla foto. Dettaglio tecnico: '+detail+'. Puoi inviarmi uno screenshot di questo messaggio.');
   toast('Codice non trovato nella foto');
  }finally{if(url)URL.revokeObjectURL(url);e.target.value=''}
 });
