@@ -109,7 +109,31 @@ function isbn10of13(code){if(!/^978\d{10}$/.test(code))return '';const nine=code
 function normISBN(s){return String(s||'').replace(/[\s-]/g,'').toUpperCase()}
 function exactVolume(v,isbn){const a=v?.industryIdentifiers||[];const alternate=isbn10of13(isbn);return a.some(x=>{const id=normISBN(x.identifier);return id===isbn||(alternate&&id===alternate)})}
 function uniqueNames(arr){return [...new Set((arr||[]).filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim()))]}
-async function coverToPhoto(url){const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),3000);try{const response=await fetch(url,{signal:ctrl.signal});if(!response.ok||!(response.headers.get('content-type')||'').startsWith('image/'))return null;const blob=await response.blob();if(blob.size<1800||blob.size>2500000)return null;const objectURL=URL.createObjectURL(blob),img=new Image();try{await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=objectURL});if(img.naturalWidth<70||img.naturalHeight<90)return null;const scale=Math.min(1,380/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.63)}finally{URL.revokeObjectURL(objectURL)}}catch{return null}finally{clearTimeout(timer)}}
+let coverChecks=[];
+async function coverToPhoto(url){
+ const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),6500);
+ const host=(()=>{try{return new URL(url).hostname}catch{return 'sconosciuto'}})();
+ const note=(status)=>{coverChecks.push({host,status});return null};
+ try{
+  const response=await fetch(url,{signal:ctrl.signal});
+  if(!response.ok)return note('HTTP '+response.status);
+  if(!(response.headers.get('content-type')||'').startsWith('image/'))return note('risposta non immagine');
+  const blob=await response.blob();
+  if(blob.size<1800)return note('immagine vuota o troppo piccola');
+  if(blob.size>2500000)return note('immagine troppo grande');
+  const objectURL=URL.createObjectURL(blob),img=new Image();
+  try{
+   await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=objectURL});
+   if(img.naturalWidth<70||img.naturalHeight<90)return note('immagine non valida');
+   const scale=Math.min(1,380/Math.max(img.width,img.height)),c=document.createElement('canvas');
+   c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
+   c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+   coverChecks.push({host,status:'ok'});
+   return c.toDataURL('image/jpeg',.63);
+  }finally{URL.revokeObjectURL(objectURL)}
+ }catch(e){return note(e?.name==='AbortError'?'tempo scaduto':'connessione o accesso immagine bloccato')}
+ finally{clearTimeout(timer)}
+}
 // Cerca copertine di edizioni con ISBN corrispondente, indipendentemente dalla fonte del titolo.
 async function isbnCoverCandidates(isbn){
  const candidates=['https://covers.openlibrary.org/b/isbn/'+encodeURIComponent(isbn)+'-L.jpg?default=false'];
