@@ -235,6 +235,17 @@ window.familyUpdateItem=async item=>{
   notice('Nome, descrizione e posizione aggiornati online.');
  }catch(err){notice('Modifica salvata solo in locale: '+err.message+'. Non premere Aggiorna inventario.')}
 };
+window.familyEditPlace=async place=>{
+ if(!token||!house||!navigator.onLine){notice('Per modificare una posizione condivisa devi essere online e collegata alla casa.');return false}
+ if(!cloudPlaceIds.has(place.id)){notice('La posizione non è ancora sincronizzata. Aggiorna inventario prima di modificarla.');return false}
+ try{
+  const result=await familyFetch(base+'/rest/v1/locations?id=eq.'+encodeURIComponent(place.id)+'&home_id=eq.'+encodeURIComponent(house.id),{method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({name:place.name,parent_id:place.parentId||null})});
+  const rows=await result.json().catch(()=>null);
+  if(!result.ok||!Array.isArray(rows)||rows.length!==1)throw Error(rows?.message||'Modifica non confermata');
+  notice('Posizione modificata e salvata online.');
+  return true;
+ }catch(err){notice('Modifica non riuscita: '+err.message);return false}
+};
 window.familyCreatePlace=async place=>{
  if(!token||!house){notice('Posizione salvata solo in locale: accedi a Casa dolce casa.');return}
  try{
