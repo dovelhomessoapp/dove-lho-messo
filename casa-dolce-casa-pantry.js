@@ -39,11 +39,13 @@ $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;t
 $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume],button[data-delete],button[data-open]');if(!b||busy)return;const id=b.dataset.consume||b.dataset.delete||b.dataset.open,l=lots.find(x=>x.id===id);if(!l)return;
  if(b.dataset.delete&&!confirm('Eliminare questo lotto di '+l.name+'?'))return;
  if(b.dataset.open){
- const today=new Date(),localDate=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
- const opened=prompt('📦 Data di apertura (AAAA-MM-GG)',localDate);if(opened===null)return;
- if(!/^\d{4}-\d{2}-\d{2}$/.test(opened)||Number.isNaN(new Date(opened+'T12:00:00').getTime())){status.textContent='Inserisci una data valida, nel formato AAAA-MM-GG';return}
- const until=prompt('📅 Consumare entro (AAAA-MM-GG). Controlla le indicazioni sulla confezione; puoi lasciare vuoto.','');if(until===null)return;
- if(until&&(!/^\d{4}-\d{2}-\d{2}$/.test(until)||until<opened)){status.textContent='La data dopo apertura deve essere valida e non precedente all’apertura';return}
+ const today=new Date(),pad=n=>String(n).padStart(2,'0'),localDate=pad(today.getDate())+'/'+pad(today.getMonth()+1)+'/'+today.getFullYear();
+ const parseItalian=v=>{if(!/^\d{2}\/\d{2}\/\d{4}$/.test(v))return null;const [d,m,y]=v.split('/').map(Number),date=new Date(y,m-1,d);if(date.getFullYear()!==y||date.getMonth()!==m-1||date.getDate()!==d)return null;return y+'-'+pad(m)+'-'+pad(d)};
+ const openedInput=prompt('📦 Data di apertura (GG/MM/AAAA)',localDate);if(openedInput===null)return;
+ const opened=parseItalian(openedInput.trim());if(!opened){status.textContent='Inserisci una data valida nel formato GG/MM/AAAA, per esempio 21/10/2026';return}
+ const untilInput=prompt('📅 Consumare entro (GG/MM/AAAA). Controlla la confezione; puoi lasciare vuoto.','');if(untilInput===null)return;
+ const until=untilInput.trim()?parseItalian(untilInput.trim()):null;
+ if(untilInput.trim()&&(!until||until<opened)){status.textContent='Inserisci una data valida (GG/MM/AAAA), non precedente all’apertura';return}
  busy=true;try{
   const payload={home_id:access.homeId,name:l.name,zone:l.zone,quantity:1,expires_on:l.expires_on,opened_on:opened,opened_until:until||null};
   if(l.quantity===1){
