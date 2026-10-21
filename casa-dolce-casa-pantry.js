@@ -41,11 +41,11 @@ $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume]
  if(b.dataset.open){
  const today=new Date(),pad=n=>String(n).padStart(2,'0'),localDate=pad(today.getDate())+'/'+pad(today.getMonth()+1)+'/'+today.getFullYear();
  const parseItalian=v=>{if(!/^\d{2}\/\d{2}\/\d{4}$/.test(v))return null;const [d,m,y]=v.split('/').map(Number),date=new Date(y,m-1,d);if(date.getFullYear()!==y||date.getMonth()!==m-1||date.getDate()!==d)return null;return y+'-'+pad(m)+'-'+pad(d)};
- const openedInput=prompt('📦 Data di apertura (GG/MM/AAAA)',localDate);if(openedInput===null)return;
+ const openedInput=prompt('📦 Quando hai aperto la confezione? (GG/MM/AAAA)',localDate);if(openedInput===null)return;
  const opened=parseItalian(openedInput.trim());if(!opened){status.textContent='Inserisci una data valida nel formato GG/MM/AAAA, per esempio 21/10/2026';return}
- const untilInput=prompt('📅 Consumare entro (GG/MM/AAAA). Controlla la confezione; puoi lasciare vuoto.','');if(untilInput===null)return;
+ const untilInput=prompt('📅 Entro quando va consumata? (GG/MM/AAAA). Controlla la confezione; puoi lasciare vuoto.','');if(untilInput===null)return;
  const until=untilInput.trim()?parseItalian(untilInput.trim()):null;
- if(untilInput.trim()&&(!until||until<opened)){status.textContent='Inserisci una data valida (GG/MM/AAAA), non precedente all’apertura';return}
+ if(untilInput.trim()&&(!until||until<opened)){status.textContent='Inserisci una data valida (GG/MM/AAAA), non precedente a quella in cui l’hai aperta';return}
  busy=true;try{
   const payload={home_id:access.homeId,name:l.name,zone:l.zone,quantity:1,expires_on:l.expires_on,opened_on:opened,opened_until:until||null};
   if(l.quantity===1){
