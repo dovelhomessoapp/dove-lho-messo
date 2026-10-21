@@ -322,6 +322,24 @@ $('#scanImageFile').addEventListener('change',async e=>{
     const px=pctx.getImageData(0,0,padded.width,padded.height);
     found=window.jsQR(px.data,padded.width,padded.height,{inversionAttempts:'attemptBoth'});
    }
+   if(!found){
+    // QR viola su bianco: binarizza, ingrandisci e riprova con diversi margini.
+    for(const threshold of [185,145,210]){
+     if(found)break;
+     const factor=2,pad=32;
+     const enhanced=document.createElement('canvas');
+     enhanced.width=canvas.width*factor+pad*2;enhanced.height=canvas.height*factor+pad*2;
+     const ec=enhanced.getContext('2d',{willReadFrequently:true});
+     ec.fillStyle='#fff';ec.fillRect(0,0,enhanced.width,enhanced.height);
+     ec.imageSmoothingEnabled=false;ec.drawImage(canvas,pad,pad,canvas.width*factor,canvas.height*factor);
+     const image=ec.getImageData(0,0,enhanced.width,enhanced.height);
+     for(let k=0;k<image.data.length;k+=4){
+      const v=(image.data[k]*0.299+image.data[k+1]*0.587+image.data[k+2]*0.114)<threshold?0:255;
+      image.data[k]=image.data[k+1]=image.data[k+2]=v;image.data[k+3]=255;
+     }
+     found=window.jsQR(image.data,enhanced.width,enhanced.height,{inversionAttempts:'attemptBoth'});
+    }
+   }
    if(found)code=found.data;
   }
   if(!code){
