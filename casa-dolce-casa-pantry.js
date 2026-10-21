@@ -7,7 +7,7 @@ root.innerHTML='<div class="panel"><h2>🍎 La mia dispensa</h2><p class="hint">
 const status=$('pantryStatus'),online=$('pantryOnline');
 const dayCount=date=>{if(!date)return null;const d=new Date(date+'T12:00:00'),today=new Date();today.setHours(12,0,0,0);return Math.round((d-today)/86400000)};
 function render(){
- const visible=lots.filter(l=>zone==='tutte'||l.zone===zone).sort((a,b)=>(a.expires_on||'9999').localeCompare(b.expires_on||'9999')||a.name.localeCompare(b.name));
+ const visible=lots.filter(l=>zone==='tutte'||l.zone===zone).sort((a,b)=>Number(Boolean(b.opened_on))-Number(Boolean(a.opened_on))||((a.opened_on?(a.opened_until||a.expires_on):a.expires_on)||'9999').localeCompare((b.opened_on?(b.opened_until||b.expires_on):b.expires_on)||'9999')||a.name.localeCompare(b.name));
  root.querySelectorAll('[data-zone]').forEach(b=>b.classList.toggle('primary',b.dataset.zone===zone));
  const expiring=lots.filter(l=>l.quantity>0&&((l.expires_on&&dayCount(l.expires_on)<=5)||(l.opened_on&&l.opened_until&&dayCount(l.opened_until)<=5)));
  $('pantryAlerts').innerHTML=expiring.length?'<div class="panel" style="background:#fff4e9;border:1px solid #f2d6b7"><strong>🔔 Da consumare prima: '+expiring.length+' lotti in scadenza o scaduti</strong></div>':'<p class="hint">💚 Nessun alimento in scadenza nei prossimi 5 giorni.</p>';
