@@ -223,7 +223,7 @@ async function lookupISBN(){
    // La miniatura di Google Books potrebbe appartenere a un'edizione differente;
    // non viene quindi scelta automaticamente.
   }
-  if(!title){const sources=[...new Set(availableSources)];toast(reachable?'Nessuna scheda ISBN trovata nelle fonti raggiunte ('+sources.join(', ')+'). Prova Cerca per titolo e autore.':'Non riesco a collegarmi ai cataloghi. Controlla la connessione e riprova.');ensureBookSearch();return}
+  if(!title){showSBNLookup(isbn);const sources=[...new Set(availableSources)];toast(reachable?'Nessuna scheda ISBN trovata nelle fonti raggiunte ('+sources.join(', ')+'). Prova Cerca per titolo e autore.':'Non riesco a collegarmi ai cataloghi. Controlla la connessione e riprova.');ensureBookSearch();return}
   if(normISBN($('#barcode').value)!==isbn)return;
   $('#kind').value='book';updateKind();$('#itemName').value=title;
   if(authors.length)$('#author').value=uniqueNames(authors).join(', ');
@@ -240,6 +240,19 @@ async function lookupISBN(){
  }catch(e){console.warn('Errore ricerca ISBN:',e);toast('Ricerca non riuscita. Riprova.')}finally{isbnLookupBtn.disabled=false;isbnLookupBtn.textContent='📖 Cerca ISBN online'}
 }
 // Ricerca aggiuntiva, utilizzabile anche con libri senza ISBN registrato nei cataloghi.
+// Fallback SBN: opens the national catalogue in a new browser tab.
+function showSBNLookup(isbn){
+ let box=document.getElementById('sbnLookupHelp');
+ if(!box){
+  box=document.createElement('div');box.id='sbnLookupHelp';box.className='panel';
+  box.style.cssText='margin:14px 0;padding:16px;border:1px solid #e5d3f1;border-radius:18px';
+  const form=document.getElementById('barcode');
+  form?.closest('label')?.parentElement?.appendChild(box);
+ }
+ if(!box)return;
+ box.innerHTML='<strong>🇮🇹 Cerca nel catalogo delle biblioteche italiane</strong><p class="muted">Non abbiamo trovato una scheda automatica. Puoi cercare lo stesso ISBN nel catalogo nazionale SBN, senza riscriverlo.</p><a id="sbnLookupLink" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 16px;border-radius:16px;background:#f0e2fa;color:#603b81;font-weight:bold;text-decoration:none">📚 Apri ricerca SBN</a>';
+ document.getElementById('sbnLookupLink').href='https://opac.sbn.it/search?query='+encodeURIComponent(isbn);
+}
 function ensureBookSearch(){
  if(document.querySelector('#bookTitleSearchPanel'))return;
  const panel=document.createElement('div');panel.id='bookTitleSearchPanel';panel.className='panel';
