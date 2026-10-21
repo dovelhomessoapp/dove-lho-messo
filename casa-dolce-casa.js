@@ -148,11 +148,11 @@ async function lookupISBN(){
      const catalog=await getCatalogJSON('https://opac.sbn.it/opacmobilegw/search.json?isbn='+encodeURIComponent(isbn));
      const rec=(catalog?.briefRecords||[]).find(x=>x?.titolo);
      if(rec){
-      const raw=String(rec.titolo).replace(/[\\x00-\\x1f\\x7f-\\x9f]/g,'');
+      const raw=String(rec.titolo).replace(/[\x00-\x1f\x7f-\x9f]/g,'');
       const author=String(rec.autorePrincipale||'').trim();
       const parts=author.split(', ');
       const publication=String(rec.pubblicazione||'');
-      sbn={title:raw.split(' / ')[0].trim(),authors:author?[parts.length>1?parts.slice(1).join(' ')+' '+parts[0]:author]:[],publisher:publication.split(':')[1]?.split(',')[0]?.trim()||'',date:publication.match(/\\b(?:18|19|20)\\d{2}\\b/)?.[0]||''};
+      sbn={title:raw.split(' / ')[0].trim(),authors:author?[parts.length>1?parts.slice(1).join(' ')+' '+parts[0]:author]:[],publisher:publication.split(':')[1]?.split(',')[0]?.trim()||'',date:publication.match(/\b(?:18|19|20)\d{2}\b/)?.[0]||''};
      }
     }catch(err){console.warn('Catalogo SBN non disponibile:',err)}
    }
