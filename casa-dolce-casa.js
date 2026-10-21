@@ -246,8 +246,9 @@ function showSBNLookup(isbn){
  if(!box){
   box=document.createElement('div');box.id='sbnLookupHelp';box.className='panel';
   box.style.cssText='margin:14px 0;padding:16px;border:1px solid #e5d3f1;border-radius:18px';
-  const form=document.getElementById('barcode');
-  form?.closest('label')?.parentElement?.appendChild(box);
+  const isbnButtons=document.getElementById('lookupBook')?.parentElement;
+  if(isbnButtons)isbnButtons.insertAdjacentElement('afterend',box);
+  else document.getElementById('barcode')?.closest('label')?.insertAdjacentElement('afterend',box);
  }
  if(!box)return;
  box.innerHTML='<strong>🇮🇹 Cerca nel catalogo delle biblioteche italiane</strong><p class="muted">Non abbiamo trovato una scheda automatica. Puoi cercare lo stesso ISBN nel catalogo nazionale SBN, senza riscriverlo.</p><a id="sbnLookupLink" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 16px;border-radius:16px;background:#f0e2fa;color:#603b81;font-weight:bold;text-decoration:none">📚 Apri ricerca SBN</a>';
