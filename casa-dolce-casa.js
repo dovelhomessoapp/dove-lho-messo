@@ -89,7 +89,7 @@ $('#itemFilter').addEventListener('input',renderItems);$('#quickSearch').addEven
 // Ricerca ISBN: cataloghi in parallelo; nessuna copertina di opere generiche viene accettata automaticamente.
 const isbnLookupBtn=$('#lookupBook');
 function checkISBN(code){if(!/^(?:\d{13}|\d{9}[\dX])$/.test(code))return false;let sum=0;if(code.length===13){for(let n=0;n<12;n++)sum+=Number(code[n])*(n%2?3:1);return (10-sum%10)%10===Number(code[12])}for(let n=0;n<10;n++)sum+=(10-n)*(code[n]==='X'?10:Number(code[n]));return sum%11===0}
-async function getCatalogJSON(url){const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),4500);try{const response=await fetch(url,{signal:ctrl.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);return await response.json()}finally{clearTimeout(timer)}}
+async function getCatalogJSON(url){const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),8000);try{const response=await fetch(url,{signal:ctrl.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);return await response.json()}finally{clearTimeout(timer)}}
 function isbn10of13(code){if(!/^978\d{10}$/.test(code))return '';const nine=code.slice(3,12);let sum=0;for(let n=0;n<9;n++)sum+=(10-n)*Number(nine[n]);let check=(11-(sum%11))%11;return nine+(check===10?'X':check)}
 function normISBN(s){return String(s||'').replace(/[\s-]/g,'').toUpperCase()}
 function exactVolume(v,isbn){const a=v?.industryIdentifiers||[];const alternate=isbn10of13(isbn);return a.some(x=>{const id=normISBN(x.identifier);return id===isbn||(alternate&&id===alternate)})}
@@ -105,7 +105,7 @@ async function lookupISBN(){
  isbnLookupBtn.disabled=true;isbnLookupBtn.textContent='📚 Cerco libro e copertina…';
  try{
   const verified=verifiedBooks[isbn];
-  let title='',authors=[],publisher='',date='',source='',exactCovers=[],reachable=false;
+  let title='',authors=[],publisher='',date='',source='',exactCovers=[],reachable=false,availableSources=[];
   if(verified){title=verified.title;authors=verified.authors;publisher=verified.publisher;date=verified.date;source='scheda verificata'}
   else{
    const [gResult,eResult,sResult]=await Promise.allSettled([
@@ -116,7 +116,7 @@ async function lookupISBN(){
    const g=gResult.status==='fulfilled'?gResult.value:null;
    const e=eResult.status==='fulfilled'?eResult.value:null;
    const r=sResult.status==='fulfilled'?sResult.value:null;
-   reachable=!!(g||e||r);
+   reachable=!!(g||e||r);if(g)availableSources.push('Google Books');if(e||r)availableSources.push('Open Library');
    let v=(g?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
    let d=r?.docs?.find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10of13(isbn)));
    // Ulteriori ricerche automatiche, sempre con controllo dell'ISBN esatto.
@@ -128,7 +128,7 @@ async function lookupISBN(){
     ]);
     const eg=extra[0].status==='fulfilled'?extra[0].value:null;
     const eo=extra[1].status==='fulfilled'?extra[1].value:null;
-    reachable=reachable||!!(eg||eo);
+    reachable=reachable||!!(eg||eo);if(eg)availableSources.push('Google Books');if(eo)availableSources.push('Open Library');
     const matchedGoogle=(eg?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
     const matchedOpen=(eo?.docs||[]).find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10of13(isbn)));
     if(matchedGoogle)v=matchedGoogle;
@@ -149,6 +149,7 @@ async function lookupISBN(){
     for(const result of responses){
      if(result.status!=='fulfilled')continue;
      reachable=true;
+     availableSources.push('ricerca alternativa');
      const data=result.value;
      if(!v?.title)v=(data?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
      if(!d?.title)d=(data?.docs||[]).find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10));
@@ -166,6 +167,7 @@ async function lookupISBN(){
    if(!e?.title&&!v?.title&&!d?.title&&!alternate?.title){
     try{
      const catalog=await getCatalogJSON('https://opac.sbn.it/opacmobilegw/search.json?isbn='+encodeURIComponent(isbn));
+     availableSources.push('SBN');reachable=true;
      const rec=(catalog?.briefRecords||[]).find(x=>x?.titolo);
      if(rec){
       const raw=String(rec.titolo).replace(/[\x00-\x1f\x7f-\x9f]/g,'');
@@ -195,7 +197,7 @@ async function lookupISBN(){
    // La miniatura di Google Books potrebbe appartenere a un'edizione differente;
    // non viene quindi scelta automaticamente.
   }
-  if(!title){toast(reachable?'ISBN non catalogato. Prova Cerca per titolo e autore.':'Cataloghi non raggiungibili. Riprova.');ensureBookSearch();return}
+  if(!title){const sources=[...new Set(availableSources)];toast(reachable?'Nessuna scheda ISBN trovata nelle fonti raggiunte ('+sources.join(', ')+'). Prova Cerca per titolo e autore.':'Non riesco a collegarmi ai cataloghi. Controlla la connessione e riprova.');ensureBookSearch();return}
   if(normISBN($('#barcode').value)!==isbn)return;
   $('#kind').value='book';updateKind();$('#itemName').value=title;
   if(authors.length)$('#author').value=uniqueNames(authors).join(', ');
