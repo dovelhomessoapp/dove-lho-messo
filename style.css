@@ -4,3 +4,6 @@
 /* v0.4: logo coerente con icona scelta */
 .brand .logo{display:block;flex:none;width:72px;height:72px;object-fit:cover;border-radius:19px;padding:0;background:none;box-shadow:0 8px 14px #8e68b238}
 @media(max-width:380px){.brand .logo{width:58px;height:58px}h1{font-size:24px}}
+
+/* Mostra interamente le foto nella scheda dettaglio, senza ritagliarle. */
+.detail-photo{display:block;width:100%;height:auto;max-height:440px;object-fit:contain;background:#f8f1ff;border-radius:20px}
