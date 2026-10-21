@@ -139,13 +139,31 @@ async function lookupISBN(){
    if(!e?.title&&!v?.title&&!d?.title){
     try{const bookMap=await getCatalogJSON('https://openlibrary.org/api/books?bibkeys=ISBN:'+encodeURIComponent(isbn)+'&jscmd=data&format=json');alternate=bookMap['ISBN:'+isbn]||null}catch(err){console.warn('Scheda alternativa:',err)}
    }
+   // Catalogo delle biblioteche italiane (SBN): tentativo aggiuntivo per ISBN
+   // meno diffusi. Il gateway mobile non garantisce CORS o disponibilità:
+   // in caso di errore non interrompe le altre ricerche.
+   let sbn=null;
+   if(!e?.title&&!v?.title&&!d?.title&&!alternate?.title){
+    try{
+     const catalog=await getCatalogJSON('https://opac.sbn.it/opacmobilegw/search.json?isbn='+encodeURIComponent(isbn));
+     const rec=(catalog?.briefRecords||[]).find(x=>x?.titolo);
+     if(rec){
+      const raw=String(rec.titolo).replace(/[\\x00-\\x1f\\x7f-\\x9f]/g,'');
+      const author=String(rec.autorePrincipale||'').trim();
+      const parts=author.split(', ');
+      const publication=String(rec.pubblicazione||'');
+      sbn={title:raw.split(' / ')[0].trim(),authors:author?[parts.length>1?parts.slice(1).join(' ')+' '+parts[0]:author]:[],publisher:publication.split(':')[1]?.split(',')[0]?.trim()||'',date:publication.match(/\\b(?:18|19|20)\\d{2}\\b/)?.[0]||''};
+     }
+    }catch(err){console.warn('Catalogo SBN non disponibile:',err)}
+   }
    // Titolo della scheda ISBN, non dell'opera generica.
-   title=e?.title||v?.title||d?.title||alternate?.title||'';
+   title=e?.title||v?.title||d?.title||alternate?.title||sbn?.title||'';
    if(v?.subtitle&&title===v.title)title+=': '+v.subtitle;
-   source=e?.title?'Open Library':v?.title?'Google Books':'Open Library Search';
+   source=sbn?.title?'SBN':e?.title?'Open Library':v?.title?'Google Books':'Open Library Search';
    authors=uniqueNames(v?.authors?.length?v.authors:(d?.author_name?.length?d.author_name:(alternate?.authors||[]).map(a=>a.name)));
-   publisher=e?.publishers?.join(', ')||v?.publisher||d?.publisher?.[0]||alternate?.publishers?.map(p=>p.name).join(', ')||'';
-   date=e?.publish_date||v?.publishedDate||String(d?.first_publish_year||'');
+   if(!authors.length&&sbn?.authors?.length)authors=sbn.authors;
+   publisher=e?.publishers?.join(', ')||v?.publisher||d?.publisher?.[0]||alternate?.publishers?.map(p=>p.name).join(', ')||sbn?.publisher||'';
+   date=e?.publish_date||v?.publishedDate||String(d?.first_publish_year||'')||sbn?.date||'';
    if(!authors.length&&e?.authors?.length){
     const results=await Promise.allSettled(e.authors.slice(0,3).filter(a=>a.key).map(a=>getCatalogJSON('https://openlibrary.org'+a.key+'.json')));
     authors=uniqueNames(results.filter(x=>x.status==='fulfilled').map(x=>x.value.name));
