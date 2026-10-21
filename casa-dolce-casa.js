@@ -121,7 +121,27 @@ async function lookupISBN(){
  try{
   const verified=verifiedBooks[isbn];
   let title='',authors=[],publisher='',date='',source='',exactCovers=[],reachable=false,availableSources=[];
-  if(verified){title=verified.title;authors=verified.authors;publisher=verified.publisher;date=verified.date;source='scheda verificata'}
+  // Cerca prima nella funzione SBN verificata, senza cambiare i dati gia salvati.
+  if(!verified){
+   try{
+    const endpoint='https://ephdnunjudbwlgbxdadm.supabase.co/functions/v1/cerca-libro-isbn?isbn='+encodeURIComponent(isbn);
+    const response=await fetch(endpoint,{headers:{'apikey':'sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT'}});
+    if(response.ok){
+     const book=await response.json();
+     if(book?.trovato&&book?.titolo){
+      title=String(book.titolo).trim();
+      authors=book.autore?[String(book.autore).trim()]:[];
+      publisher=String(book.editore||'').trim();
+      date=String(book.anno||'').trim();
+      source=String(book.fonte||'SBN');
+      if(book.copertina)exactCovers.push(String(book.copertina).replace(/^http:/,'https:'));
+      reachable=true;availableSources.push(source);
+     }
+    }
+   }catch(err){console.warn('Ricerca SBN tramite Supabase:',err)}
+  }
+  if(title){ /* Scheda trovata tramite Supabase: salta le ricerche alternative. */ }
+  else if(verified){title=verified.title;authors=verified.authors;publisher=verified.publisher;date=verified.date;source='scheda verificata'}
   else{
    const [gResult,eResult,sResult]=await Promise.allSettled([
     getCatalogJSON('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent('isbn:'+isbn)+'&maxResults=5'),
