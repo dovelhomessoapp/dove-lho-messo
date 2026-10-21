@@ -166,6 +166,7 @@ async function lookupISBN(){
  if(!checkISBN(isbn)){toast('Controlla il codice ISBN: inserisci un ISBN valido');return}
  if(!navigator.onLine){toast('Per cercare un libro serve Internet');return}
  isbnLookupBtn.disabled=true;isbnLookupBtn.textContent='📚 Cerco libro e copertina…';
+ coverChecks=[];
  try{
   const verified=verifiedBooks[isbn];
   let title='',authors=[],publisher='',date='',source='',exactCovers=[],reachable=false,availableSources=[];
@@ -309,7 +310,14 @@ async function lookupISBN(){
    else {photoData='';lastAutoBookCover='';$('#photoPreview').removeAttribute('src');$('#photoPreview').hidden=true}
   }
   saveDraft();
-  toast(photoData?'Libro trovato con copertina: controlla che sia la tua edizione 💜':'Libro trovato! Copertina non verificata: aggiungi una foto.');
+  if(photoData)toast('Libro trovato con copertina: controlla che sia la tua edizione 💜');
+  else{
+   const checks=coverChecks||[];
+   const reasons=[...new Set(checks.map(x=>x.status))];
+   const detail=checks.length?'Copertina non recuperata ('+reasons.join(', ')+').':'Nessuna copertina associata a questo ISBN.';
+   toast('Libro trovato! '+detail+' Puoi aggiungere una foto.');
+   console.info('Diagnostica copertine ISBN',isbn,checks);
+  }
  }catch(e){console.warn('Errore ricerca ISBN:',e);toast('Ricerca non riuscita. Riprova.')}finally{isbnLookupBtn.disabled=false;isbnLookupBtn.textContent='📖 Cerca ISBN online'}
 }
 // Ricerca aggiuntiva, utilizzabile anche con libri senza ISBN registrato nei cataloghi.
