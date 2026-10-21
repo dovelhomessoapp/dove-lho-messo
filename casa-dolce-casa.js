@@ -160,55 +160,69 @@ async function isbnCoverCandidates(isbn){
 }
 // Proposte di copertine per titolo: mai salvate senza conferma dell'utente.
 async function suggestBookCovers(){
- const title=$('#itemName').value.trim(),author=$('#author').value.trim();
+ const title=$('#itemName').value.trim(),author=$('#author').value.trim(),isbn=($('#barcode').value||'').replace(/[^0-9X]/gi,'');
  if(title.length<3){toast('Inserisci prima il titolo del libro');return}
  let panel=document.getElementById('coverChoicePanel');
  if(!panel){
   panel=document.createElement('div');panel.id='coverChoicePanel';panel.className='panel';
   panel.style.cssText='margin:14px 0;padding:16px;border:1px solid #e5d3f1;border-radius:18px';
-  const btn=document.getElementById('lookupBook');
-  btn.parentElement.insertAdjacentElement('afterend',panel);
+  document.getElementById('lookupBook').parentElement.insertAdjacentElement('afterend',panel);
  }
  panel.replaceChildren();
- const status=document.createElement('p');status.textContent='Cerco copertine alternative…';panel.append(status);
+ const status=document.createElement('p');status.textContent='Cerco copertine nei cataloghi…';panel.append(status);
+ const norm=t=>String(t||'').toLocaleLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+ const matches=(a,b)=>{const x=norm(a),y=norm(b);return !!x&&!!y&&(x===y||x.includes(y)||y.includes(x))};
+ const options=[];
  try{
-  const requests=[
-   getCatalogJSON('https://openlibrary.org/search.json?'+new URLSearchParams({title,limit:'20',fields:'title,author_name,cover_i,isbn,edition_key'})),
-   getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:'intitle:'+title+(author?' inauthor:'+author:''),maxResults:'20'}))
+  const searches=[
+   getCatalogJSON('https://openlibrary.org/search.json?'+new URLSearchParams({title,limit:'40',fields:'title,author_name,cover_i,isbn'})),
+   getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:title,maxResults:'40',printType:'books'})),
+   getCatalogJSON('https://opac.sbn.it/opacmobilegw/search.json?'+new URLSearchParams({isbn:isbn||'',rows:'10'}))
   ];
-  const settled=await Promise.allSettled(requests),options=[];
+  const settled=await Promise.allSettled(searches);
   if(settled[0].status==='fulfilled')for(const d of settled[0].value.docs||[]){
-   if(!d.cover_i||!sameWords(d.title,title))continue;
-   if(author&&!(d.author_name||[]).some(a=>sameWords(a,author)))continue;
-   options.push({url:'https://covers.openlibrary.org/b/id/'+d.cover_i+'-M.jpg',source:'Open Library',name:d.title});
+   if(!d.cover_i||!matches(d.title,title))continue;
+   if(author&&(d.author_name||[]).length&&!(d.author_name||[]).some(x=>matches(x,author)))continue;
+   options.push({url:'https://covers.openlibrary.org/b/id/'+d.cover_i+'-M.jpg',source:'Open Library'});
   }
   if(settled[1].status==='fulfilled')for(const item of settled[1].value.items||[]){
    const v=item.volumeInfo||{},url=v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail;
-   if(!url||!sameWords(v.title,title))continue;
-   if(author&&!(v.authors||[]).some(a=>sameWords(a,author)))continue;
-   options.push({url:url.replace(/^http:/,'https:'),source:'Google Books',name:v.title});
+   if(!url||!matches(v.title,title))continue;
+   if(author&&(v.authors||[]).length&&!(v.authors||[]).some(x=>matches(x,author)))continue;
+   options.push({url:url.replace(/^http:/,'https:'),source:'Google Books'});
   }
-  const unique=options.filter((o,i)=>options.findIndex(x=>x.url===o.url)===i).slice(0,12);
+  if(settled[2].status==='fulfilled')for(const d of settled[2].value.briefRecords||[]){
+   if(!matches(d.titolo,title)||!d.copertina)continue;
+   const url=String(d.copertina).replace(/^http:/,'https:');
+   if(/^https:\/\//.test(url)&&!url.includes('covers.librarything.com'))options.push({url,source:'Catalogo SBN'});
+  }
+  const unique=options.filter((o,i)=>options.findIndex(x=>x.url===o.url)===i).slice(0,16);
   panel.replaceChildren();
   const heading=document.createElement('strong');heading.textContent='🖼️ Scegli la copertina del tuo libro';panel.append(heading);
-  const help=document.createElement('p');help.className='muted';help.textContent='Queste immagini possono appartenere ad altre edizioni. Seleziona solo quella identica alla tua copertina.';panel.append(help);
-  if(!unique.length){const p=document.createElement('p');p.textContent='Nessuna copertina alternativa trovata. Usa Scatta foto o Galleria.';panel.append(p);return}
+  const help=document.createElement('p');help.className='muted';help.textContent='Le immagini potrebbero appartenere ad altre edizioni. Scegli soltanto quella uguale al tuo libro.';panel.append(help);
   const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px';panel.append(grid);
   for(const option of unique){
    const btn=document.createElement('button');btn.type='button';btn.className='secondary';btn.style.cssText='display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;white-space:normal';
    const img=document.createElement('img');img.src=option.url;img.alt='Copertina candidata';img.loading='lazy';img.style.cssText='max-width:100%;height:145px;object-fit:contain';
+   img.onerror=()=>{btn.remove()};
    const caption=document.createElement('span');caption.textContent='Usa questa · '+option.source;
    btn.append(img,caption);
    btn.onclick=async()=>{
     btn.disabled=true;caption.textContent='Verifico immagine…';
     const photo=await coverToPhoto(option.url);
-    if(!photo){caption.textContent='Immagine non scaricabile';btn.disabled=false;return}
+    if(!photo){caption.textContent='Immagine non scaricabile: usa Galleria';btn.disabled=false;return}
     photoData=photo;lastAutoBookCover='';$('#photoPreview').src=photo;$('#photoPreview').hidden=false;
-    saveDraft();panel.remove();toast('Copertina selezionata! Controlla che sia la tua edizione 💜');
-   };
-   grid.append(btn);
+    saveDraft();panel.remove();toast('Copertina scelta! Controlla che sia la tua edizione 💜');
+   };grid.append(btn);
   }
- }catch(e){status.textContent='Ricerca copertine non disponibile. Riprova.'}
+  if(!unique.length){const p=document.createElement('p');p.textContent='Nessuna immagine disponibile nei cataloghi interrogati.';panel.append(p)}
+  const link=document.createElement('a');
+  link.href='https://www.google.com/search?'+new URLSearchParams({tbm:'isch',q:[title,author,isbn,'copertina libro'].filter(Boolean).join(' ')});
+  link.target='_blank';link.rel='noopener noreferrer';link.textContent='🔎 Cerca altre copertine nelle immagini Google';
+  link.style.cssText='display:block;margin-top:16px;padding:12px;border:1px solid #ddc5ef;border-radius:14px;text-align:center;color:#68408b;font-weight:bold';
+  panel.append(link);
+  const tip=document.createElement('p');tip.className='muted';tip.textContent='Se trovi la copertina giusta su Google, salvala nelle Foto e torna qui: tocca Galleria. Nessun dato del libro verrà cancellato.';panel.append(tip);
+ }catch(e){status.textContent='Ricerca non disponibile. Riprova.'}
 }
 setTimeout(()=>{
  const btn=document.getElementById('lookupBook');if(!btn||document.getElementById('suggestBookCoversBtn'))return;
