@@ -8,7 +8,7 @@ const KEY='dlm-casa-dolce-casa-v1';const DRAFT_KEY='dlm-casa-dolce-casa-draft-v1
  const options=db.places.filter(p=>!excluded.has(p.id));
  const current=options.findIndex(p=>p.id===place.parentId);
  const lines=['0 — Nessuna (posizione principale)',...options.map((p,i)=>(i+1)+' — '+placePath(p.id))];
- const selected=prompt('Dove si trova? Scegli il numero:\\n'+lines.join('\\n'),String(current+1));
+ const selected=prompt('Dove si trova? Scegli il numero:\n'+lines.join('\n'),String(current+1));
  if(selected===null)return;
  const number=Number(selected.trim());
  if(!Number.isInteger(number)||number<0||number>options.length){toast('Numero non valido: modifica annullata.');return}
