@@ -4,7 +4,7 @@ const KEY='dlm-casa-dolce-casa-v1';const DRAFT_KEY='dlm-casa-dolce-casa-draft-v1
  const term=field.value.trim().toLocaleLowerCase('it');
  if(!term){results.innerHTML='';return}
  const matches=db.places.filter(p=>placePath(p.id).toLocaleLowerCase('it').includes(term)).slice(0,30);
- results.innerHTML=matches.length?matches.map(p=>'<button type="button" class="secondary" style="display:block;width:100%;text-align:left;margin:6px 0;padding:12px;overflow-wrap:anywhere" onclick="openSearchedPlace(\\''+p.id+'\\')">📍 '+safe(placePath(p.id))+'</button>').join(''):'<p class="hint">Nessuna posizione trovata.</p>';
+ results.innerHTML=matches.length?matches.map(p=>'<button type="button" class="secondary" style="display:block;width:100%;text-align:left;margin:6px 0;padding:12px;overflow-wrap:anywhere" onclick="openSearchedPlace(\''+p.id+'\')">📍 '+safe(placePath(p.id))+'</button>').join(''):'<p class="hint">Nessuna posizione trovata.</p>';
 };
 window.openSearchedPlace=function(id){
  const path=[],seen=new Set();let current=db.places.find(p=>p.id===id);
