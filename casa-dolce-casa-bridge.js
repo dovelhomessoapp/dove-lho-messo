@@ -311,6 +311,39 @@ window.showItem=function(id){
  line.append(label,document.createTextNode(showFamilyCreator(item)));
  const buttons=panel.querySelector('.row');
  if(buttons)panel.insertBefore(line,buttons);else panel.append(line);
+
+ // Spostamento rapido dalla scheda, senza modificare gli altri dati.
+ const moveBox=document.createElement('div');
+ moveBox.style.cssText='margin:18px 0 12px;padding:14px;border:1px solid #dec4eb;border-radius:16px;background:#faf4ff';
+ const moveButton=document.createElement('button');
+ moveButton.type='button';moveButton.className='secondary full';moveButton.textContent='📍 Sposta in un’altra posizione';
+ const moveControls=document.createElement('div');moveControls.hidden=true;moveControls.style.marginTop='12px';
+ const moveLabel=document.createElement('label');moveLabel.textContent='Nuova posizione';
+ const moveSelect=document.createElement('select');moveSelect.style.cssText='width:100%;margin:8px 0 12px';
+ const noPlace=document.createElement('option');noPlace.value='';noPlace.textContent='Da assegnare';moveSelect.append(noPlace);
+ const placePath=p=>{const names=[],seen=new Set();let cur=p;while(cur&&!seen.has(cur.id)){seen.add(cur.id);names.unshift(cur.name);cur=db.places.find(x=>x.id===cur.parentId)}return names.join(' → ')};
+ db.places.forEach(p=>{const option=document.createElement('option');option.value=p.id;option.textContent=placePath(p);moveSelect.append(option)});
+ moveSelect.value=item.place||'';
+ moveLabel.append(moveSelect);
+ const confirmMove=document.createElement('button');confirmMove.type='button';confirmMove.className='primary full';confirmMove.textContent='💜 Conferma spostamento';
+ const cancelMove=document.createElement('button');cancelMove.type='button';cancelMove.className='secondary full';cancelMove.style.marginTop='8px';cancelMove.textContent='Annulla';
+ moveControls.append(moveLabel,confirmMove,cancelMove);moveBox.append(moveButton,moveControls);
+ moveButton.onclick=()=>{moveControls.hidden=false;moveButton.hidden=true};
+ cancelMove.onclick=()=>{moveControls.hidden=true;moveButton.hidden=false;moveSelect.value=item.place||''};
+ confirmMove.onclick=async()=>{
+  if(moveSelect.value===(item.place||'')){cancelMove.click();return}
+  const newPlace=moveSelect.value;
+  if(newPlace&&!db.places.some(p=>p.id===newPlace)){notice('Questa posizione non esiste più.');return}
+  confirmMove.disabled=true;confirmMove.textContent='Salvataggio…';
+  try{
+   item.place=newPlace;
+   if(!save())throw Error('Salvataggio locale non riuscito');
+   if(window.familyUpdateItem)await window.familyUpdateItem(item);
+   renderPlaces();renderItems();window.showItem(id);
+   notice('Posizione aggiornata 💜');
+  }catch(e){notice('Impossibile spostare: '+e.message);confirmMove.disabled=false;confirmMove.textContent='💜 Conferma spostamento'}
+ };
+ if(buttons)panel.insertBefore(moveBox,buttons);else panel.append(moveBox);
  if(item.updatedBy){const editLine=document.createElement('p'),editLabel=document.createElement('b');editLabel.textContent='✏️ Ultima modifica di: ';editLine.append(editLabel,document.createTextNode(item.updatedByName||familyNicknames.get(item.updatedBy)||'Non identificato'));if(buttons)panel.insertBefore(editLine,buttons);else panel.append(editLine);}
 };
 })();
