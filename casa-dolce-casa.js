@@ -217,7 +217,22 @@ async function lookupCode(){
 }
 isbnLookupBtn.addEventListener('click',lookupCode);
 
-let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;$('#scanBack').hidden=false;page('scan')};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){code=code.trim();if(!code)return;stopCamera();if(code.startsWith('DLM-P-')){let p=db.places.find(x=>x.id===code.slice(6));if(!p){$('#scanResult').innerHTML='<div class="panel">Posizione non presente in questo archivio.</div>';return}let items=db.items.filter(i=>i.place===p.id);$('#scanResult').innerHTML=`<div class="panel"><h3>📍 ${safe(p.name)}</h3><p>${items.length} oggetti in questa posizione</p>${items.map(i=>`<p>📦 ${safe(i.name)}</p>`).join('')}<button class="primary full" onclick="assignScannedPlace('${p.id}')">Aggiungi qui un oggetto</button></div>`;return}if(scanForItem){scanForItem=false;page('add');restoreDraft(false);$('#barcode').value=code;saveDraft();toast('Codice inserito nel modulo');if(/^\d{13}$/.test(code)&&isEAN(code))lookupCode();return}let item=db.items.find(i=>i.barcode===code);if(item)showItem(item.id);else $('#scanResult').innerHTML='<div class="panel">Nessun oggetto associato a questo codice. Puoi aggiungerlo manualmente.</div>'}window.assignScannedPlace=id=>{editing=null;resetForm();$('#itemPlace').value=id;page('add')};$('#manualGo').onclick=()=>resolveScan($('#manualScan').value);let html5scanner=null,zxReader=null,zxControls=null,scanBusy=false,scanTimeout=null,scanHandled=false,zxingLoading=null;
+let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;$('#scanBack').hidden=false;page('scan')};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){
+ code=String(code||'').trim();if(!code)return;stopCamera();
+ if(code.startsWith('DLM-P-')){
+  const p=db.places.find(x=>x.id===code.slice(6));
+  if(!p){$('#scanResult').innerHTML='<div class="panel">Posizione non presente in questo archivio.</div>';return}
+  const items=db.items.filter(i=>i.place===p.id);
+  const children=db.places.filter(x=>x.parentId===p.id);
+  $('#scanResult').innerHTML='<div class="panel"><h3>📍 '+safe(p.name)+'</h3><p class="hint">🏡 '+safe(placePath(p.id))+'</p><p><strong>📦 '+items.length+' oggetti</strong> · '+children.length+' sottoposizioni</p>'+(items.length?'<details open><summary style="cursor:pointer;font-weight:700;padding:10px 0">Oggetti contenuti</summary>'+items.map(i=>'<button type="button" class="secondary" style="display:block;width:100%;text-align:left;margin:6px 0" onclick="showItem(\''+i.id+'\')">📦 '+safe(i.name)+'</button>').join('')+'</details>':'<p class="hint">Questa posizione non contiene ancora oggetti.</p>')+(children.length?'<p class="hint">Dentro: '+children.map(x=>safe(x.name)).join(', ')+'</p>':'')+'<button type="button" class="secondary full" onclick="openScannedPlace(\''+p.id+'\')">📍 Apri questa posizione</button><button type="button" class="primary full" onclick="assignScannedPlace(\''+p.id+'\')">＋ Aggiungi qui un oggetto</button></div>';
+  return;
+ }
+ if(scanForItem){scanForItem=false;page('add');restoreDraft(false);$('#barcode').value=code;saveDraft();toast('Codice inserito nel modulo');if(/^\d{13}$/.test(code)&&isEAN(code))lookupCode();return}
+ const item=db.items.find(i=>i.barcode===code);if(item)showItem(item.id);else $('#scanResult').innerHTML='<div class="panel">Nessun oggetto associato a questo codice. Puoi aggiungerlo manualmente.</div>';
+}
+window.openScannedPlace=id=>{page('places');openSearchedPlace(id)};
+window.assignScannedPlace=id=>{editing=null;resetForm();page('add');$('#itemPlace').value=id;saveDraft()};
+$('#manualGo').onclick=()=>resolveScan($('#manualScan').value);let html5scanner=null,zxReader=null,zxControls=null,scanBusy=false,scanTimeout=null,scanHandled=false,zxingLoading=null;
 async function loadZXing(){
  if(window.ZXing?.BrowserMultiFormatReader)return true;
  if(!navigator.onLine)return false;
