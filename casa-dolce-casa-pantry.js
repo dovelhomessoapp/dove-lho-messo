@@ -75,7 +75,41 @@ $('pantryBarcodePhoto').addEventListener('change',async e=>{
   await loadPantryZXing();
   url=URL.createObjectURL(file);
   const reader=new window.ZXing.BrowserMultiFormatReader();
-  const result=await reader.decodeFromImageUrl(url);
+  let result;
+  try{result=await reader.decodeFromImageUrl(url)}
+  catch(firstError){
+   const img=new Image();img.src=url;await img.decode();
+   const variants=[0,90,270];
+   for(const angle of variants){
+    if(result)break;
+    const rotated=angle!==0;
+    const canvas=document.createElement('canvas');
+    const scale=Math.min(3,1800/Math.max(img.naturalWidth,img.naturalHeight));
+    const w=Math.round(img.naturalWidth*scale),h=Math.round(img.naturalHeight*scale);
+    canvas.width=rotated?h:w;canvas.height=rotated?w:h;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.translate(canvas.width/2,canvas.height/2);
+    ctx.rotate(angle*Math.PI/180);
+    ctx.drawImage(img,-w/2,-h/2,w,h);
+    const data=ctx.getImageData(0,0,canvas.width,canvas.height);
+    const modes=['original','contrast','threshold'];
+    for(const mode of modes){
+     if(result)break;
+     const pixels=new Uint8ClampedArray(data.data);
+     if(mode!=='original'){
+      for(let p=0;p<pixels.length;p+=4){
+       const gray=.299*pixels[p]+.587*pixels[p+1]+.114*pixels[p+2];
+       const v=mode==='threshold'?(gray>145?255:0):Math.max(0,Math.min(255,(gray-128)*1.9+128));
+       pixels[p]=pixels[p+1]=pixels[p+2]=v;
+      }
+     }
+     ctx.putImageData(new ImageData(pixels,canvas.width,canvas.height),0,0);
+     const attempt=new Image();attempt.src=canvas.toDataURL('image/png');await attempt.decode();
+     try{result=await reader.decodeFromImageElement(attempt)}catch(_){}
+    }
+   }
+   if(!result)throw firstError;
+  }
   const code=String(result.getText()).replace(/\s/g,'');
   if(!/^\d{8,14}$/.test(code))throw Error('Codice non valido');
   $('pantryBarcode').value=code;info.textContent='💜 Codice letto dalla foto!';await lookupFoodBarcode();
