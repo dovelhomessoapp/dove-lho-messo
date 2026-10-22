@@ -40,7 +40,7 @@ $('pantryCamera').onclick=async()=>{
   if(!pantryScanning)return;
   pantryZXing=new ZXing.BrowserMultiFormatReader();
   info.textContent='Inquadra il codice a barre con la fotocamera…';
-  pantryZXing.decodeFromVideoElementContinuously(video,(result,err)=>{if(!pantryScanning||!result)return;const value=result.getText();if(/^\\d{8,14}$/.test(value)){$('pantryBarcode').value=value;stopPantryCamera();lookupFoodBarcode()}});
+  pantryZXing.decodeFromVideoElementContinuously(video,(result,err)=>{if(!pantryScanning||!result)return;const value=result.getText();if(/^\d{8,14}$/.test(value)){$('pantryBarcode').value=value;stopPantryCamera();lookupFoodBarcode()}});
  }catch(e){stopPantryCamera();info.textContent='Lettore automatico non disponibile. Inserisci il codice manualmente.'}
  return
 }
