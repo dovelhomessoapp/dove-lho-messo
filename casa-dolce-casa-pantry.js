@@ -306,6 +306,41 @@ $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;t
  const payload={home_id:access.homeId,name:[$('pantryName').value.trim(),$('pantryBrand').value.trim(),$('pantryFormat').value.trim()].filter(Boolean).join(' · ').slice(0,120),zone:$('pantryZone').value,shelf:$('pantryShelf').value.trim()||null,quantity:Number($('pantryQty').value),expires_on:$('pantryExpiry').value||null};
  if(!payload.name||!Number.isInteger(payload.quantity)||payload.quantity<1)throw Error('Controlla nome e quantità');
  await request('pantry_lots',{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(payload)});
+ try {
+  const barcode = $('pantryBarcode').value.trim();
+  if (barcode && access?.homeId) {
+    const product = {
+      home_id: access.homeId,
+      barcode: barcode,
+      name: payload.name,
+      brand: payload.brand || '',
+      format: payload.format || ''
+    };
+
+    const existing = await request(
+      'pantry_products?select=id&home_id=eq.' +
+      encodeURIComponent(access.homeId) +
+      '&barcode=eq.' + encodeURIComponent(barcode) +
+      '&limit=1'
+    );
+
+    if (existing.length) {
+      await request('pantry_products?id=eq.' + existing[0].id, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(product)
+      });
+    } else {
+      await request('pantry_products', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(product)
+      });
+    }
+  }
+} catch (err) {
+  console.warn('Archivio prodotti:', err);
+}
  $('pantryForm').reset();await refresh();pantryPopulateShelf($('pantryShelf'),$('pantryZone').value);status.textContent='💜 Alimento salvato per tutta la famiglia';
  }catch(err){status.textContent='Non salvato: '+err.message}finally{busy=false}};
 $('pantrySearch').addEventListener('input',render);
