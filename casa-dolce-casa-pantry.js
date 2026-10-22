@@ -22,17 +22,21 @@ $('pantryZone').addEventListener('change',()=>pantryPopulateShelf($('pantryShelf
 $('pantryManageShelves').onclick=()=>pantryManageShelves();
 function pantryManageShelves(){
  const z=$('pantryZone').value,labels={dispensa:'Dispensa',frigo:'Frigo',freezer:'Freezer'};
- const current=pantryShelfOptions(z);
- const action=prompt('⚙️ '+labels[z]+' — posizioni disponibili:\n'+current.map((v,i)=>(i+1)+'. '+v).join('\n')+'\n\nScrivi il nome di un nuovo ripiano o cassetto (es. Ripiano 6). Per eliminare scrivi - seguito dal numero (es. -2).','');
- if(action===null)return;
- const input=action.trim();if(!input)return;
- let next=current.slice();
- if(/^-[0-9]+$/.test(input)){const n=Number(input.slice(1));if(n<1||n>next.length){alert('Numero non valido');return}next.splice(n-1,1)}
- else if(input.length>80){alert('Nome troppo lungo');return}
- else if(!next.some(v=>v.toLowerCase()===input.toLowerCase()))next.push(input);
- const saved=pantryShelfStore();saved[z]=next;localStorage.setItem(pantryShelfKey,JSON.stringify(saved));
- pantryPopulateShelf($('pantryShelf'),z,$('pantryShelf').value);
- status.textContent='💜 Posizioni aggiornate. I ripiani già usati negli alimenti restano visibili.';
+ let entries=(Array.isArray(pantryShelfStore()[z])?pantryShelfStore()[z]:pantryDefaultShelves[z]).slice();
+ const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(30,16,45,.48);display:flex;align-items:center;justify-content:center;padding:16px';
+ const panel=document.createElement('div');panel.style.cssText='background:white;border-radius:22px;padding:20px;width:min(100%,420px);max-height:85vh;overflow-y:auto;box-shadow:0 14px 50px #24133244';
+ const title=document.createElement('h3');title.textContent='⚙️ Ripiani e cassetti — '+labels[z];title.style.margin='0 0 8px';
+ const hint=document.createElement('p');hint.className='hint';hint.textContent='Aggiungi o elimina posizioni dall’elenco. Gli alimenti già salvati non vengono eliminati.';
+ const list=document.createElement('div');
+ const field=document.createElement('input');field.placeholder='Es. Ripiano 6 oppure Cassetto verdure';field.maxLength=80;field.style.cssText='width:100%;box-sizing:border-box;margin:12px 0;padding:12px;border:1px solid #d8b9eb;border-radius:12px';
+ const add=document.createElement('button');add.type='button';add.className='secondary full';add.textContent='＋ Aggiungi posizione';
+ const done=document.createElement('button');done.type='button';done.className='primary full';done.textContent='Fine';done.style.marginTop='12px';
+ function persist(){const saved=pantryShelfStore();saved[z]=entries;localStorage.setItem(pantryShelfKey,JSON.stringify(saved));pantryPopulateShelf($('pantryShelf'),z,$('pantryShelf').value)}
+ function draw(){list.replaceChildren();entries.forEach((name,i)=>{const line=document.createElement('div');line.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0;padding:8px 0;border-bottom:1px solid #eee';const label=document.createElement('span');label.textContent='📍 '+name;const del=document.createElement('button');del.type='button';del.className='secondary';del.textContent='Elimina';del.style.flexShrink='0';del.onclick=()=>{entries.splice(i,1);persist();draw()};line.append(label,del);list.appendChild(line)})}
+ add.onclick=()=>{const value=field.value.trim();if(!value)return;if(entries.some(x=>x.toLowerCase()===value.toLowerCase())){alert('Questa posizione esiste già.');return}entries.push(value);field.value='';persist();draw()};
+ field.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();add.click()}});
+ done.onclick=()=>overlay.remove();overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
+ panel.append(title,hint,list,field,add,done);overlay.appendChild(panel);document.body.appendChild(overlay);draw();
 }
 pantryPopulateShelf($('pantryShelf'),$('pantryZone').value);
 let pantryStream=null,pantryTimer=null,pantryDetector=null,pantryScanning=false,pantryZXing=null;
