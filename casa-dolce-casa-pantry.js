@@ -144,30 +144,26 @@ async function startPantryNative(session){
 $('pantryCamera').onclick=async()=>{
  const info=$('pantryProductInfo'),video=$('pantryVideo');
  if(pantryScanning){stopPantryCamera();return}
- if(!navigator.mediaDevices?.getUserMedia){info.textContent='Fotocamera non disponibile. Inserisci il codice manualmente.';return}
  const session=++pantryScanSession;
+ pantryScanning=true;
+ video.hidden=false;$('pantryStop').hidden=false;
+ info.textContent='📷 Avvio lo scanner automatico…';
  try{
-  pantryStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-  if(session!==pantryScanSession){pantryStream.getTracks().forEach(t=>t.stop());return}
-  video.srcObject=pantryStream;video.hidden=false;$('pantryStop').hidden=false;await video.play();pantryScanning=true;
-  info.textContent='📷 Preparo il lettore per iPhone…';
-  try{
-   await loadPantryZXing();
-   if(!pantryScanning||session!==pantryScanSession)return;
-   pantryZXing=new window.ZXing.BrowserMultiFormatReader();
-   info.textContent='📷 Inquadra il codice a barre al centro, con buona luce. Attendi qualche secondo…';
-   const onDecode=(result,err)=>{if(result)pantryFoundBarcode(result.getText(),session);else if(err&&err.name&&!/NotFound|Checksum|Format/.test(err.name)&&pantryScanning&&session===pantryScanSession)info.textContent='📷 Lettore attivo. Riprova tenendo il codice fermo e ben illuminato.'};
-   if(typeof pantryZXing.decodeFromVideoElementContinuously==='function')pantryZXing.decodeFromVideoElementContinuously(video,onDecode);
-   else if(typeof pantryZXing.decodeFromVideoElement==='function')pantryZXing.decodeFromVideoElement(video).then(result=>pantryFoundBarcode(result.getText(),session)).catch(()=>{});
-   else throw Error('Metodo video non supportato');
-   // Se Safari espone il rilevatore nativo, lo usiamo contemporaneamente come secondo lettore.
-   if('BarcodeDetector' in window){try{await startPantryNative(session)}catch(e){}}
-  }catch(err){
-   if(!pantryScanning||session!==pantryScanSession)return;
-   try{await startPantryNative(session)}
-   catch(e){info.textContent='Lettore automatico non disponibile. Puoi scrivere il codice nel campo sopra.'}
-  }
- }catch(e){if(session===pantryScanSession){stopPantryCamera();info.textContent='Impossibile avviare la fotocamera. Puoi inserire il codice manualmente.'}}
+  await loadPantryZXing();
+  if(!pantryScanning||session!==pantryScanSession)return;
+  pantryZXing=new window.ZXing.BrowserMultiFormatReader(undefined,250);
+  const onDecode=(result,err)=>{
+   if(result){pantryFoundBarcode(result.getText(),session);return}
+   if(err&&err.name&&!/NotFound|Checksum|Format/.test(err.name)&&pantryScanning&&session===pantryScanSession)info.textContent='📷 Scanner attivo: tieni il codice fermo e ben illuminato.';
+  };
+  // ZXing gestisce direttamente la fotocamera: evita conflitti con getUserMedia separato su Safari.
+  info.textContent='📷 Inquadra il codice a barre: la lettura è automatica.';
+  await pantryZXing.decodeFromVideoDevice(undefined,video,onDecode);
+ }catch(err){
+  if(!pantryScanning||session!==pantryScanSession)return;
+  info.textContent='⚠️ Scanner non avviato: '+String(err?.message||err).slice(0,160);
+  stopPantryCamera();
+ }
 };
 const dayCount=date=>{if(!date)return null;const d=new Date(date+'T12:00:00'),today=new Date();today.setHours(12,0,0,0);return Math.round((d-today)/86400000)};
 function choosePantryZone(current,currentShelf=""){
