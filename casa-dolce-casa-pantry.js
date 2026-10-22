@@ -156,7 +156,12 @@ $('pantryCamera').onclick=async()=>{
    if(!pantryScanning||session!==pantryScanSession)return;
    pantryZXing=new window.ZXing.BrowserMultiFormatReader();
    info.textContent='📷 Inquadra il codice a barre al centro, con buona luce. Attendi qualche secondo…';
-   pantryZXing.decodeFromVideoElementContinuously(video,(result)=>{if(result)pantryFoundBarcode(result.getText(),session)});
+   const onDecode=(result,err)=>{if(result)pantryFoundBarcode(result.getText(),session);else if(err&&err.name&&!/NotFound|Checksum|Format/.test(err.name)&&pantryScanning&&session===pantryScanSession)info.textContent='📷 Lettore attivo. Riprova tenendo il codice fermo e ben illuminato.'};
+   if(typeof pantryZXing.decodeFromVideoElementContinuously==='function')pantryZXing.decodeFromVideoElementContinuously(video,onDecode);
+   else if(typeof pantryZXing.decodeFromVideoElement==='function')pantryZXing.decodeFromVideoElement(video).then(result=>pantryFoundBarcode(result.getText(),session)).catch(()=>{});
+   else throw Error('Metodo video non supportato');
+   // Se Safari espone il rilevatore nativo, lo usiamo contemporaneamente come secondo lettore.
+   if('BarcodeDetector' in window){try{await startPantryNative(session)}catch(e){}}
   }catch(err){
    if(!pantryScanning||session!==pantryScanSession)return;
    try{await startPantryNative(session)}
