@@ -199,7 +199,7 @@ function render(){
  const normal=filtered.filter(l=>!isPriority(l));
  const sections=[['frigo','🥬 Frigo'],['freezer','🧊 Freezer'],['dispensa','🥫 Dispensa']];
  const accordions=sections.map(([key,label])=>{
-   const group=normal.filter(l=>l.zone===key);
+   const group=normal.filter(l=>l.zone===key).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base',numeric:true})||String(a.brand||'').localeCompare(String(b.brand||''),'it',{sensitivity:'base'}));
    return '<details class="pantry-group" '+(q&&group.length?'open':'')+' style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">'+label+' · '+group.length+' lotti</summary><div style="margin-top:10px">'+(group.length?cards(group):'<p class="hint">Nessun alimento in questa posizione.</p>')+'</div></details>';
  }).join('');
  $('pantryList').innerHTML=(q?'<p class="hint">🔎 '+filtered.length+' risultati per «'+escape(q)+'»</p>':'')+
