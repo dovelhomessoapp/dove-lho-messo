@@ -51,6 +51,25 @@ $('pantryCamera').onclick=async()=>{
  }catch(e){stopPantryCamera();info.textContent='Impossibile avviare la fotocamera. Puoi inserire il codice manualmente.'}
 };
 const dayCount=date=>{if(!date)return null;const d=new Date(date+'T12:00:00'),today=new Date();today.setHours(12,0,0,0);return Math.round((d-today)/86400000)};
+function choosePantryZone(current){
+ return new Promise(resolve=>{
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(30,16,45,.48);display:flex;align-items:center;justify-content:center;padding:22px';
+  const panel=document.createElement('div');
+  panel.style.cssText='background:white;border-radius:22px;padding:24px;width:min(100%,420px);box-shadow:0 14px 50px #24133244';
+  const heading=document.createElement('h3');heading.textContent='📍 Dove si trova?';heading.style.margin='0 0 15px';
+  const select=document.createElement('select');select.style.cssText='width:100%;padding:14px;border:1px solid #d8b9eb;border-radius:12px;font-size:17px;background:#faf5ff;color:#42265c';
+  [['dispensa','🥫 Dispensa'],['frigo','🥬 Frigo'],['freezer','🧊 Freezer']].forEach(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;select.appendChild(o)});
+  select.value=current;
+  const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;margin-top:18px';
+  const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='Annulla';
+  const confirm=document.createElement('button');confirm.type='button';confirm.className='primary';confirm.textContent='Conferma';
+  actions.append(cancel,confirm);panel.append(heading,select,actions);overlay.appendChild(panel);document.body.appendChild(overlay);
+  const finish=value=>{overlay.remove();resolve(value)};
+  cancel.onclick=()=>finish(null);confirm.onclick=()=>finish(select.value);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+ });
+}
 function render(){
  const visible=lots.filter(l=>zone==='tutte'||l.zone===zone).sort((a,b)=>Number(Boolean(b.opened_on))-Number(Boolean(a.opened_on))||((a.opened_on?(a.opened_until||a.expires_on):a.expires_on)||'9999').localeCompare((b.opened_on?(b.opened_until||b.expires_on):b.expires_on)||'9999')||a.name.localeCompare(b.name));
  root.querySelectorAll('[data-zone]').forEach(b=>b.classList.toggle('primary',b.dataset.zone===zone));
@@ -83,8 +102,7 @@ $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;t
  }catch(err){status.textContent='Non salvato: '+err.message}finally{busy=false}};
 $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume],button[data-delete],button[data-open],button[data-move]');if(!b||busy)return;const id=b.dataset.consume||b.dataset.delete||b.dataset.open||b.dataset.move,l=lots.find(x=>x.id===id);if(!l)return;
  if(b.dataset.move){
- const chosen=prompt('📍 Nuova posizione: dispensa, frigo oppure freezer.',l.zone);if(chosen===null)return;
- const newZone=chosen.trim().toLowerCase();
+ const newZone=await choosePantryZone(l.zone);if(newZone===null)return;
  if(!['dispensa','frigo','freezer'].includes(newZone)){status.textContent='Scegli: dispensa, frigo oppure freezer.';return}
  busy=true;try{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({zone:newZone})});await refresh();status.textContent='💜 Posizione aggiornata'}catch(err){status.textContent='Spostamento non riuscito: '+err.message}finally{busy=false}return;
  }
@@ -97,8 +115,7 @@ $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume]
  const untilInput=prompt('📅 Entro quando va consumata? (GG/MM/AAAA). Controlla la confezione; puoi lasciare vuoto.','');if(untilInput===null)return;
  const until=untilInput.trim()?parseItalian(untilInput.trim()):null;
  if(untilInput.trim()&&(!until||until<opened)){status.textContent='Inserisci una data valida (GG/MM/AAAA), non precedente a quella in cui l’hai aperta';return}
- const locationInput=prompt('📍 Dove metti la confezione aperta? Scrivi dispensa, frigo o freezer.',l.zone);if(locationInput===null)return;
- const newZone=locationInput.trim().toLowerCase();
+ const newZone=await choosePantryZone(l.zone);if(newZone===null)return;
  if(!['dispensa','frigo','freezer'].includes(newZone)){status.textContent='Scegli: dispensa, frigo oppure freezer.';return}
  busy=true;try{
   const payload={home_id:access.homeId,name:l.name,zone:newZone,quantity:1,expires_on:l.expires_on,opened_on:opened,opened_until:until||null};
