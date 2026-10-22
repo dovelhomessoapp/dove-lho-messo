@@ -52,6 +52,23 @@ async function lookupFoodBarcode(){
  const info=$('pantryProductInfo');
  if(!/^\d{8,14}$/.test(code)){info.textContent='Inserisci un codice a barre numerico da 8 a 14 cifre.';return}
  info.textContent='🔎 Cerco il prodotto…';
+ try {
+  const saved = await request(
+    'pantry_products?select=name,brand,format&home_id=eq.' +
+    encodeURIComponent(access.homeId) +
+    '&barcode=eq.' + encodeURIComponent(code) + '&limit=1'
+  );
+  if (saved.length) {
+    const p = saved[0];
+    $('pantryName').value = p.name;
+    $('pantryBrand').value = p.brand || '';
+    $('pantryFormat').value = p.format || '';
+    info.textContent = '💜 Prodotto riconosciuto dall’archivio della famiglia!';
+    return;
+  }
+} catch (e) {
+  console.warn('Archivio familiare non disponibile', e);
+}
  try{
  const response=await fetch('https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(code)+'.json?fields=product_name,product_name_it,brands,quantity,image_front_small_url',{headers:{Accept:'application/json'}});
  if(!response.ok)throw Error('Ricerca temporaneamente non disponibile');
