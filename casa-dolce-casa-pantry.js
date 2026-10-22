@@ -76,8 +76,8 @@ $('pantryBarcodePhoto').addEventListener('change',async e=>{
   url=URL.createObjectURL(file);
   const reader=new window.ZXing.BrowserMultiFormatReader();
   const result=await reader.decodeFromImageUrl(url);
-  const code=String(result.getText()).replace(/\\s/g,'');
-  if(!/^\\d{8,14}$/.test(code))throw Error('Codice non valido');
+  const code=String(result.getText()).replace(/\s/g,'');
+  if(!/^\d{8,14}$/.test(code))throw Error('Codice non valido');
   $('pantryBarcode').value=code;info.textContent='💜 Codice letto dalla foto!';await lookupFoodBarcode();
  }catch(err){info.textContent='Non riesco a leggere il codice nella foto. Prova a fotografare da vicino, ben a fuoco e con buona luce, oppure inserisci il numero manualmente.'}
  finally{if(url)URL.revokeObjectURL(url);e.target.value=''}
