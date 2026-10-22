@@ -60,9 +60,11 @@ async function lookupFoodBarcode(){
   );
   if (saved.length) {
     const p = saved[0];
-    $('pantryName').value = p.name;
-    $('pantryBrand').value = p.brand || '';
-    $('pantryFormat').value = p.format || '';
+    const parts = (p.name || '').split(' · ');
+    const legacy = !p.brand && !p.format && parts.length >= 3;
+    $('pantryName').value = legacy ? parts.slice(0, -2).join(' · ') : (p.name || '');
+    $('pantryBrand').value = legacy ? parts[parts.length - 2] : (p.brand || '');
+    $('pantryFormat').value = legacy ? parts[parts.length - 1] : (p.format || '');
     info.textContent = '💜 Prodotto riconosciuto dall’archivio della famiglia!';
     return;
   }
@@ -352,9 +354,9 @@ if (match) {
     const product = {
       home_id: access.homeId,
       barcode: barcode,
-      name: payload.name,
-      brand: payload.brand || '',
-      format: payload.format || ''
+      name: $('pantryName').value.trim(),
+      brand: $('pantryBrand').value.trim(),
+      format: $('pantryFormat').value.trim()
     };
 
     const existing = await request(
