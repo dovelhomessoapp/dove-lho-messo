@@ -79,7 +79,7 @@ $('pantryBarcodePhoto').addEventListener('change',async e=>{
   const code=String(result.getText()).replace(/\s/g,'');
   if(!/^\d{8,14}$/.test(code))throw Error('Codice non valido');
   $('pantryBarcode').value=code;info.textContent='💜 Codice letto dalla foto!';await lookupFoodBarcode();
- }catch(err){info.textContent='Non riesco a leggere il codice nella foto. Prova a fotografare da vicino, ben a fuoco e con buona luce, oppure inserisci il numero manualmente.'}
+ }catch(err){const detail=String(err?.name||'Errore')+' — '+String(err?.message||'nessun dettaglio');info.textContent='Non sono riuscita a leggere il codice. Dettaglio tecnico: '+detail+'. Puoi inviarmi uno screenshot di questo messaggio?'}
  finally{if(url)URL.revokeObjectURL(url);e.target.value=''}
 });
 
