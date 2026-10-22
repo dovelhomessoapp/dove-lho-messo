@@ -3,7 +3,7 @@ const root=document.getElementById('pantry');if(!root)return;
 const base='https://ephdnunjudbwlgbxdadm.supabase.co',apikey='sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT';
 let lots=[],access=null,zone='tutte',busy=false;
 const $=id=>document.getElementById(id),escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-root.innerHTML='<div class="panel"><h2>🍎 La mia dispensa</h2><p class="hint">Inventario condiviso della famiglia · avvisi 5 giorni prima della scadenza</p><p id="pantryStatus" role="status">Accedi alla tua Casa dolce casa per vedere la dispensa.</p><div id="pantryOnline" hidden><div style="margin:14px 0"><label>🔎 Cerca un alimento<input id="pantrySearch" type="search" placeholder="Es. latte, pasta, marca o ripiano" autocomplete="off"></label></div><div id="pantryAlerts"></div><details id="pantryAddDetails" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px">➕ Aggiungi alimento</summary><form id="pantryForm" style="margin-top:12px"><div class="panel" style="margin:12px 0;background:#faf5ff"><strong>📷 Riconosci dal codice a barre</strong><p class="hint">Cerca automaticamente nome, marca e formato. La scadenza va inserita dalla confezione.</p><label>Codice a barre<input id="pantryBarcode" inputmode="numeric" placeholder="Es. 8001234567890"></label><div class="row"><button type="button" class="secondary" id="pantryCamera">📷 Scansiona</button><button type="button" class="secondary" id="pantryLookup">🔎 Cerca prodotto</button></div><video id="pantryVideo" playsinline muted hidden style="width:100%;max-height:280px;border-radius:14px;margin-top:8px"></video><button type="button" class="secondary full" id="pantryStop" hidden>Chiudi fotocamera</button><label style="display:block;margin-top:10px">🖼️ Scegli una foto dalla galleria (oppure scattane una)<input id="pantryBarcodePhoto" type="file" accept="image/*" style="margin-top:6px"></label><p class="hint" id="pantryProductInfo" role="status"></p></div><label>Nome alimento<input id="pantryName" required maxlength="120" placeholder="Es. Yogurt alla fragola"></label><label>Marca<input id="pantryBrand" maxlength="80" placeholder="Es. Granarolo"></label><label>Formato<input id="pantryFormat" maxlength="50" placeholder="Es. 1 litro"></label><label>Dove si trova?<select id="pantryZone"><option value="dispensa">🥫 Dispensa</option><option value="frigo">🥬 Frigo</option><option value="freezer">🧊 Freezer</option></select></label><label>Ripiano o cassetto (facoltativo)<select id="pantryShelf"></select></label><button type="button" class="secondary full" id="pantryManageShelves">⚙️ Gestisci ripiani e cassetti</button><label>Quantità<input id="pantryQty" type="number" min="1" max="99999" value="1" required></label><label>Data di scadenza (facoltativa)<input id="pantryExpiry" type="date"></label><p class="hint">Se lo stesso prodotto ha scadenze diverse, aggiungilo una volta per ciascuna scadenza.</p><button class="primary full" type="submit">💜 Salva alimento</button></form></details><h3>📦 Alimenti in casa</h3><div id="pantryList"></div><button type="button" class="secondary full" id="pantryRefresh">↻ Aggiorna dispensa</button></div></div>';
+root.innerHTML='<div class="panel"><h2>🍎 La mia dispensa</h2><p class="hint">Inventario condiviso della famiglia · avvisi 5 giorni prima della scadenza</p><p id="pantryStatus" role="status">Accedi alla tua Casa dolce casa per vedere la dispensa.</p><div id="pantryOnline" hidden><div style="margin:14px 0"><label>🔎 Cerca un alimento<input id="pantrySearch" type="search" placeholder="Es. latte, pasta, marca o ripiano" autocomplete="off"></label></div><div id="pantryAlerts"></div><details id="pantryAddDetails" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px">➕ Aggiungi alimento</summary><form id="pantryForm" style="margin-top:12px"><div class="panel" style="margin:12px 0;background:#faf5ff"><strong>📷 Riconosci dal codice a barre</strong><p class="hint">Cerca automaticamente nome, marca e formato. La scadenza va inserita dalla confezione.</p><label>Codice a barre<input id="pantryBarcode" inputmode="numeric" placeholder="Es. 8001234567890"></label><div class="row"><button type="button" class="secondary" id="pantryCamera">📷 Scansiona</button><button type="button" class="secondary" id="pantryLookup">🔎 Cerca prodotto</button></div><video id="pantryVideo" playsinline muted hidden style="width:100%;max-height:280px;border-radius:14px;margin-top:8px"></video><button type="button" class="secondary full" id="pantryStop" hidden>Chiudi fotocamera</button><label style="display:block;margin-top:10px">🖼️ Scegli una foto dalla galleria (oppure scattane una)<input id="pantryBarcodePhoto" type="file" accept="image/*" style="margin-top:6px"></label><p class="hint" id="pantryProductInfo" role="status"></p></div><label>Nome alimento<input id="pantryName" required maxlength="120" placeholder="Es. Yogurt alla fragola"></label><label>Marca<input id="pantryBrand" maxlength="80" placeholder="Es. Granarolo"></label><label>Formato<input id="pantryFormat" maxlength="50" placeholder="Es. 1 litro"></label><label>Dove si trova?<select id="pantryZone"><option value="dispensa">🥫 Dispensa</option><option value="frigo">🥬 Frigo</option><option value="freezer">🧊 Freezer</option></select></label><label>Ripiano o cassetto (facoltativo)<select id="pantryShelf"></select></label><button type="button" class="secondary full" id="pantryManageShelves">⚙️ Gestisci ripiani e cassetti</button><label>Quantità<input id="pantryQty" type="number" min="1" max="99999" value="1" required></label><label>Data di scadenza (facoltativa)<input id="pantryExpiry" type="date"></label><p class="hint">Se lo stesso prodotto ha scadenze diverse, aggiungilo una volta per ciascuna scadenza.</p><button class="primary full" type="submit">💜 Salva alimento</button></form></details><details id="shoppingBox" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px">🛒 La mia lista della spesa <span id="shoppingCount"></span></summary><form id="shoppingForm" style="margin:12px 0"><label>Prodotto da comprare<input id="shoppingName" maxlength="120" required placeholder="Es. Latte · Parmalat · 1 litro"></label><label>Quantità<input id="shoppingQty" type="number" min="1" max="99999" value="1" required></label><button type="submit" class="primary full">➕ Aggiungi alla lista</button></form><p id="shoppingStatus" class="hint"></p><div id="shoppingList"></div><button type="button" class="secondary full" id="shoppingRefresh">↻ Aggiorna lista</button></details><h3>📦 Alimenti in casa</h3><div id="pantryList"></div><button type="button" class="secondary full" id="pantryRefresh">↻ Aggiorna dispensa</button></div></div>';
 const status=$('pantryStatus'),online=$('pantryOnline');
 const pantryDefaultShelves={dispensa:['Ripiano 1','Ripiano 2','Ripiano 3'],frigo:['Ripiano 1','Ripiano 2','Ripiano 3','Ripiano 4','Ripiano 5','Cassetto verdure','Sportello'],freezer:['Cassetto 1','Cassetto 2','Cassetto 3']};
 const pantryShelfKey='dlm-pantry-shelves-v1';
@@ -237,13 +237,52 @@ async function request(path,opts={}){
  if(!response.ok){const d=await response.json().catch(()=>({}));throw Error(d.message||'Errore '+response.status)}
  if(response.status===204)return null;const t=await response.text();return t?JSON.parse(t):null;
 }
+let shopping=[];
+async function refreshShopping(){
+ if(!access)return;
+ try{
+  shopping=await request('shopping_items?select=id,name,quantity,purchased&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=name.asc');
+  renderShopping();
+  $('shoppingStatus').textContent='';
+ }catch(err){$('shoppingStatus').textContent='Per attivare la lista della spesa, esegui shopping-setup.sql in Supabase. '+err.message}
+}
+function renderShopping(){
+ const pending=shopping.filter(x=>!x.purchased).sort((a,b)=>a.name.localeCompare(b.name,'it',{sensitivity:'base'}));
+ const bought=shopping.filter(x=>x.purchased).sort((a,b)=>a.name.localeCompare(b.name,'it',{sensitivity:'base'}));
+ $('shoppingCount').textContent='('+pending.length+')';
+ const card=x=>'<div class="panel" style="margin:9px 0;padding:12px"><div style="display:flex;gap:9px;align-items:center;justify-content:space-between"><strong style="'+(x.purchased?'text-decoration:line-through;opacity:.65':'')+'">'+escape(x.name)+' · '+x.quantity+'</strong><div class="row"><button type="button" class="secondary" data-shopping-toggle="'+x.id+'">'+(x.purchased?'↩️ Ripristina':'✓ Comprato')+'</button><button type="button" class="secondary" data-shopping-delete="'+x.id+'">Elimina</button></div></div></div>';
+ $('shoppingList').innerHTML=(pending.length?pending.map(card).join(''):'<p class="hint">Nessun prodotto da acquistare.</p>')+(bought.length?'<details style="margin-top:12px"><summary>✅ Acquistati ('+bought.length+')</summary>'+bought.map(card).join('')+'</details>':'');
+}
+async function addToShopping(name,quantity=1){
+ if(!access)throw Error('Accedi alla casa');
+ const clean=String(name||'').trim().slice(0,120);if(!clean)throw Error('Nome mancante');
+ const existing=shopping.find(x=>!x.purchased&&x.name.toLocaleLowerCase('it')===clean.toLocaleLowerCase('it'));
+ if(existing)await request('shopping_items?id=eq.'+encodeURIComponent(existing.id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:existing.quantity+quantity})});
+ else await request('shopping_items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_id:access.homeId,name:clean,quantity})});
+ await refreshShopping();
+}
+$('shoppingForm').onsubmit=async e=>{
+ e.preventDefault();if(busy)return;busy=true;
+ try{await addToShopping($('shoppingName').value,Number($('shoppingQty').value));$('shoppingForm').reset();$('shoppingStatus').textContent='💜 Aggiunto alla lista condivisa'}
+ catch(err){$('shoppingStatus').textContent='Non salvato: '+err.message}finally{busy=false}
+};
+$('shoppingRefresh').onclick=refreshShopping;
+$('shoppingList').onclick=async e=>{
+ const b=e.target.closest('button[data-shopping-toggle],button[data-shopping-delete]');if(!b||busy)return;
+ const id=b.dataset.shoppingToggle||b.dataset.shoppingDelete,x=shopping.find(y=>y.id===id);if(!x)return;
+ busy=true;try{
+  if(b.dataset.shoppingDelete){if(!confirm('Eliminare '+x.name+' dalla lista?'))return;await request('shopping_items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'DELETE'})}
+  else await request('shopping_items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({purchased:!x.purchased})});
+  await refreshShopping();
+ }catch(err){$('shoppingStatus').textContent=err.message}finally{busy=false}
+};
 async function refresh(){
  if(!access)return;
- try{status.textContent='Aggiorno la dispensa…';lots=await request('pantry_lots?select=id,name,zone,quantity,expires_on,opened_on,opened_until,shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);render()}
+ try{status.textContent='Aggiorno la dispensa…';lots=await request('pantry_lots?select=id,name,zone,quantity,expires_on,opened_on,opened_until,shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);render();await refreshShopping()}
  catch(e){status.textContent='Per attivare la dispensa condivisa, esegui prima pantry-setup.sql in Supabase. Dettaglio: '+e.message}
 }
 window.familyPantryConnect=(homeId,getToken)=>{access={homeId,token:getToken};online.hidden=false;refresh()};
-window.familyPantryDisconnect=()=>{access=null;lots=[];online.hidden=true;status.textContent='Accedi alla tua Casa dolce casa per vedere la dispensa.'};
+window.familyPantryDisconnect=()=>{access=null;lots=[];shopping=[];online.hidden=true;status.textContent='Accedi alla tua Casa dolce casa per vedere la dispensa.'};
 root.querySelectorAll('[data-zone]').forEach(b=>b.addEventListener('click',()=>{zone=b.dataset.zone;render()}));
 $('pantryRefresh').onclick=refresh;
 $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;try{
@@ -285,5 +324,5 @@ $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume]
  }
  busy=true;try{if(b.dataset.delete||l.quantity<=1){await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'DELETE'})}
  else{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:l.quantity-1})})}
- await refresh()}catch(err){status.textContent='Modifica non riuscita: '+err.message}finally{busy=false}};
+ await refresh();if(b.dataset.consume&&l.quantity<=1&&confirm('🛒 Hai finito '+l.name+'. Vuoi aggiungerlo alla mia lista della spesa?')){try{await addToShopping(l.name,1);$('shoppingBox').open=true;status.textContent='💜 Aggiunto alla lista della spesa'}catch(err){status.textContent='Alimento consumato, ma lista della spesa non aggiornata: '+err.message}}}catch(err){status.textContent='Modifica non riuscita: '+err.message}finally{busy=false}};
 })();
