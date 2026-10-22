@@ -46,3 +46,38 @@ if(btn&&status&&preview){
   }finally{btn.disabled=false}
  });
 }
+
+/* Experimental semantic image comparison using an on-device CLIP model. */
+const compareBtn=document.getElementById('photoAiCompare');
+const compareStatus=document.getElementById('photoAiCompareStatus');
+let semanticModelPromise=null;
+const candidates=[
+ 'a 3D printer machine','a storage container with a digital humidity display',
+ 'a container for eyelash extension glue','a digital watch','a plastic food storage container',
+ 'a jar with a lid','a camera','a pair of shoes','a book','a kitchen appliance',
+ 'a toy','a printer','a power tool','a phone charger','a bottle',
+ 'a hair dryer','a sewing machine','a pair of glasses','a lamp','a box'
+];
+if(compareBtn&&compareStatus&&preview){
+ compareBtn.addEventListener('click',async()=>{
+  if(!preview.src||preview.hidden){compareStatus.textContent='Prima scegli una fotografia.';return}
+  if(!navigator.onLine&&!semanticModelPromise){compareStatus.textContent='Per il primo caricamento serve Internet.';return}
+  compareBtn.disabled=true;
+  try{
+   compareStatus.textContent='Caricamento del modello visivo gratuito CLIP… Il primo download può essere grande e richiedere alcuni minuti.';
+   if(!semanticModelPromise)semanticModelPromise=import('https://esm.sh/@xenova/transformers@2.17.2?bundle')
+    .then(async m=>({module:m,model:await m.pipeline('zero-shot-image-classification','Xenova/clip-vit-base-patch32',{quantized:true})}))
+    .catch(e=>{semanticModelPromise=null;throw e});
+   const {module,model}=await semanticModelPromise;
+   compareStatus.textContent='Confronto della fotografia con descrizioni di oggetti…';
+   const response=await fetch(preview.src);
+   const photo=await module.RawImage.fromBlob(await response.blob());
+   const result=await model(photo,candidates);
+   const best=result.slice(0,4).map(x=>x.label+' ('+Math.round(x.score*100)+'%)').join(' · ');
+   compareStatus.textContent='Ipotesi del modello sperimentale: '+best+'. Sono confronti con un elenco limitato, non identificazioni certe. Non modifico automaticamente la scheda.';
+  }catch(e){
+   compareStatus.textContent='Modello avanzato non disponibile su questo iPhone: '+((e&&e.message)||String(e)).slice(0,180)+'. Il riconoscimento standard resta utilizzabile.';
+   console.warn('Semantic photo recognition:',e);
+  }finally{compareBtn.disabled=false}
+ });
+}
