@@ -215,6 +215,7 @@ function render(){
  $('pantryAlerts').innerHTML=soon.length?'<details open style="background:#fff4e9;border:1px solid #f2d6b7;border-radius:18px;padding:14px;margin:12px 0"><summary style="font-weight:700;cursor:pointer">🔔 Da consumare presto ('+soon.length+')</summary><p class="hint">In ordine di scadenza, dai più urgenti.</p><ul style="padding-left:22px;margin-bottom:0">'+urgentRows+'</ul></details>':'<p class="hint">💚 Nessun alimento in scadenza nei prossimi 5 giorni.</p>';
  const matches=l=>!q||[l.name,l.brand,l.format,l.zone,l.shelf].some(v=>String(v||'').toLocaleLowerCase('it').includes(q));
  const filtered=sorted.filter(matches);
+ renderMinimumStocks();
  const cards=arr=>arr.map(l=>{const days=dayCount(l.expires_on);const badge=days===null?'Senza scadenza':days<0?'⚠️ Scaduto da '+Math.abs(days)+' giorni':days===0?'⚠️ Scade oggi':days<=5?'🔔 Scade tra '+days+' giorni':'Scade il '+l.expires_on.split('-').reverse().join('/');
  const opened=l.opened_on?'<p class="hint">📦 Aperta il '+escape(l.opened_on.split('-').reverse().join('/'))+(l.opened_until?' · Consumare entro '+escape(l.opened_until.split('-').reverse().join('/'))+(dayCount(l.opened_until)<=5?' 🔔':''):' · Termine dopo apertura non indicato')+'</p>':'';return '<div class="panel" style="margin:10px 0"><strong>'+escape(l.name)+'</strong>'+(l.opened_on?' <span style="display:inline-block;margin-left:6px;padding:4px 9px;border-radius:999px;background:#f2dfff;color:#7432a6;font-weight:700;font-size:12px">📦 APERTO</span>':'')+'<p class="hint">'+({frigo:'🥬 Frigo',freezer:'🧊 Freezer',dispensa:'🥫 Dispensa'}[l.zone]||'')+(l.shelf?' · 📍 '+escape(/^\d+$/.test(l.shelf)?'Ripiano '+l.shelf:l.shelf):'')+' · '+escape(badge)+'</p>'+opened+'<div class="row"><span>Quantità: <b>'+l.quantity+'</b></span><button type="button" class="secondary" data-consume="'+l.id+'">− 1 consumato</button>'+(l.opened_on?'':'<button type="button" class="secondary" data-open="'+l.id+'">📦 Apri 1</button>')+'<button type="button" class="secondary" data-edit="'+l.id+'">✏️ Modifica</button><button type="button" class="secondary" data-move="'+l.id+'">📍 Sposta</button><button type="button" class="secondary" data-delete="'+l.id+'">Elimina</button></div></div>'}).join('');
  const priority=filtered.filter(isPriority);
@@ -259,7 +260,25 @@ async function request(path,opts={}){
  if(!response.ok){const d=await response.json().catch(()=>({}));throw Error(d.message||'Errore '+response.status)}
  if(response.status===204)return null;const t=await response.text();return t?JSON.parse(t):null;
 }
-let shopping=[];
+let shopping=[],minimumStocks=[];
+const stockKey=name=>String(name||'').trim().toLocaleLowerCase('it').slice(0,120);
+async function refreshMinimumStocks(){
+ try{minimumStocks=await request('pantry_minimum_stocks?select=id,product_name,product_key,minimum_quantity&home_id=eq.'+encodeURIComponent(access.homeId));$('pantryStockStatus').textContent=''}
+ catch(err){minimumStocks=[];$('pantryStockStatus').textContent='Scorte minime non disponibili: '+err.message}
+}
+function renderMinimumStocks(){
+ const entries=minimumStocks.map(m=>{const total=lots.filter(l=>stockKey(l.name)===m.product_key).reduce((n,l)=>n+Number(l.quantity||0),0);return {...m,total,missing:Math.max(0,m.minimum_quantity-total)}}).sort((a,b)=>b.missing-a.missing||a.product_name.localeCompare(b.product_name,'it'));
+ $('pantryStockList').innerHTML=entries.length?entries.map(m=>'<div class="panel" style="padding:12px;margin:8px 0"><strong>'+escape(m.product_name)+'</strong><p class="hint">In casa: '+m.total+' · Scorta minima: '+m.minimum_quantity+(m.missing?' · ⚠️ Mancano '+m.missing:' · 💚 Scorta sufficiente')+'</p><div class="row">'+(m.missing?'<button type="button" class="secondary" data-stock-buy="'+escape(m.id)+'">🛒 Aggiungi '+m.missing+' alla spesa</button>':'')+'<button type="button" class="secondary" data-stock-edit="'+escape(m.id)+'">✏️ Modifica</button><button type="button" class="secondary" data-stock-delete="'+escape(m.id)+'">Elimina soglia</button></div></div>').join(''):'<p class="hint">Nessuna scorta minima impostata.</p>';
+ const low=entries.filter(m=>m.missing);$('pantryStockAlerts').innerHTML=low.length?'<div class="panel" style="background:#fff4e9;border:1px solid #f2d6b7;margin:12px 0"><strong>🛒 Scorte da reintegrare: '+low.length+'</strong><p class="hint">'+low.map(m=>escape(m.product_name)+' (mancano '+m.missing+')').join(' · ')+'</p></div>':'';
+}
+async function saveMinimumStock(name,amount){
+ const key=stockKey(name),existing=minimumStocks.find(m=>m.product_key===key);
+ if(!key||!Number.isInteger(amount)||amount<1||amount>99999)throw Error('Inserisci un nome e una quantità valida');
+ if(existing)await request('pantry_minimum_stocks?id=eq.'+encodeURIComponent(existing.id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({minimum_quantity:amount,product_name:name.trim()})});
+ else await request('pantry_minimum_stocks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_id:access.homeId,product_name:name.trim(),product_key:key,minimum_quantity:amount})});
+ await refreshMinimumStocks();renderMinimumStocks();
+}
+
 async function refreshShopping(){
  if(!access)return;
  try{
@@ -298,13 +317,28 @@ $('shoppingList').onclick=async e=>{
   await refreshShopping();
  }catch(err){$('shoppingStatus').textContent=err.message}finally{busy=false}
 };
+const stockPanel=document.createElement('details');stockPanel.style.cssText='margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff';
+stockPanel.innerHTML='<summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px">📦 Scorte minime della famiglia</summary><p class="hint">Imposta quante confezioni vuoi avere sempre in casa. Sommiamo frigo, freezer e dispensa.</p><form id="pantryStockForm"><label>Nome alimento<input id="pantryStockName" required maxlength="120" placeholder="Es. Latte · Parmalat"></label><label>Quantità minima<input id="pantryStockQty" type="number" min="1" max="99999" value="2" required></label><button class="secondary" type="submit">💜 Salva scorta minima</button></form><p id="pantryStockStatus" class="hint"></p><div id="pantryStockList"></div>';
+$('pantryList').before(stockPanel);
+const stockAlert=document.createElement('div');stockAlert.id='pantryStockAlerts';$('pantryAlerts').after(stockAlert);
+$('pantryStockForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;try{await saveMinimumStock($('pantryStockName').value,Number($('pantryStockQty').value));$('pantryStockStatus').textContent='💜 Scorta minima salvata per la famiglia'}catch(err){$('pantryStockStatus').textContent='Non salvato: '+err.message}finally{busy=false}};
+$('pantryStockList').onclick=async e=>{
+ const b=e.target.closest('button[data-stock-buy],button[data-stock-edit],button[data-stock-delete]');if(!b||busy)return;
+ const id=b.dataset.stockBuy||b.dataset.stockEdit||b.dataset.stockDelete,m=minimumStocks.find(x=>x.id===id);if(!m)return;
+ if(b.dataset.stockEdit){$('pantryStockName').value=m.product_name;$('pantryStockQty').value=m.minimum_quantity;stockPanel.open=true;$('pantryStockName').focus();return}
+ if(b.dataset.stockDelete&&!confirm('Eliminare la scorta minima di '+m.product_name+'? Gli alimenti restano nella dispensa.'))return;
+ busy=true;try{
+ if(b.dataset.stockDelete){await request('pantry_minimum_stocks?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'DELETE'});await refreshMinimumStocks();renderMinimumStocks();$('pantryStockStatus').textContent='Scorta minima eliminata'}
+ else{const total=lots.filter(l=>stockKey(l.name)===m.product_key).reduce((n,l)=>n+Number(l.quantity||0),0),missing=Math.max(0,m.minimum_quantity-total);if(missing){await addToShopping(m.product_name,missing);$('shoppingBox').open=true;$('pantryStockStatus').textContent='💜 Aggiunto alla lista della spesa'}}
+ }catch(err){$('pantryStockStatus').textContent='Operazione non riuscita: '+err.message}finally{busy=false}
+};
 async function refresh(){
  if(!access)return;
- try{status.textContent='Aggiorno la dispensa…';lots=await request('pantry_lots?select=id,name,zone,quantity,expires_on,opened_on,opened_until,shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);render();await refreshShopping()}
+ try{status.textContent='Aggiorno la dispensa…';lots=await request('pantry_lots?select=id,name,zone,quantity,expires_on,opened_on,opened_until,shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);await refreshMinimumStocks();render();await refreshShopping()}
  catch(e){status.textContent='Per attivare la dispensa condivisa, esegui prima pantry-setup.sql in Supabase. Dettaglio: '+e.message}
 }
 window.familyPantryConnect=(homeId,getToken)=>{access={homeId,token:getToken};online.hidden=false;refresh()};
-window.familyPantryDisconnect=()=>{access=null;lots=[];shopping=[];online.hidden=true;status.textContent='Accedi alla tua Casa dolce casa per vedere la dispensa.'};
+window.familyPantryDisconnect=()=>{access=null;lots=[];shopping=[];minimumStocks=[];online.hidden=true;status.textContent='Accedi alla tua Casa dolce casa per vedere la dispensa.'};
 root.querySelectorAll('[data-zone]').forEach(b=>b.addEventListener('click',()=>{zone=b.dataset.zone;render()}));
 $('pantryRefresh').onclick=refresh;
 $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;try{
