@@ -39,8 +39,14 @@ function pantryManageShelves(){
  panel.append(title,hint,list,field,add,done);overlay.appendChild(panel);document.body.appendChild(overlay);draw();
 }
 pantryPopulateShelf($('pantryShelf'),$('pantryZone').value);
-let pantryStream=null,pantryTimer=null,pantryDetector=null,pantryScanning=false,pantryZXing=null;
-function stopPantryCamera(){pantryScanning=false;if(pantryZXing){try{pantryZXing.reset()}catch(e){}pantryZXing=null;}if(pantryTimer)clearTimeout(pantryTimer);pantryTimer=null;if(pantryStream)pantryStream.getTracks().forEach(t=>t.stop());pantryStream=null;const v=$('pantryVideo');v.pause();v.srcObject=null;v.hidden=true;$('pantryStop').hidden=true}
+let pantryStream=null,pantryTimer=null,pantryDetector=null,pantryScanning=false,pantryZXing=null,pantryScanSession=0;
+function stopPantryCamera(){
+ pantryScanning=false;pantryScanSession++;
+ if(pantryZXing){try{pantryZXing.reset()}catch(e){}pantryZXing=null}
+ if(pantryTimer)clearTimeout(pantryTimer);pantryTimer=null;
+ if(pantryStream)pantryStream.getTracks().forEach(t=>t.stop());pantryStream=null;
+ const v=$('pantryVideo');v.pause();v.srcObject=null;v.hidden=true;$('pantryStop').hidden=true;
+}
 async function lookupFoodBarcode(){
  const code=$('pantryBarcode').value.trim().replace(/\s/g,'');
  const info=$('pantryProductInfo');
@@ -57,32 +63,56 @@ async function lookupFoodBarcode(){
  info.textContent='💜 Prodotto riconosciuto! Controlla il nome, poi scegli posizione, quantità e scadenza.';
  }catch(e){info.textContent='Non riesco a cercare il prodotto: '+e.message+'. Puoi inserirlo manualmente.'}
 }
+
 $('pantryLookup').onclick=lookupFoodBarcode;
 $('pantryBarcode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();lookupFoodBarcode()}});
 $('pantryStop').onclick=stopPantryCamera;
+async function loadPantryZXing(){
+ if(window.ZXing?.BrowserMultiFormatReader)return;
+ const urls=['https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js','https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js'];
+ for(const url of urls){
+  try{await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=url;s.onload=resolve;s.onerror=()=>reject(Error('download'));document.head.appendChild(s)});if(window.ZXing?.BrowserMultiFormatReader)return}catch(e){}
+ }
+ throw Error('Impossibile caricare il lettore');
+}
+function pantryFoundBarcode(value,session){
+ if(!pantryScanning||session!==pantryScanSession)return false;
+ const code=String(value||'').replace(/\s/g,'');
+ if(!/^\d{8,14}$/.test(code))return false;
+ $('pantryBarcode').value=code;stopPantryCamera();lookupFoodBarcode();return true;
+}
+async function startPantryNative(session){
+ const info=$('pantryProductInfo'),video=$('pantryVideo');
+ if(!('BarcodeDetector' in window))throw Error('Lettore nativo non disponibile');
+ pantryDetector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']});
+ info.textContent='📷 Inquadra il codice a barre. Avvicina lentamente la confezione e tienila ferma.';
+ const tick=async()=>{if(!pantryScanning||session!==pantryScanSession)return;
+  try{const codes=await pantryDetector.detect(video);if(codes.some(x=>pantryFoundBarcode(x.rawValue,session)))return}catch(e){}
+  if(pantryScanning&&session===pantryScanSession)pantryTimer=setTimeout(tick,350);
+ };tick();
+}
 $('pantryCamera').onclick=async()=>{
  const info=$('pantryProductInfo'),video=$('pantryVideo');
- if(pantryScanning)stopPantryCamera();
+ if(pantryScanning){stopPantryCamera();return}
  if(!navigator.mediaDevices?.getUserMedia){info.textContent='Fotocamera non disponibile. Inserisci il codice manualmente.';return}
+ const session=++pantryScanSession;
  try{
- pantryStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
- video.srcObject=pantryStream;video.hidden=false;$('pantryStop').hidden=false;await video.play();pantryScanning=true;
- if(!('BarcodeDetector' in window)){
- info.textContent='Preparo il lettore compatibile con iPhone…';
- try{
-  if(!window.ZXing){await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js';script.onload=resolve;script.onerror=()=>reject(Error('Lettore non disponibile'));document.head.appendChild(script)})}
-  if(!pantryScanning)return;
-  pantryZXing=new ZXing.BrowserMultiFormatReader();
-  info.textContent='Inquadra il codice a barre con la fotocamera…';
-  pantryZXing.decodeFromVideoElementContinuously(video,(result,err)=>{if(!pantryScanning||!result)return;const value=result.getText().replace(/\s/g,'');if(/^\d{8,14}$/.test(value)){$('pantryBarcode').value=value;stopPantryCamera();lookupFoodBarcode()}});
- }catch(e){stopPantryCamera();info.textContent='Lettore automatico non disponibile. Inserisci il codice manualmente.'}
- return
-}
- pantryDetector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']});
- info.textContent='Inquadra il codice a barre…';
- const tick=async()=>{if(!pantryScanning)return;try{const codes=await pantryDetector.detect(video);const found=codes.find(x=>/^\d{8,14}$/.test(x.rawValue));if(found){$('pantryBarcode').value=found.rawValue;stopPantryCamera();await lookupFoodBarcode();return}}catch(e){}if(pantryScanning)pantryTimer=setTimeout(tick,350)};
- tick();
- }catch(e){stopPantryCamera();info.textContent='Impossibile avviare la fotocamera. Puoi inserire il codice manualmente.'}
+  pantryStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+  if(session!==pantryScanSession){pantryStream.getTracks().forEach(t=>t.stop());return}
+  video.srcObject=pantryStream;video.hidden=false;$('pantryStop').hidden=false;await video.play();pantryScanning=true;
+  info.textContent='📷 Preparo il lettore per iPhone…';
+  try{
+   await loadPantryZXing();
+   if(!pantryScanning||session!==pantryScanSession)return;
+   pantryZXing=new window.ZXing.BrowserMultiFormatReader();
+   info.textContent='📷 Inquadra il codice a barre al centro, con buona luce. Attendi qualche secondo…';
+   pantryZXing.decodeFromVideoElementContinuously(video,(result)=>{if(result)pantryFoundBarcode(result.getText(),session)});
+  }catch(err){
+   if(!pantryScanning||session!==pantryScanSession)return;
+   try{await startPantryNative(session)}
+   catch(e){info.textContent='Lettore automatico non disponibile. Puoi scrivere il codice nel campo sopra.'}
+  }
+ }catch(e){if(session===pantryScanSession){stopPantryCamera();info.textContent='Impossibile avviare la fotocamera. Puoi inserire il codice manualmente.'}}
 };
 const dayCount=date=>{if(!date)return null;const d=new Date(date+'T12:00:00'),today=new Date();today.setHours(12,0,0,0);return Math.round((d-today)/86400000)};
 function choosePantryZone(current,currentShelf=""){
