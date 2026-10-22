@@ -122,8 +122,7 @@ function render(){
    return '<details class="pantry-group" '+(q&&group.length?'open':'')+' style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">'+label+' · '+group.length+' lotti</summary><div style="margin-top:10px">'+(group.length?cards(group):'<p class="hint">Nessun alimento in questa posizione.</p>')+'</div></details>';
  }).join('');
  $('pantryList').innerHTML=(q?'<p class="hint">🔎 '+filtered.length+' risultati per «'+escape(q)+'»</p>':'')+
- '<h3>🔔 Aperti e da consumare prima ('+priority.length+')</h3>'+
- (priority.length?cards(priority):'<p class="hint">Nessun alimento aperto o in scadenza'+(q?' tra i risultati':'')+'.</p>')+
+ '<details class="pantry-group" '+(q?'open':'')+' style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">🔔 Aperti e da consumare prima ('+priority.length+')</summary><div style="margin-top:10px">'+(priority.length?cards(priority):'<p class="hint">Nessun alimento aperto o in scadenza'+(q?' tra i risultati':'')+'.</p>')+'</div></details>'+
  '<h3 style="margin-top:22px">📦 Tutti gli altri alimenti</h3>'+accordions;
 }
 
