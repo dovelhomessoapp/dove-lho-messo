@@ -15,7 +15,7 @@ function pantryShelfOptions(z,selected=''){
 }
 function pantryPopulateShelf(select,z,selected=''){
  select.replaceChildren();const empty=document.createElement('option');empty.value='';empty.textContent='Nessun ripiano specificato';select.appendChild(empty);
- pantryShelfOptions(z,selected).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=/^\\d+$/.test(v)?'Ripiano '+v:v;select.appendChild(o)});
+ pantryShelfOptions(z,selected).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=/^\d+$/.test(v)?'Ripiano '+v:v;select.appendChild(o)});
  select.value=selected||'';
 }
 $('pantryZone').addEventListener('change',()=>pantryPopulateShelf($('pantryShelf'),$('pantryZone').value));
@@ -23,7 +23,7 @@ $('pantryManageShelves').onclick=()=>pantryManageShelves();
 function pantryManageShelves(){
  const z=$('pantryZone').value,labels={dispensa:'Dispensa',frigo:'Frigo',freezer:'Freezer'};
  const current=pantryShelfOptions(z);
- const action=prompt('⚙️ '+labels[z]+' — posizioni disponibili:\\n'+current.map((v,i)=>(i+1)+'. '+v).join('\\n')+'\\n\\nScrivi il nome di un nuovo ripiano o cassetto (es. Ripiano 6). Per eliminare scrivi - seguito dal numero (es. -2).','');
+ const action=prompt('⚙️ '+labels[z]+' — posizioni disponibili:\n'+current.map((v,i)=>(i+1)+'. '+v).join('\n')+'\n\nScrivi il nome di un nuovo ripiano o cassetto (es. Ripiano 6). Per eliminare scrivi - seguito dal numero (es. -2).','');
  if(action===null)return;
  const input=action.trim();if(!input)return;
  let next=current.slice();
@@ -106,7 +106,7 @@ function render(){
  const expiring=lots.filter(l=>l.quantity>0&&((l.expires_on&&dayCount(l.expires_on)<=5)||(l.opened_on&&l.opened_until&&dayCount(l.opened_until)<=5)));
  $('pantryAlerts').innerHTML=expiring.length?'<div class="panel" style="background:#fff4e9;border:1px solid #f2d6b7"><strong>🔔 Da consumare prima: '+expiring.length+' lotti in scadenza o scaduti</strong></div>':'<p class="hint">💚 Nessun alimento in scadenza nei prossimi 5 giorni.</p>';
  $('pantryList').innerHTML=visible.length?visible.map(l=>{const days=dayCount(l.expires_on);const badge=days===null?'Senza scadenza':days<0?'⚠️ Scaduto da '+Math.abs(days)+' giorni':days===0?'⚠️ Scade oggi':days<=5?'🔔 Scade tra '+days+' giorni':'Scade il '+l.expires_on.split('-').reverse().join('/');
- const opened=l.opened_on?'<p class="hint">📦 Aperta il '+escape(l.opened_on.split('-').reverse().join('/'))+(l.opened_until?' · Consumare entro '+escape(l.opened_until.split('-').reverse().join('/'))+(dayCount(l.opened_until)<=5?' 🔔':''):' · Termine dopo apertura non indicato')+'</p>':'';return '<div class="panel" style="margin:10px 0"><strong>'+escape(l.name)+'</strong>'+(l.opened_on?' <span style="display:inline-block;margin-left:6px;padding:4px 9px;border-radius:999px;background:#f2dfff;color:#7432a6;font-weight:700;font-size:12px">📦 APERTO</span>':'')+'<p class="hint">'+({frigo:'🥬 Frigo',freezer:'🧊 Freezer',dispensa:'🥫 Dispensa'}[l.zone]||'')+(l.shelf?' · 📍 '+escape(/^\\d+$/.test(l.shelf)?'Ripiano '+l.shelf:l.shelf):'')+' · '+escape(badge)+'</p>'+opened+'<div class="row"><span>Quantità: <b>'+l.quantity+'</b></span><button type="button" class="secondary" data-consume="'+l.id+'">− 1 consumato</button>'+(l.opened_on?'':'<button type="button" class="secondary" data-open="'+l.id+'">📦 Apri 1</button>')+'<button type="button" class="secondary" data-move="'+l.id+'">📍 Sposta</button><button type="button" class="secondary" data-delete="'+l.id+'">Elimina</button></div></div>'}).join(''):'<p class="hint">Non ci sono alimenti in questa sezione.</p>';
+ const opened=l.opened_on?'<p class="hint">📦 Aperta il '+escape(l.opened_on.split('-').reverse().join('/'))+(l.opened_until?' · Consumare entro '+escape(l.opened_until.split('-').reverse().join('/'))+(dayCount(l.opened_until)<=5?' 🔔':''):' · Termine dopo apertura non indicato')+'</p>':'';return '<div class="panel" style="margin:10px 0"><strong>'+escape(l.name)+'</strong>'+(l.opened_on?' <span style="display:inline-block;margin-left:6px;padding:4px 9px;border-radius:999px;background:#f2dfff;color:#7432a6;font-weight:700;font-size:12px">📦 APERTO</span>':'')+'<p class="hint">'+({frigo:'🥬 Frigo',freezer:'🧊 Freezer',dispensa:'🥫 Dispensa'}[l.zone]||'')+(l.shelf?' · 📍 '+escape(/^\d+$/.test(l.shelf)?'Ripiano '+l.shelf:l.shelf):'')+' · '+escape(badge)+'</p>'+opened+'<div class="row"><span>Quantità: <b>'+l.quantity+'</b></span><button type="button" class="secondary" data-consume="'+l.id+'">− 1 consumato</button>'+(l.opened_on?'':'<button type="button" class="secondary" data-open="'+l.id+'">📦 Apri 1</button>')+'<button type="button" class="secondary" data-move="'+l.id+'">📍 Sposta</button><button type="button" class="secondary" data-delete="'+l.id+'">Elimina</button></div></div>'}).join(''):'<p class="hint">Non ci sono alimenti in questa sezione.</p>';
 }
 async function request(path,opts={}){
  if(!access)throw Error('Accedi prima alla tua casa');
