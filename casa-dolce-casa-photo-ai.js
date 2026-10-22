@@ -36,7 +36,10 @@ if(btn&&status&&preview){
    if(!preview.complete)await new Promise((resolve,reject)=>{preview.addEventListener('load',resolve,{once:true});preview.addEventListener('error',reject,{once:true})});
    const result=await model.classify(preview,3);
    const labels=result.map(x=>x.className+' ('+Math.round(x.probability*100)+'%)').join(' · ');
-   status.textContent='Possibili riconoscimenti: '+labels+'. Sono suggerimenti da verificare; il modello potrebbe non conoscere oggetti specifici come le stampanti 3D.';
+   const confidence=result[0]?.probability||0;
+   status.textContent=confidence<0.5
+    ? '⚠️ Oggetto non riconosciuto con sufficiente affidabilità. Ipotesi del modello: '+labels+'. Non userò questi risultati per compilare la scheda: inserisci il nome manualmente oppure prova una foto più ravvicinata e con sfondo semplice.'
+    : 'Possibili riconoscimenti: '+labels+'. Controlla sempre i suggerimenti prima di compilare la scheda.';
   }catch(e){
    status.textContent='Analisi non riuscita: '+((e&&e.message)||String(e)).slice(0,180)+'. Puoi compilare la scheda normalmente.';
    console.warn('Photo AI:',e);
