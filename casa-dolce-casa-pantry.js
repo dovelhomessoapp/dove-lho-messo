@@ -305,7 +305,47 @@ $('pantryRefresh').onclick=refresh;
 $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;try{
  const payload={home_id:access.homeId,name:[$('pantryName').value.trim(),$('pantryBrand').value.trim(),$('pantryFormat').value.trim()].filter(Boolean).join(' · ').slice(0,120),zone:$('pantryZone').value,shelf:$('pantryShelf').value.trim()||null,quantity:Number($('pantryQty').value),expires_on:$('pantryExpiry').value||null};
  if(!payload.name||!Number.isInteger(payload.quantity)||payload.quantity<1)throw Error('Controlla nome e quantità');
- await request('pantry_lots',{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(payload)});
+ 
+const same = lots.filter(l =>
+  l.name?.trim().toLowerCase() === payload.name.trim().toLowerCase() &&
+  (l.brand || '').trim().toLowerCase() === (payload.brand || '').trim().toLowerCase() &&
+  (l.format || '').trim().toLowerCase() === (payload.format || '').trim().toLowerCase() &&
+  l.zone === payload.zone &&
+  (l.expires_on || null) === (payload.expires_on || null) &&
+  !l.opened_on
+);
+
+let match = same.find(l =>
+  (l.shelf || null) === (payload.shelf || null)
+);
+
+if (!match && !payload.shelf && same.length === 1) {
+  match = same[0];
+}
+
+if (match) {
+  await request(
+    'pantry_lots?id=eq.' + encodeURIComponent(match.id) +
+    '&home_id=eq.' + encodeURIComponent(access.homeId),
+    {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        quantity: Number(match.quantity) + Number(payload.quantity)
+      })
+    }
+  );
+} else {
+  await request('pantry_lots', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
  try {
   const barcode = $('pantryBarcode').value.trim();
   if (barcode && access?.homeId) {
