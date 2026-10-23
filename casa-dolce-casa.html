@@ -148,7 +148,27 @@ nav .nav-art .cd-icon{filter:drop-shadow(0 3px 3px #76519940)!important}
 #home .cd-family-panel #familyHouse{margin:8px 0}
 #home .cd-family-panel #familyCount{margin:6px 0 12px}
 #home .cd-family-panel #familyMsg{font-size:12px}
-</style><style id="cd-3d-png-20261022">.cd-png-icon{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 4px 4px rgba(101,56,129,.20))!important}#home .tile .emoji:after{display:none!important}</style></head><body><svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden" xmlns="http://www.w3.org/2000/svg"><defs>
+</style><style id="cd-3d-png-20261022">.cd-png-icon{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 4px 4px rgba(101,56,129,.20))!important}#home .tile .emoji:after{display:none!important}</style><style id="book-smart-layout">
+/* Layout dedicato ai libri: i campi originali e i loro listener rimangono invariati. */
+#add:has(#kind option[value="book"]:checked) #itemForm{display:flex;flex-direction:column;gap:10px}
+#add:has(#kind option[value="book"]:checked) #itemForm>label:has(#kind){order:-30}
+#add:has(#kind option[value="book"]:checked) #bookIsbnTools{order:-29;background:#f8efff;border:1px solid #e7d4f4;border-radius:20px;padding:15px}
+#add:has(#kind option[value="book"]:checked) #bookIsbnTools:before{content:"1. Trova il tuo libro 📚";display:block;font-weight:800;color:#633396;margin-bottom:12px;font-size:18px}
+#add:has(#kind option[value="book"]:checked) #itemForm>label:has(#itemName){order:-25}
+#add:has(#kind option[value="book"]:checked) #authorWrap{order:-24}
+#add:has(#kind option[value="book"]:checked) #itemForm>label:has(#desc){order:-23}
+#add:has(#kind option[value="book"]:checked) #itemForm>label:has(#itemCategory){order:-22}
+#add:has(#kind option[value="book"]:checked) #itemForm>label:has(#itemPlace){order:-15}
+#add:has(#kind option[value="book"]:checked) #itemForm>label:has(#value){order:-14}
+#add:has(#kind option[value="book"]:checked) #itemForm>button[type="submit"]{order:99;position:sticky;bottom:84px;z-index:4;box-shadow:0 6px 18px #8d58ba35}
+#add:has(#kind option[value="book"]:checked) #photoAiPanel{display:none!important}
+#add:has(#kind option[value="book"]:checked) #bookCoverTools{order:2}
+#add:has(#kind option[value="book"]:checked) #sbnDirectBox{order:3}
+#add:has(#kind option[value="book"]:checked) #itemForm>label:has(#kind){margin-bottom:0}
+#add:has(#kind option[value="book"]:checked) #photoPreview{max-height:240px;object-fit:contain}
+#add:has(#kind option[value="book"]:checked) #bookCoverTools button{margin-top:8px!important}
+#add:has(#kind option[value="book"]:checked) #itemForm>label:has(#value){margin-top:8px}
+</style></head><body><svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden" xmlns="http://www.w3.org/2000/svg"><defs>
 <linearGradient id="cdBox" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffdfa8"/><stop offset=".65" stop-color="#d6a36f"/><stop offset="1" stop-color="#b77c50"/></linearGradient>
 <linearGradient id="cdPink" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff1f6"/><stop offset=".5" stop-color="#ff87b3"/><stop offset="1" stop-color="#d74478"/></linearGradient>
 <linearGradient id="cdPurple" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f2c8ff"/><stop offset=".45" stop-color="#b75de8"/><stop offset="1" stop-color="#7432c6"/></linearGradient>
