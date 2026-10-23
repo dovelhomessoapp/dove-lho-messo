@@ -94,7 +94,7 @@ if(compareBtn&&compareStatus&&preview){
    const blob=await (await fetch(preview.src)).blob();
    const image=await module.RawImage.fromBlob(blob);
    const results=await model(image,candidates);
-   compareStatus.textContent='Scegli uno dei tre nomi suggeriti, oppure inseriscilo manualmente. Le percentuali sono relative alle descrizioni confrontate.';if(suggestions){suggestions.replaceChildren();results.slice(0,3).forEach(x=>{const label=candidateTranslations.get(x.label)||x.label;const button=document.createElement('button');button.type='button';button.className='secondary full';button.style.marginTop='8px';button.dataset.aiName=label;button.textContent=label+' · '+Math.round(x.score*100)+'% — Usa questo nome';suggestions.appendChild(button);});}
+   const top=results[0]?.score||0;compareStatus.textContent=top<0.3?'⚠️ Nessun riconoscimento sufficientemente affidabile. Inserisci il nome manualmente; le percentuali del confronto non sono probabilità di correttezza.':'Scegli un nome solo se corrisponde davvero alla foto. Le percentuali sono relative alle descrizioni confrontate.';if(suggestions){suggestions.replaceChildren();(top>=0.3?results.slice(0,3):[]).forEach(x=>{const label=candidateTranslations.get(x.label)||x.label;const button=document.createElement('button');button.type='button';button.className='secondary full';button.style.marginTop='8px';button.dataset.aiName=label;button.textContent=label+' · '+Math.round(x.score*100)+'% — Usa questo nome';suggestions.appendChild(button);});}
   }catch(e){
    compareStatus.textContent='Test avanzato non riuscito: '+((e&&e.message)||String(e)).slice(0,200)+'. Puoi continuare con la scheda normale.';
    console.warn('Advanced image recognition',e);
@@ -129,6 +129,33 @@ function ocrSuggestion(raw){
  const name=[type,number?number+' pezzi':'',brand].filter(Boolean).join(' ').trim();
  return {name,category:type?'Cancelleria e materiale scolastico':'',description:lines.slice(0,8).join(' · '),raw:lines.join('\n')};
 }
+/* Try the original orientation and quarter-turns: iPhone photos can carry orientation metadata. */
+async function ocrOriented(worker,img){
+ const source=new Image();source.src=img;
+ if(!source.complete)await new Promise((ok,fail)=>{source.onload=ok;source.onerror=fail});
+ const w=source.naturalWidth,h=source.naturalHeight;
+ if(!w||!h)throw new Error('Immagine non leggibile');
+ const runs=[];
+ for(const degrees of [0,90,270,180]){
+  const swapped=degrees===90||degrees===270;
+  const canvas=document.createElement('canvas');
+  const scale=Math.min(1,1800/Math.max(w,h));
+  canvas.width=Math.round((swapped?h:w)*scale);
+  canvas.height=Math.round((swapped?w:h)*scale);
+  const ctx=canvas.getContext('2d');
+  ctx.translate(canvas.width/2,canvas.height/2);
+  ctx.rotate(degrees*Math.PI/180);
+  ctx.drawImage(source,-w*scale/2,-h*scale/2,w*scale,h*scale);
+  const result=await worker.recognize(canvas);
+  const raw=(result.data.text||'').trim();
+  const words=(result.data.words||[]).filter(x=>x.confidence>=45&&/[a-zA-ZÀ-ÿ]{2,}/.test(x.text));
+  const confidence=words.length?words.reduce((a,x)=>a+x.confidence,0)/words.length:0;
+  const meaningful=raw.match(/[a-zA-ZÀ-ÿ]{3,}/g)||[];
+  const score=confidence*Math.min(meaningful.length,12)/12;
+  runs.push({raw,score,confidence,words:meaningful.length,degrees});
+ }
+ return runs.sort((a,b)=>b.score-a.score)[0];
+}
 if(ocrRead&&preview){
  ocrRead.addEventListener('click',async()=>{
   if(!preview.src||preview.hidden){ocrStatus.textContent='Prima scatta o scegli una foto.';return}
@@ -141,11 +168,11 @@ if(ocrRead&&preview){
    if(!ocrWorkerPromise)ocrWorkerPromise=window.Tesseract.createWorker('ita+eng',1,{logger:()=>{}}).catch(e=>{ocrWorkerPromise=null;throw e});
    const worker=await ocrWorkerPromise;
    ocrStatus.textContent='Sto leggendo le scritte sulla foto…';
-   const result=await worker.recognize(preview.src);
-   const extracted=(result.data.text||'').trim();
-   if(!extracted){ocrStatus.textContent='Non ho trovato scritte leggibili. Prova una foto più ravvicinata, nitida e ben illuminata.';return}
+   const result=await ocrOriented(worker,preview.src);
+   const extracted=result.raw;
+   if(!extracted||result.score<18||result.words<2){ocrStatus.textContent='⚠️ Non riesco a leggere le scritte con sufficiente affidabilità, nemmeno ruotando la foto. Non inserirò testo confuso nella scheda. Prova una foto frontale e ravvicinata della confezione.';return}
    const suggestion=ocrSuggestion(extracted);
-   ocrStatus.textContent='Testo individuato: verifica e scegli cosa inserire nella scheda.';
+   ocrStatus.textContent='Lettura migliore con rotazione '+result.degrees+'°. Controlla il testo prima di inserirlo.';
    const pre=document.createElement('p');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:.92em;color:#654982';pre.textContent=suggestion.raw;ocrResults.appendChild(pre);
    const addButton=(label,handler)=>{const b=document.createElement('button');b.type='button';b.className='secondary full';b.style.marginTop='8px';b.textContent=label;b.addEventListener('click',handler);ocrResults.appendChild(b)};
    if(suggestion.name)addButton('✨ Usa nome suggerito: '+suggestion.name,()=>{
