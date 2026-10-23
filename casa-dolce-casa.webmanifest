@@ -1,8 +1,8 @@
 {
   "id": "./casa-dolce-casa.html",
-  "name": "Dove l’ho messo? · Casa dolce casa",
-  "short_name": "Casa dolce casa",
-  "start_url": "./casa-dolce-casa.html?v=20261022-24",
+  "name": "Dove l’ho messo?",
+  "short_name": "Dove l’ho messo?",
+  "start_url": "./casa-dolce-casa.html?v=20261023-prezzi2",
   "scope": "./",
   "display": "standalone",
   "background_color": "#fcf7ff",
