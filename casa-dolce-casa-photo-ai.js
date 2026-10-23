@@ -55,7 +55,22 @@ const candidatePairs=[["a 3D printer","Stampante 3D"],["a humidity controlled st
 const candidates=candidatePairs.map(x=>x[0]);
 const candidateTranslations=new Map(candidatePairs);
 const suggestions=document.getElementById('photoAiSuggestions');
-if(suggestions)suggestions.addEventListener('click',event=>{const button=event.target.closest('button[data-ai-name]');if(!button)return;const field=document.getElementById('itemName');if(!field)return;const name=button.dataset.aiName;if(field.value.trim()&&!confirm('Sostituire il nome già inserito?'))return;field.value=name;field.dispatchEvent(new Event('input',{bubbles:true}));compareStatus.textContent='Nome inserito: '+name+'. Verifica prima di salvare.';});
+if(suggestions)suggestions.addEventListener('click',event=>{const button=event.target.closest('button[data-ai-name]');if(!button)return;const field=document.getElementById('itemName');if(!field)return;const name=button.dataset.aiName;if(field.value.trim()&&!confirm('Sostituire il nome già inserito?'))return;field.value=name;field.dispatchEvent(new Event('input',{bubbles:true}));
+const descriptions={
+ 'Contenitore per colla extension ciglia':['Bellezza e cura personale','Contenitore per conservare la colla per extension ciglia, con chiusura metallica e display digitale sul coperchio.'],
+ 'Contenitore per colla ciglia':['Bellezza e cura personale','Contenitore per conservare la colla per ciglia finte.'],
+ 'Stampante 3D':['Elettronica e strumenti','Stampante 3D per realizzare oggetti mediante stampa a filamento.'],
+ 'Igrometro':['Strumenti di misura','Strumento per misurare l’umidità.'],
+ 'Termometro digitale':['Strumenti di misura','Dispositivo digitale per misurare la temperatura.'],
+ 'Bilancia da cucina':['Cucina','Bilancia per pesare ingredienti e alimenti.'],
+ 'Contenitore per cosmetici':['Bellezza e cura personale','Contenitore per riporre o conservare prodotti cosmetici.']
+};
+const category=document.getElementById('aiCategorySuggestion');
+const desc=document.getElementById('desc');
+const suggestion=descriptions[name];
+if(category)category.textContent=suggestion?'Categoria suggerita: '+suggestion[0]+' (solo indicativa)':'Categoria: da definire manualmente';
+if(suggestion&&desc&&!desc.value.trim()){desc.value=suggestion[1];desc.dispatchEvent(new Event('input',{bubbles:true}));}
+compareStatus.textContent='Nome inserito: '+name+'.'+(suggestion?' Descrizione proposta se il campo era vuoto.':'')+' Verifica e correggi prima di salvare.';});
 if(compareBtn&&compareStatus&&preview){
  compareBtn.addEventListener('click',async()=>{
   if(!preview.src||preview.hidden){compareStatus.textContent='Prima scegli una fotografia.';return}
