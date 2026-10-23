@@ -136,24 +136,30 @@ async function ocrOriented(worker,img){
  const w=source.naturalWidth,h=source.naturalHeight;
  if(!w||!h)throw new Error('Immagine non leggibile');
  const runs=[];
- for(const degrees of [0,90,270,180]){
-  const swapped=degrees===90||degrees===270;
-  const canvas=document.createElement('canvas');
-  const scale=Math.min(1,1800/Math.max(w,h));
-  canvas.width=Math.round((swapped?h:w)*scale);
-  canvas.height=Math.round((swapped?w:h)*scale);
-  const ctx=canvas.getContext('2d');
-  ctx.translate(canvas.width/2,canvas.height/2);
-  ctx.rotate(degrees*Math.PI/180);
-  ctx.drawImage(source,-w*scale/2,-h*scale/2,w*scale,h*scale);
-  const result=await worker.recognize(canvas);
-  const raw=(result.data.text||'').trim();
-  const words=(result.data.words||[]).filter(x=>x.confidence>=45&&/[a-zA-ZÀ-ÿ]{2,}/.test(x.text));
-  const confidence=words.length?words.reduce((a,x)=>a+x.confidence,0)/words.length:0;
-  const meaningful=raw.match(/[a-zA-ZÀ-ÿ]{3,}/g)||[];
-  const score=confidence*Math.min(meaningful.length,12)/12;
-  runs.push({raw,score,confidence,words:meaningful.length,degrees});
+ // Scan the whole photo first, then enlarge the central package area.
+ // Crop is deliberately generous to avoid cutting off packaging text.
+ for(const crop of [1,0.82,0.64]){
+  for(const degrees of [0,90,270,180]){
+   const cw=w*crop,ch=h*crop,swapped=degrees===90||degrees===270;
+   const scale=Math.min(3,Math.max(1,1600/Math.max(cw,ch)));
+   const canvas=document.createElement('canvas');
+   canvas.width=Math.max(1,Math.round((swapped?ch:cw)*scale));
+   canvas.height=Math.max(1,Math.round((swapped?cw:ch)*scale));
+   const ctx=canvas.getContext('2d');
+   ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+   ctx.translate(canvas.width/2,canvas.height/2);
+   ctx.rotate(degrees*Math.PI/180);
+   ctx.drawImage(source,(w-cw)/2,(h-ch)/2,cw,ch,-cw*scale/2,-ch*scale/2,cw*scale,ch*scale);
+   const result=await worker.recognize(canvas);
+   const raw=(result.data.text||'').trim();
+   const words=(result.data.words||[]).filter(x=>x.confidence>=45&&/[a-zA-ZÀ-ÿ]{2,}/.test(x.text));
+   const confidence=words.length?words.reduce((sum,x)=>sum+x.confidence,0)/words.length:0;
+   const meaningful=raw.match(/[a-zA-ZÀ-ÿ]{3,}/g)||[];
+   const score=confidence*Math.min(meaningful.length,12)/12;
+   runs.push({raw,score,confidence,words:meaningful.length,degrees,crop});
+  }
  }
+ // Prefer recognitions with legible words; never auto-save uncertain results.
  return runs.sort((a,b)=>b.score-a.score)[0];
 }
 if(ocrRead&&preview){
@@ -167,12 +173,12 @@ if(ocrRead&&preview){
    if(!window.Tesseract)throw new Error('Lettore di testo non disponibile');
    if(!ocrWorkerPromise)ocrWorkerPromise=window.Tesseract.createWorker('ita+eng',1,{logger:()=>{}}).catch(e=>{ocrWorkerPromise=null;throw e});
    const worker=await ocrWorkerPromise;
-   ocrStatus.textContent='Sto leggendo le scritte sulla foto…';
+   ocrStatus.textContent='Sto leggendo e ingrandendo le scritte (può richiedere un minuto)…';
    const result=await ocrOriented(worker,preview.src);
    const extracted=result.raw;
    if(!extracted||result.score<18||result.words<2){ocrStatus.textContent='⚠️ Non riesco a leggere le scritte con sufficiente affidabilità, nemmeno ruotando la foto. Non inserirò testo confuso nella scheda. Prova una foto frontale e ravvicinata della confezione.';return}
    const suggestion=ocrSuggestion(extracted);
-   ocrStatus.textContent='Lettura migliore con rotazione '+result.degrees+'°. Controlla il testo prima di inserirlo.';
+   ocrStatus.textContent='Lettura migliore con rotazione '+result.degrees+'° e ritaglio '+Math.round(result.crop*100)+'%. Controlla il testo prima di inserirlo.';
    const pre=document.createElement('p');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:.92em;color:#654982';pre.textContent=suggestion.raw;ocrResults.appendChild(pre);
    const addButton=(label,handler)=>{const b=document.createElement('button');b.type='button';b.className='secondary full';b.style.marginTop='8px';b.textContent=label;b.addEventListener('click',handler);ocrResults.appendChild(b)};
    if(suggestion.name)addButton('✨ Usa nome suggerito: '+suggestion.name,()=>{
