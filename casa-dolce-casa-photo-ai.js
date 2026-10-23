@@ -51,18 +51,17 @@ if(btn&&status&&preview){
 const compareBtn=document.getElementById('photoAiCompare');
 const compareStatus=document.getElementById('photoAiCompareStatus');
 let semanticModelPromise=null;
-const candidates=[
- 'a 3D printer','a humidity controlled storage jar for eyelash extension glue',
- 'a container for eyelash glue','a digital watch','a plastic food storage container',
- 'a jar with a lid','a camera','a pair of shoes','a book','a kitchen appliance',
- 'a toy','a printer','a power tool','a phone charger','a bottle',
- 'a hair dryer','a sewing machine','a pair of glasses','a lamp','a cardboard box'
-];
+const candidatePairs=[["a 3D printer","Stampante 3D"],["a humidity controlled storage jar for eyelash extension glue","Contenitore per colla extension ciglia"],["a container for eyelash glue","Contenitore per colla ciglia"],["a digital watch","Orologio digitale"],["a plastic food storage container","Contenitore per alimenti"],["a jar with a lid","Barattolo con coperchio"],["a camera","Fotocamera"],["a pair of shoes","Scarpe"],["a book","Libro"],["a kitchen appliance","Elettrodomestico"],["a toy","Giocattolo"],["a printer","Stampante"],["a power tool","Utensile elettrico"],["a phone charger","Caricabatterie"],["a bottle","Bottiglia"],["a hair dryer","Asciugacapelli"],["a sewing machine","Macchina da cucire"],["a pair of glasses","Occhiali"],["a lamp","Lampada"],["a cardboard box","Scatola"],["a vacuum cleaner","Aspirapolvere"],["a coffee machine","Macchina del caffè"],["a blender","Frullatore"],["a kitchen scale","Bilancia da cucina"],["a digital thermometer","Termometro digitale"],["a digital hygrometer","Igrometro"],["a cosmetic storage container","Contenitore per cosmetici"],["a nail polish bottle","Smalto"],["a makeup brush","Pennello da trucco"],["a storage box","Scatola portaoggetti"],["a jewelry box","Portagioie"],["a refrigerator","Frigorifero"],["a freezer","Congelatore"],["a microwave oven","Microonde"],["a computer keyboard","Tastiera"],["a laptop","Computer portatile"],["a screwdriver","Cacciavite"],["a drill","Trapano"],["a pair of scissors","Forbici"],["a remote control","Telecomando"],["a bicycle","Bicicletta"],["a cooking pot","Pentola"],["a drinking mug","Tazza"],["a backpack","Zaino"],["a perfume bottle","Profumo"],["a set of keys","Chiavi"],["a flashlight","Torcia"]];
+const candidates=candidatePairs.map(x=>x[0]);
+const candidateTranslations=new Map(candidatePairs);
+const suggestions=document.getElementById('photoAiSuggestions');
+if(suggestions)suggestions.addEventListener('click',event=>{const button=event.target.closest('button[data-ai-name]');if(!button)return;const field=document.getElementById('itemName');if(!field)return;const name=button.dataset.aiName;if(field.value.trim()&&!confirm('Sostituire il nome già inserito?'))return;field.value=name;field.dispatchEvent(new Event('input',{bubbles:true}));compareStatus.textContent='Nome inserito: '+name+'. Verifica prima di salvare.';});
 if(compareBtn&&compareStatus&&preview){
  compareBtn.addEventListener('click',async()=>{
   if(!preview.src||preview.hidden){compareStatus.textContent='Prima scegli una fotografia.';return}
   if(!navigator.onLine&&!semanticModelPromise){compareStatus.textContent='Per scaricare il modello serve Internet.';return}
   compareBtn.disabled=true;
+  if(suggestions)suggestions.replaceChildren();
   try{
    compareStatus.textContent='Caricamento del modello avanzato gratuito… può richiedere alcuni minuti e molta memoria.';
    if(!semanticModelPromise)semanticModelPromise=import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1')
@@ -78,7 +77,7 @@ if(compareBtn&&compareStatus&&preview){
    const blob=await (await fetch(preview.src)).blob();
    const image=await module.RawImage.fromBlob(blob);
    const results=await model(image,candidates);
-   compareStatus.textContent='Ipotesi sperimentali: '+results.slice(0,4).map(x=>x.label+' ('+Math.round(x.score*100)+'%)').join(' · ')+'. Confronto limitato alle descrizioni disponibili: verifica sempre prima di salvare.';
+   compareStatus.textContent='Scegli uno dei tre nomi suggeriti, oppure inseriscilo manualmente. Le percentuali sono relative alle descrizioni confrontate.';if(suggestions){suggestions.replaceChildren();results.slice(0,3).forEach(x=>{const label=candidateTranslations.get(x.label)||x.label;const button=document.createElement('button');button.type='button';button.className='secondary full';button.style.marginTop='8px';button.dataset.aiName=label;button.textContent=label+' · '+Math.round(x.score*100)+'% — Usa questo nome';suggestions.appendChild(button);});}
   }catch(e){
    compareStatus.textContent='Test avanzato non riuscito: '+((e&&e.message)||String(e)).slice(0,200)+'. Puoi continuare con la scheda normale.';
    console.warn('Advanced image recognition',e);
