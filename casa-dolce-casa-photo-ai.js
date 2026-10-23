@@ -101,3 +101,69 @@ if(compareBtn&&compareStatus&&preview){
   }finally{compareBtn.disabled=false}
  });
 }
+
+
+/* OCR gratuito nel browser: legge testo sulle confezioni senza caricare foto su server applicativi. */
+const ocrPanel=document.createElement('div');
+ocrPanel.style.cssText='margin-top:16px;padding:16px;border:1px solid #e6d0f3;border-radius:18px;background:#fff';
+ocrPanel.innerHTML='<h3 style="margin:0 0 8px;color:#43246c">🔤 Leggi le scritte sulla confezione</h3><p class="hint">Riconosce marca, tipo di prodotto e quantità scritte sulla foto. Controlla sempre il risultato.</p><button type="button" class="secondary full" id="photoOcrRead">🔎 Leggi testo dalla foto (gratis)</button><p id="photoOcrStatus" class="hint" aria-live="polite"></p><div id="photoOcrResults"></div>';
+const ocrAnchor=document.getElementById('photoAiAnalyze');
+if(ocrAnchor){const parent=ocrAnchor.closest('.panel')||ocrAnchor.parentElement;parent?.insertAdjacentElement('afterend',ocrPanel)}
+else ocrPanel.remove();
+let ocrWorkerPromise=null;
+const ocrRead=document.getElementById('photoOcrRead');
+const ocrStatus=document.getElementById('photoOcrStatus');
+const ocrResults=document.getElementById('photoOcrResults');
+function ocrSuggestion(raw){
+ const lines=raw.split(/\n+/).map(x=>x.replace(/\s+/g,' ').trim()).filter(x=>x.length>=3);
+ const text=lines.join(' ');
+ const brand=(text.match(/faber[\s-]*castell/i)||text.match(/stabilo|staedtler|giotto|bic|pilot|edding|sharpie/i)||[])[0]||'';
+ const qty=(text.match(/\b(?:\d{1,3})\s*(?:felt[\s-]*tip pens|pennarelli|matite|markers|pezzi|pcs)\b/i)||[])[0]||'';
+ let type='';
+ if(/felt[\s-]*tip|pennarell|filzstift|markers/i.test(text))type='Pennarelli';
+ else if(/matite|pencils/i.test(text))type='Matite';
+ else if(/penne|ballpoint/i.test(text))type='Penne';
+ else if(/colla|glue/i.test(text))type='Colla';
+ else if(/quadern|notebook/i.test(text))type='Quaderno';
+ const number=(qty.match(/\d+/)||[])[0]||'';
+ const name=[type,number?number+' pezzi':'',brand].filter(Boolean).join(' ').trim();
+ return {name,category:type?'Cancelleria e materiale scolastico':'',description:lines.slice(0,8).join(' · '),raw:lines.join('\n')};
+}
+if(ocrRead&&preview){
+ ocrRead.addEventListener('click',async()=>{
+  if(!preview.src||preview.hidden){ocrStatus.textContent='Prima scatta o scegli una foto.';return}
+  if(!navigator.onLine&&!ocrWorkerPromise){ocrStatus.textContent='Serve Internet per scaricare il lettore di testo al primo utilizzo.';return}
+  ocrRead.disabled=true;ocrResults.replaceChildren();
+  try{
+   ocrStatus.textContent='Caricamento del lettore gratuito (italiano e inglese)…';
+   await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+   if(!window.Tesseract)throw new Error('Lettore di testo non disponibile');
+   if(!ocrWorkerPromise)ocrWorkerPromise=window.Tesseract.createWorker('ita+eng',1,{logger:()=>{}}).catch(e=>{ocrWorkerPromise=null;throw e});
+   const worker=await ocrWorkerPromise;
+   ocrStatus.textContent='Sto leggendo le scritte sulla foto…';
+   const result=await worker.recognize(preview.src);
+   const extracted=(result.data.text||'').trim();
+   if(!extracted){ocrStatus.textContent='Non ho trovato scritte leggibili. Prova una foto più ravvicinata, nitida e ben illuminata.';return}
+   const suggestion=ocrSuggestion(extracted);
+   ocrStatus.textContent='Testo individuato: verifica e scegli cosa inserire nella scheda.';
+   const pre=document.createElement('p');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:.92em;color:#654982';pre.textContent=suggestion.raw;ocrResults.appendChild(pre);
+   const addButton=(label,handler)=>{const b=document.createElement('button');b.type='button';b.className='secondary full';b.style.marginTop='8px';b.textContent=label;b.addEventListener('click',handler);ocrResults.appendChild(b)};
+   if(suggestion.name)addButton('✨ Usa nome suggerito: '+suggestion.name,()=>{
+    const input=document.getElementById('itemName');if(!input)return;
+    if(input.value.trim()&&!confirm('Sostituire il nome già inserito?'))return;
+    input.value=suggestion.name;input.dispatchEvent(new Event('input',{bubbles:true}));
+    const cat=document.getElementById('itemCategory');
+    if(cat&&!cat.value.trim()&&suggestion.category){cat.value=suggestion.category;cat.dispatchEvent(new Event('input',{bubbles:true}))}
+    ocrStatus.textContent='Nome inserito. Controlla e correggi prima di salvare.';
+   });
+   addButton('📝 Aggiungi il testo letto alla descrizione',()=>{
+    const field=document.getElementById('desc');if(!field)return;
+    const next=suggestion.description;
+    if(field.value.trim()&&!confirm('Aggiungere il testo alla descrizione esistente?'))return;
+    field.value=[field.value.trim(),next].filter(Boolean).join('\n');field.dispatchEvent(new Event('input',{bubbles:true}));
+    ocrStatus.textContent='Testo aggiunto alla descrizione. Controlla prima di salvare.';
+   });
+  }catch(e){ocrStatus.textContent='Lettura non riuscita: '+((e&&e.message)||String(e)).slice(0,150)+'. Puoi compilare la scheda normalmente.';console.warn('OCR',e)}
+  finally{ocrRead.disabled=false}
+ });
+}
