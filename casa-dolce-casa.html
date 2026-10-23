@@ -176,6 +176,20 @@ nav .nav-art .cd-icon{filter:drop-shadow(0 3px 3px #76519940)!important}
 #add:has(#kind option[value="book"]:checked) #bookCoverTools:before{content:"🖼️ Copertina del libro";display:block;color:#633396;font-weight:800;font-size:18px;margin:4px 0 10px}
 #add:has(#kind option[value="book"]:checked) #sbnDirectBox{margin-top:8px!important}
 #add:has(#kind option[value="book"]:checked) #itemForm>label:has(#value){margin-bottom:12px}
+</style><style id="book-smart-compact">
+#add:has(#kind option[value="book"]:checked) #bookCoverTools{order:2}
+#add:has(#kind option[value="book"]:checked) #bookCoverTools:before{content:none!important}
+#add:has(#kind option[value="book"]:checked) #bookCoverTools details{border:1px solid #e6d3f2;border-radius:16px;padding:10px 12px;background:#faf4ff}
+#add:has(#kind option[value="book"]:checked) #bookCoverTools summary{cursor:pointer;color:#663599;font-weight:800;list-style:none;padding:7px 4px}
+#add:has(#kind option[value="book"]:checked) #bookCoverTools summary::-webkit-details-marker{display:none}
+#add:has(#kind option[value="book"]:checked) #bookCoverTools summary:after{content:"⌄";float:right}
+#add:has(#kind option[value="book"]:checked) #bookCoverTools details[open] summary:after{content:"⌃"}
+#add:has(#kind option[value="book"]:checked) #sbnDirectBox{padding:0!important;border:0!important}
+#add:has(#kind option[value="book"]:checked) #sbnDirectBox details{border:1px solid #e6d3f2;border-radius:16px;padding:12px;background:#fff}
+#add:has(#kind option[value="book"]:checked) #sbnDirectBox summary{cursor:pointer;color:#663599;font-weight:800;list-style:none}
+#add:has(#kind option[value="book"]:checked) #sbnDirectBox summary::-webkit-details-marker{display:none}
+#add:has(#kind option[value="book"]:checked) #sbnDirectBox summary:after{content:"⌄";float:right}
+#add:has(#kind option[value="book"]:checked) #sbnDirectBox details[open] summary:after{content:"⌃"}
 </style></head><body><svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden" xmlns="http://www.w3.org/2000/svg"><defs>
 <linearGradient id="cdBox" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffdfa8"/><stop offset=".65" stop-color="#d6a36f"/><stop offset="1" stop-color="#b77c50"/></linearGradient>
 <linearGradient id="cdPink" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff1f6"/><stop offset=".5" stop-color="#ff87b3"/><stop offset="1" stop-color="#d74478"/></linearGradient>
@@ -203,4 +217,19 @@ nav .nav-art .cd-icon{filter:drop-shadow(0 3px 3px #76519940)!important}
   window.open('https://opac.sbn.it/it/risultati-ricerca-avanzata?isbn='+encodeURIComponent(isbn),'_blank','noopener,noreferrer');
  });
 })();
-</script><script src="./qr.js"></script><script src="./casa-dolce-casa.js?v=20261023-bookisbn3"></script><script src="./casa-dolce-casa-pantry.js?v=20261022-cart33"></script><script src="./casa-dolce-casa-bridge.js?v=20261023-gemini1"></script><script defer src="./casa-dolce-casa-gemini.js?v=20261023-gemini1"></script><script type="module" src="./casa-dolce-casa-photo-ai.js?v=20261023-ocr19"></script></body></html>
+</script><script src="./qr.js"></script><script src="./casa-dolce-casa.js?v=20261023-bookisbn3"></script><script src="./casa-dolce-casa-pantry.js?v=20261022-cart33"></script><script src="./casa-dolce-casa-bridge.js?v=20261023-gemini1"></script><script defer src="./casa-dolce-casa-gemini.js?v=20261023-gemini1"></script><script type="module" src="./casa-dolce-casa-photo-ai.js?v=20261023-ocr19"></script><script id="book-smart-compact-js">
+document.addEventListener('DOMContentLoaded',function(){
+const covers=document.getElementById('bookCoverTools');
+if(covers&&!covers.querySelector('details')){
+ const d=document.createElement('details');d.innerHTML='<summary>🖼️ Cambia copertina — altre opzioni</summary>';
+ while(covers.firstChild)d.appendChild(covers.firstChild);
+ covers.appendChild(d);
+}
+const sbn=document.getElementById('sbnDirectBox');
+if(sbn&&!sbn.querySelector('details')){
+ const d=document.createElement('details');d.innerHTML='<summary>🇮🇹 Ricerca avanzata nelle biblioteche (SBN)</summary>';
+ while(sbn.firstChild)d.appendChild(sbn.firstChild);
+ sbn.appendChild(d);
+}
+});
+</script></body></html>
