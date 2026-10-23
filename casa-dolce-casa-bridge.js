@@ -95,6 +95,17 @@ async function familyFetch(url,options={}){
  }
  return response;
 }
+window.casaDolceCasaRecognize=async function(imageBase64){
+ if(!token||!house)throw Error('Accedi prima a Casa dolce casa con il tuo account familiare.');
+ const response=await familyFetch(base+'/functions/v1/riconosci-oggetto',{
+  method:'POST',
+  headers:{apikey:key,'Content-Type':'application/json'},
+  body:JSON.stringify({imageBase64})
+ });
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok)throw Error(data.error||data.message||'Errore '+response.status);
+ return data;
+};
 async function get(path,t){const r=await familyFetch(base+path,{headers:{apikey:key,Authorization:'Bearer '+t},cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'Errore di lettura');return d}
 const PLACE_PHOTOS_KEY='dlm-casa-dolce-casa-location-photos-v37';
 function localPlacePhotos(){try{return JSON.parse(localStorage.getItem(PLACE_PHOTOS_KEY)||'{}')}catch{return {}}}
