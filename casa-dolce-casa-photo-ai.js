@@ -110,6 +110,46 @@ ocrPanel.innerHTML='<h3 style="margin:0 0 8px;color:#43246c">🔤 Leggi le scrit
 const ocrAnchor=document.getElementById('photoAiAnalyze');
 if(ocrAnchor){const parent=ocrAnchor.closest('.panel')||ocrAnchor.parentElement;parent?.insertAdjacentElement('afterend',ocrPanel)}
 else ocrPanel.remove();
+const cropPanel=document.createElement('div');
+cropPanel.style.cssText='margin:12px 0;padding:12px;border:1px solid #e6d0f3;border-radius:14px';
+cropPanel.innerHTML='<button type="button" class="secondary full" id="photoCropToggle">✂️ Seleziona le scritte con il dito</button><p class="hint" id="photoCropHelp">Trascina un rettangolo intorno alla marca e alle scritte. La selezione sarà usata solo per la lettura del testo.</p><div id="photoCropStage" style="display:none;position:relative;touch-action:none;user-select:none;margin:10px auto;max-width:100%;width:max-content"><img id="photoCropImage" alt="Foto da ritagliare" style="display:block;max-width:100%;max-height:360px;object-fit:contain;border-radius:10px"><div id="photoCropRect" style="display:none;position:absolute;border:3px solid #853dc6;background:#ae65e433;pointer-events:none"></div></div><button type="button" class="secondary full" id="photoCropClear" style="display:none">↩️ Annulla selezione</button>';
+ocrPanel.insertBefore(cropPanel,document.getElementById('photoOcrRead'));
+let selectedCrop=null;
+const cropStage=document.getElementById('photoCropStage'),cropImage=document.getElementById('photoCropImage'),cropRect=document.getElementById('photoCropRect'),cropHelp=document.getElementById('photoCropHelp'),cropClear=document.getElementById('photoCropClear');
+function clearPhotoCrop(){selectedCrop=null;cropRect.style.display='none';cropClear.style.display='none'}
+document.getElementById('photoCropToggle').addEventListener('click',()=>{
+ if(!preview.src||preview.hidden){cropHelp.textContent='Prima scegli una foto.';return}
+ clearPhotoCrop();cropImage.src=preview.src;cropStage.style.display='block';
+ cropHelp.textContent='Trascina il dito sulla foto per racchiudere le scritte.';
+});
+cropClear.addEventListener('click',()=>{clearPhotoCrop();cropHelp.textContent='Selezione annullata: verrà analizzata tutta la foto.'});
+let cropStart=null;
+cropStage.addEventListener('pointerdown',e=>{
+ if(!cropImage.complete||!cropImage.naturalWidth)return;
+ const b=cropImage.getBoundingClientRect();if(!b.width||!b.height)return;
+ cropStart={x:Math.max(0,Math.min(1,(e.clientX-b.left)/b.width)),y:Math.max(0,Math.min(1,(e.clientY-b.top)/b.height))};
+ cropStage.setPointerCapture(e.pointerId);e.preventDefault();
+});
+cropStage.addEventListener('pointermove',e=>{
+ if(!cropStart)return;
+ const b=cropImage.getBoundingClientRect();
+ const x=Math.max(0,Math.min(1,(e.clientX-b.left)/b.width)),y=Math.max(0,Math.min(1,(e.clientY-b.top)/b.height));
+ selectedCrop={x:Math.min(x,cropStart.x),y:Math.min(y,cropStart.y),w:Math.abs(x-cropStart.x),h:Math.abs(y-cropStart.y)};
+ cropRect.style.display='block';cropRect.style.left=(selectedCrop.x*100)+'%';cropRect.style.top=(selectedCrop.y*100)+'%';cropRect.style.width=(selectedCrop.w*100)+'%';cropRect.style.height=(selectedCrop.h*100)+'%';e.preventDefault();
+});
+cropStage.addEventListener('pointerup',()=>{
+ if(!cropStart)return;cropStart=null;
+ if(!selectedCrop||selectedCrop.w<0.08||selectedCrop.h<0.05){clearPhotoCrop();cropHelp.textContent='Selezione troppo piccola: riprova.';return}
+ cropClear.style.display='block';cropHelp.textContent='Area selezionata! Premi «Leggi testo dalla foto» per analizzarla.';
+});
+async function getOcrImage(){
+ if(!selectedCrop)return preview.src;
+ const img=new Image();img.src=preview.src;
+ if(!img.complete)await new Promise((ok,fail)=>{img.onload=ok;img.onerror=fail});
+ const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*selectedCrop.w));c.height=Math.max(1,Math.round(img.naturalHeight*selectedCrop.h));
+ c.getContext('2d').drawImage(img,img.naturalWidth*selectedCrop.x,img.naturalHeight*selectedCrop.y,c.width,c.height,0,0,c.width,c.height);
+ return c.toDataURL('image/png');
+}
 let ocrWorkerPromise=null;
 const ocrRead=document.getElementById('photoOcrRead');
 const ocrStatus=document.getElementById('photoOcrStatus');
@@ -174,7 +214,7 @@ if(ocrRead&&preview){
    if(!ocrWorkerPromise)ocrWorkerPromise=window.Tesseract.createWorker('ita+eng',1,{logger:()=>{}}).catch(e=>{ocrWorkerPromise=null;throw e});
    const worker=await ocrWorkerPromise;
    ocrStatus.textContent='Sto leggendo e ingrandendo le scritte (può richiedere un minuto)…';
-   const result=await ocrOriented(worker,preview.src);
+   const result=await ocrOriented(worker,await getOcrImage());
    const extracted=result.raw;
    if(!extracted||result.score<18||result.words<2){ocrStatus.textContent='⚠️ Non riesco a leggere le scritte con sufficiente affidabilità, nemmeno ruotando la foto. Non inserirò testo confuso nella scheda. Prova una foto frontale e ravvicinata della confezione.';return}
    const suggestion=ocrSuggestion(extracted);
