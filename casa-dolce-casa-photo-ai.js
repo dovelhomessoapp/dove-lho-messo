@@ -178,6 +178,15 @@ if(ocrRead&&preview){
    const extracted=result.raw;
    if(!extracted||result.score<18||result.words<2){ocrStatus.textContent='⚠️ Non riesco a leggere le scritte con sufficiente affidabilità, nemmeno ruotando la foto. Non inserirò testo confuso nella scheda. Prova una foto frontale e ravvicinata della confezione.';return}
    const suggestion=ocrSuggestion(extracted);
+   // Tesseract confidence can be misleading on decorative packaging.
+   // Only offer import when recognizable product words are actually present.
+   const normalized=extracted.replace(/[^a-zA-ZÀ-ÿ0-9]+/g,' ').trim();
+   const meaningfulWords=normalized.split(/\s+/).filter(x=>x.length>=4);
+   const recognizable=/faber[\\s-]*castell|pennarell|felt[\\s-]*tip|filzstift|markers|matite|pencils|stabilo|staedtler|giotto|bic|pilot|sharpie|quadern|notebook|colla|glue/i.test(extracted);
+   if(!recognizable && (meaningfulWords.length<3 || !meaningfulWords.some(x=>x.length>=6))){
+    ocrStatus.textContent='⚠️ Il lettore ha trovato soltanto frammenti di lettere, non parole attendibili. Non propongo di aggiungerli alla scheda. Puoi scrivere il nome manualmente o riprovare con una foto ravvicinata.';
+    return;
+   }
    ocrStatus.textContent='Lettura migliore con rotazione '+result.degrees+'° e ritaglio '+Math.round(result.crop*100)+'%. Controlla il testo prima di inserirlo.';
    const pre=document.createElement('p');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:.92em;color:#654982';pre.textContent=suggestion.raw;ocrResults.appendChild(pre);
    const addButton=(label,handler)=>{const b=document.createElement('button');b.type='button';b.className='secondary full';b.style.marginTop='8px';b.textContent=label;b.addEventListener('click',handler);ocrResults.appendChild(b)};
