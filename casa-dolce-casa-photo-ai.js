@@ -182,10 +182,10 @@ const ocrResults=document.getElementById('photoOcrResults');
 function ocrSuggestion(raw){
  const lines=raw.split(/\n+/).map(x=>x.replace(/\s+/g,' ').trim()).filter(x=>x.length>=3);
  const text=lines.join(' ');
- const brand=(text.match(/faber[\s-]*castell/i)||text.match(/stabilo|staedtler|giotto|bic|pilot|edding|sharpie/i)||[])[0]||'';
+ const brand=(text.match(/(?:faber|aber)[\s-]*castel{1,2}/i)||text.match(/stabilo|staedtler|giotto|bic|pilot|edding|sharpie/i)||[])[0]||'';
  // Allow OCR to insert or lose a few letters in common packaging words.
  const compact=text.toLowerCase().replace(/[^a-z0-9]/g,'');
- const hasMarker=/felt[\s\W]*t(?:i|l)?p|filzstift|pennarell|markers/i.test(text)||(/faber[\s-]*castel/i.test(text)&&/\bfelt\b/i.test(text))||
+ const hasMarker=/felt[\s\W]*t(?:i|l)?p|filzstift|pennarell|markers/i.test(text)||(/(?:faber|aber)[\s-]*castel/i.test(text)&&/\bfelt\b/i.test(text))||
    (/faber[\s-]*castell/i.test(text)&&/\b12\b/.test(text)&&/fel.{0,6}(?:pen|ip)|(?:fel|fil).{0,9}pen/i.test(text));
  const qty=(text.match(/\b(?:\d{1,3})\s*(?:felt[\s-]*tip pens|pennarelli|matite|markers|pezzi|pcs)\b/i)||[])[0]||'';
  let type='';
@@ -195,7 +195,7 @@ function ocrSuggestion(raw){
  else if(/colla|glue/i.test(text))type='Colla';
  else if(/quadern|notebook/i.test(text))type='Quaderno';
  const number=(qty.match(/\d+/)||[])[0]||(hasMarker&&(text.match(/\b(?:12|24|36|48|6|8|10)\b/)||[])[0])||'';
- const name=[type,brand,number?'confezione da '+number:''].filter(Boolean).join(' ').trim();
+ const safeBrand=/^(?:faber|aber)[\s-]*castel/i.test(brand)?'Faber-Castell':brand;\n const name=[type,safeBrand,number?'confezione da '+number:''].filter(Boolean).join(' ').trim();
  return {name,category:type?'Cancelleria e materiale scolastico':'',description:lines.slice(0,8).join(' · '),raw:lines.join('\n')};
 }
 /* Try the original orientation and quarter-turns: iPhone photos can carry orientation metadata. */
@@ -224,7 +224,7 @@ async function ocrOriented(worker,img){
    const words=(result.data.words||[]).filter(x=>x.confidence>=45&&/[a-zA-ZÀ-ÿ]{2,}/.test(x.text));
    const confidence=words.length?words.reduce((sum,x)=>sum+x.confidence,0)/words.length:0;
    const meaningful=raw.match(/[a-zA-ZÀ-ÿ]{3,}/g)||[];
-   const productHints=(/faber[\s-]*castel|stabilo|staedtler|giotto/i.test(raw)?20:0)+(/felt|filzstift|pennarell|markers/i.test(raw)?18:0)+(/\b(?:12|24|36|48)\b/.test(raw)?12:0);\n   const score=confidence*Math.min(meaningful.length,12)/12+productHints;
+   const productHints=(/(?:faber|aber)[\s-]*castel|stabilo|staedtler|giotto/i.test(raw)?20:0)+(/felt|filzstift|pennarell|markers/i.test(raw)?18:0)+(/\b(?:12|24|36|48)\b/.test(raw)?12:0);\n   const score=confidence*Math.min(meaningful.length,12)/12+productHints;
    runs.push({raw,score,confidence,words:meaningful.length,degrees,crop});
   }
  }
@@ -251,7 +251,7 @@ if(ocrRead&&preview){
    // Only offer import when recognizable product words are actually present.
    const normalized=extracted.replace(/[^a-zA-ZÀ-ÿ0-9]+/g,' ').trim();
    const meaningfulWords=normalized.split(/\s+/).filter(x=>x.length>=4);
-   const recognizable=/faber[\\s-]*castell|pennarell|felt[\\s-]*tip|filzstift|markers|matite|pencils|stabilo|staedtler|giotto|bic|pilot|sharpie|quadern|notebook|colla|glue/i.test(extracted);
+   const recognizable=/(?:faber|aber)[\\s-]*castel|pennarell|felt[\\s-]*tip|filzstift|markers|matite|pencils|stabilo|staedtler|giotto|bic|pilot|sharpie|quadern|notebook|colla|glue/i.test(extracted);
    if(!recognizable && (meaningfulWords.length<3 || !meaningfulWords.some(x=>x.length>=6))){
     ocrStatus.textContent='⚠️ Il lettore ha trovato soltanto frammenti di lettere, non parole attendibili. Non propongo di aggiungerli alla scheda. Puoi scrivere il nome manualmente o riprovare con una foto ravvicinata.';
     return;
