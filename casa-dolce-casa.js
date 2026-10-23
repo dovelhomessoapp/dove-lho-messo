@@ -81,12 +81,12 @@ function renderItems(){
  const entry=i=>`<article class="entry"><div class="thumb">${i.photo?`<img class="thumb" src="${safe(i.photo)}" alt="">`:i.kind==='book'?'📖':'📦'}</div><div class="info"><strong>${safe(i.name)}</strong><small>📍 ${safe(fullPlacePath(i.place))}</small></div><button aria-label="Apri" onclick="showItem('${i.id}')">›</button></article>`;
  const items=db.items.filter(i=>i.kind!=='book'&&matches(i));
  const groups=new Map();
- items.forEach(i=>{const category=String(i.category||'Altri oggetti').trim()||'Altri oggetti';if(!groups.has(category))groups.set(category,[]);groups.get(category).push(i)});
+ items.forEach(i=>{const category=fullPlacePath(i.place);if(!groups.has(category))groups.set(category,[]);groups.get(category).push(i)});
  const list=$('#itemList');
  const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(d=>d.dataset.category));
  const groupHtml=Array.from(groups.entries()).sort((a,b)=>a[0].localeCompare(b[0],'it')).map(([category,records])=>{
   const open=q||previouslyOpen.has(category)||groups.size===1?' open':'';
-  return `<details class="dlm-item-group" data-category="${safe(category)}"${open}><summary>📦 ${safe(category)} <span class="dlm-group-count">${records.length}</span></summary><div class="entries">${records.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')}</div></details>`;
+  return `<details class="dlm-item-group" data-category="${safe(category)}"${open}><summary>📍 ${safe(category)} <span class="dlm-group-count">${records.length}</span></summary><div class="entries">${records.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')}</div></details>`;
  }).join('');
  list.innerHTML=groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>';
  const books=db.items.filter(i=>i.kind==='book');
@@ -749,7 +749,7 @@ let dlmBookView='grid';
 function dlmRenderBooks(){
  const holder=document.getElementById('bookList');if(!holder)return;
  const q=(document.getElementById('bookFilter')?.value||'').toLocaleLowerCase().trim();
- const books=db.items.filter(i=>i.kind==='book'&&[i.name,i.author,i.barcode].some(s=>String(s||'').toLocaleLowerCase().includes(q)));
+ const books=db.items.filter(i=>i.kind==='book'&&[i.name,i.author,i.barcode].some(s=>String(s||'').toLocaleLowerCase().includes(q))).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
  holder.classList.toggle('book-list',dlmBookView==='list');
  holder.innerHTML=books.map(i=>`<button type="button" class="book-tile" onclick="showItem('${i.id}')"><span class="book-cover">${i.photo?`<img loading="lazy" src="${safe(i.photo)}" alt="Copertina di ${safe(i.name)}" onerror="this.replaceWith(document.createTextNode('📖'))">`:'📖'}</span><span class="book-text"><strong>${safe(i.name)}</strong><small>${safe(i.author||'Autore da inserire')}</small></span></button>`).join('')||'<div class="empty">Non ci sono libri da mostrare 💜</div>';
  document.getElementById('booksGridBtn')?.setAttribute('aria-pressed',String(dlmBookView==='grid'));
