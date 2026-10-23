@@ -68,7 +68,9 @@ const descriptions={
 const category=document.getElementById('aiCategorySuggestion');
 const desc=document.getElementById('desc');
 const suggestion=descriptions[name];
-if(category)category.textContent=suggestion?'Categoria suggerita: '+suggestion[0]+' (solo indicativa)':'Categoria: da definire manualmente';
+const categoryInput=document.getElementById('itemCategory');
+if(category)category.textContent=suggestion?'Categoria proposta automaticamente: '+suggestion[0]+' (puoi modificarla)':'Categoria: da definire manualmente';
+if(suggestion&&categoryInput&&!categoryInput.value.trim()){categoryInput.value=suggestion[0];categoryInput.dispatchEvent(new Event('input',{bubbles:true}));}
 if(suggestion&&desc&&!desc.value.trim()){desc.value=suggestion[1];desc.dispatchEvent(new Event('input',{bubbles:true}));}
 compareStatus.textContent='Nome inserito: '+name+'.'+(suggestion?' Descrizione proposta se il campo era vuoto.':'')+' Verifica e correggi prima di salvare.';});
 if(compareBtn&&compareStatus&&preview){
