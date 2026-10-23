@@ -183,15 +183,19 @@ function ocrSuggestion(raw){
  const lines=raw.split(/\n+/).map(x=>x.replace(/\s+/g,' ').trim()).filter(x=>x.length>=3);
  const text=lines.join(' ');
  const brand=(text.match(/faber[\s-]*castell/i)||text.match(/stabilo|staedtler|giotto|bic|pilot|edding|sharpie/i)||[])[0]||'';
+ // Allow OCR to insert or lose a few letters in common packaging words.
+ const compact=text.toLowerCase().replace(/[^a-z0-9]/g,'');
+ const hasMarker=/felt[\s\W]*t(?:i|l)?p|filzstift|pennarell|markers/i.test(text)||
+   (/faber[\s-]*castell/i.test(text)&&/\b12\b/.test(text)&&/fel.{0,6}(?:pen|ip)|(?:fel|fil).{0,9}pen/i.test(text));
  const qty=(text.match(/\b(?:\d{1,3})\s*(?:felt[\s-]*tip pens|pennarelli|matite|markers|pezzi|pcs)\b/i)||[])[0]||'';
  let type='';
- if(/felt[\s-]*tip|pennarell|filzstift|markers/i.test(text))type='Pennarelli';
+ if(hasMarker)type='Pennarelli';
  else if(/matite|pencils/i.test(text))type='Matite';
  else if(/penne|ballpoint/i.test(text))type='Penne';
  else if(/colla|glue/i.test(text))type='Colla';
  else if(/quadern|notebook/i.test(text))type='Quaderno';
- const number=(qty.match(/\d+/)||[])[0]||'';
- const name=[type,number?number+' pezzi':'',brand].filter(Boolean).join(' ').trim();
+ const number=(qty.match(/\d+/)||[])[0]||(hasMarker&&(text.match(/\b(?:12|24|36|48|6|8|10)\b/)||[])[0])||'';
+ const name=[type,brand,number?'confezione da '+number:''].filter(Boolean).join(' ').trim();
  return {name,category:type?'Cancelleria e materiale scolastico':'',description:lines.slice(0,8).join(' · '),raw:lines.join('\n')};
 }
 /* Try the original orientation and quarter-turns: iPhone photos can carry orientation metadata. */
