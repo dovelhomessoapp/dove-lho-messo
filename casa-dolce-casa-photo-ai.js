@@ -185,7 +185,7 @@ function ocrSuggestion(raw){
  const brand=(text.match(/faber[\s-]*castell/i)||text.match(/stabilo|staedtler|giotto|bic|pilot|edding|sharpie/i)||[])[0]||'';
  // Allow OCR to insert or lose a few letters in common packaging words.
  const compact=text.toLowerCase().replace(/[^a-z0-9]/g,'');
- const hasMarker=/felt[\s\W]*t(?:i|l)?p|filzstift|pennarell|markers/i.test(text)||
+ const hasMarker=/felt[\s\W]*t(?:i|l)?p|filzstift|pennarell|markers/i.test(text)||(/faber[\s-]*castel/i.test(text)&&/\bfelt\b/i.test(text))||
    (/faber[\s-]*castell/i.test(text)&&/\b12\b/.test(text)&&/fel.{0,6}(?:pen|ip)|(?:fel|fil).{0,9}pen/i.test(text));
  const qty=(text.match(/\b(?:\d{1,3})\s*(?:felt[\s-]*tip pens|pennarelli|matite|markers|pezzi|pcs)\b/i)||[])[0]||'';
  let type='';
@@ -224,7 +224,7 @@ async function ocrOriented(worker,img){
    const words=(result.data.words||[]).filter(x=>x.confidence>=45&&/[a-zA-ZÀ-ÿ]{2,}/.test(x.text));
    const confidence=words.length?words.reduce((sum,x)=>sum+x.confidence,0)/words.length:0;
    const meaningful=raw.match(/[a-zA-ZÀ-ÿ]{3,}/g)||[];
-   const score=confidence*Math.min(meaningful.length,12)/12;
+   const productHints=(/faber[\s-]*castel|stabilo|staedtler|giotto/i.test(raw)?20:0)+(/felt|filzstift|pennarell|markers/i.test(raw)?18:0)+(/\b(?:12|24|36|48)\b/.test(raw)?12:0);\n   const score=confidence*Math.min(meaningful.length,12)/12+productHints;
    runs.push({raw,score,confidence,words:meaningful.length,degrees,crop});
   }
  }
