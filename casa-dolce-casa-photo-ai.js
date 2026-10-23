@@ -142,6 +142,31 @@ cropStage.addEventListener('pointerup',()=>{
  if(!selectedCrop||selectedCrop.w<0.08||selectedCrop.h<0.05){clearPhotoCrop();cropHelp.textContent='Selezione troppo piccola: riprova.';return}
  cropClear.style.display='block';cropHelp.textContent='Area selezionata! Premi «Leggi testo dalla foto» per analizzarla.';
 });
+// On iOS Safari, prevent page panning during a finger-drawn selection.
+cropStage.style.touchAction='none';
+cropImage.style.touchAction='none';
+cropImage.style.webkitUserDrag='none';
+cropStage.style.overscrollBehavior='contain';
+cropStage.addEventListener('touchstart',e=>{
+ if(!cropImage.complete||!cropImage.naturalWidth||!e.touches.length)return;
+ e.preventDefault();
+ const t=e.touches[0],b=cropImage.getBoundingClientRect();
+ cropStart={x:Math.max(0,Math.min(1,(t.clientX-b.left)/b.width)),y:Math.max(0,Math.min(1,(t.clientY-b.top)/b.height))};
+},{passive:false});
+cropStage.addEventListener('touchmove',e=>{
+ if(!cropStart||!e.touches.length)return;
+ e.preventDefault();
+ const t=e.touches[0],b=cropImage.getBoundingClientRect();
+ const x=Math.max(0,Math.min(1,(t.clientX-b.left)/b.width)),y=Math.max(0,Math.min(1,(t.clientY-b.top)/b.height));
+ selectedCrop={x:Math.min(x,cropStart.x),y:Math.min(y,cropStart.y),w:Math.abs(x-cropStart.x),h:Math.abs(y-cropStart.y)};
+ cropRect.style.display='block';cropRect.style.left=(selectedCrop.x*100)+'%';cropRect.style.top=(selectedCrop.y*100)+'%';cropRect.style.width=(selectedCrop.w*100)+'%';cropRect.style.height=(selectedCrop.h*100)+'%';
+},{passive:false});
+cropStage.addEventListener('touchend',e=>{
+ if(!cropStart)return;e.preventDefault();cropStart=null;
+ if(!selectedCrop||selectedCrop.w<0.08||selectedCrop.h<0.05){clearPhotoCrop();cropHelp.textContent='Selezione troppo piccola: riprova.';return}
+ cropClear.style.display='block';cropHelp.textContent='Area selezionata! Premi «Leggi testo dalla foto» per analizzarla.';
+},{passive:false});
+cropStage.addEventListener('touchcancel',()=>{cropStart=null});
 async function getOcrImage(){
  if(!selectedCrop)return preview.src;
  const img=new Image();img.src=preview.src;
