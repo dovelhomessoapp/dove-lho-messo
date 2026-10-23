@@ -1,6 +1,8 @@
 /* Optional value suggestion from the existing Gemini recognition response.
    Never fabricate a price when the server does not return one. */
 (()=>{
+ const valueField=document.getElementById('value');
+ if(valueField){valueField.addEventListener('blur',()=>{const raw=valueField.value.trim();if(!raw)return;const n=Number(raw.replace(',','.'));if(Number.isFinite(n)&&n>=0)valueField.value=n.toFixed(2).replace('.',',')});}
  const button=document.getElementById('estimateValueAi');
  const status=document.getElementById('estimateValueStatus');
  const result=document.getElementById('estimateValueResult');
@@ -43,7 +45,7 @@
    apply.onclick=()=>{
     const input=document.getElementById('value');if(!input)return;
     if(input.value.trim()&&!confirm('Vuoi sostituire il valore già inserito?'))return;
-    input.value=String(price);input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.value=price.toFixed(2).replace('.',',');input.dispatchEvent(new Event('input',{bubbles:true}));
     status.textContent='Valore inserito. Verifica la stima prima di salvare.';
    };
    result.append(p,apply);
