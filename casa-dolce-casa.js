@@ -387,7 +387,7 @@ async function lookupISBN(){
    const checks=coverChecks||[];
    const reasons=[...new Set(checks.map(x=>x.status))];
    const detail=checks.length?'Copertina non recuperata ('+reasons.join(', ')+').':'Nessuna copertina associata a questo ISBN.';
-   toast('Libro trovato! '+detail+' Puoi aggiungere una foto.');
+   toast('📚 Libro trovato! La copertina non è disponibile automaticamente. Puoi sceglierne un’altra in «Cambia copertina».');
    console.info('Diagnostica copertine ISBN',isbn,checks);
   }
  }catch(e){console.warn('Errore ricerca ISBN:',e);toast('Ricerca non riuscita. Riprova.')}finally{isbnLookupBtn.disabled=false;isbnLookupBtn.textContent='📖 Cerca ISBN online'}
