@@ -6,6 +6,37 @@ const home=document.getElementById('home');
 const panel=document.createElement('section');panel.className='panel cd-family-panel';
 panel.innerHTML='<div class="cd-family-heading"><img class="cd-family-icon" src="./assets/casa-dolce-casa-3d.png" alt="" style="object-fit:contain;overflow:visible"><div><h3>Casa dolce casa</h3><p>Archivio familiare condiviso</p></div></div><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>Crea un accesso personale</summary><form id="familySignup"><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Per entrare nella Casa dolce casa servirà anche un invito del proprietario.</p></details><section id="familyAcceptBox" hidden><h3>💌 Accetta invito familiare</h3><p>Accedi con la stessa email a cui è destinato l’invito, poi premi il pulsante qui sotto.</p><button id="familyAcceptBtn" class="secondary" type="button">Accetta invito</button></section><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><details id="familyMembersBox" style="margin:12px 0"><summary>👨‍👩‍👧‍👦 La mia famiglia</summary><div id="familyMembersList"></div><form id="familyInviteForm" hidden><label>Email del familiare<input id="familyInviteEmail" type="email" required></label><button class="secondary" type="submit">Crea link di invito</button></form><div id="familyInviteResult" aria-live="polite"></div></details><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
 home.append(panel);
+// Recupero password Supabase: il link email apre questa pagina con un token temporaneo.
+const recoveryParams=new URLSearchParams(location.hash.replace(/^#/,''));
+const recoveryAccessToken=recoveryParams.get('type')==='recovery'?recoveryParams.get('access_token'):null;
+if(recoveryAccessToken){
+ const resetBox=document.createElement('section');
+ resetBox.className='panel';
+ resetBox.style.cssText='margin:14px 0;padding:18px;border:2px solid #c9a1e8;border-radius:18px;background:#fff9ff';
+ resetBox.innerHTML='<h3>🔐 Scegli una nuova password</h3><p>Inserisci una nuova password di almeno 8 caratteri. Non usare quella vecchia.</p><form id="familyPasswordResetForm"><label>Nuova password<input id="familyNewPassword" type="password" autocomplete="new-password" minlength="8" required></label><label>Ripeti la password<input id="familyRepeatPassword" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="primary">Salva nuova password</button></form><p id="familyResetStatus" role="status"></p>';
+ panel.prepend(resetBox);
+ panel.querySelector('#familyForm').hidden=true;
+ panel.querySelector('#familySignupBox').hidden=true;
+ resetBox.querySelector('form').onsubmit=async e=>{
+  e.preventDefault();
+  const pass=resetBox.querySelector('#familyNewPassword').value;
+  const repeat=resetBox.querySelector('#familyRepeatPassword').value;
+  const status=resetBox.querySelector('#familyResetStatus');
+  if(pass!==repeat){status.textContent='Le due password non coincidono.';return}
+  const button=e.submitter;button.disabled=true;status.textContent='Salvataggio in corso…';
+  try{
+   const response=await fetch(base+'/auth/v1/user',{method:'PUT',headers:{apikey:key,Authorization:'Bearer '+recoveryAccessToken,'Content-Type':'application/json'},body:JSON.stringify({password:pass})});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw Error(data.msg||data.message||data.error_description||'Impossibile aggiornare la password. Richiedi un nuovo link.');
+   history.replaceState(null,'',location.pathname+location.search);
+   resetBox.querySelector('form').remove();
+   status.textContent='💜 Password aggiornata! Ora puoi accedere con la tua email e la nuova password.';
+   panel.querySelector('#familyForm').hidden=false;
+  }catch(err){status.textContent='Errore: '+err.message}
+  finally{button.disabled=false}
+ };
+}
+
 const el=id=>document.getElementById(id);
 let token=null,house=null,sending=false;
 let refreshToken=null;
@@ -363,7 +394,7 @@ async function restoreSession(){
  }
 }
 window.addEventListener('online',()=>{if(!token&&refreshToken)void restoreSession()});
-void restoreSession();
+if(!recoveryAccessToken)void restoreSession();
 
 /* Mostra chi ha inserito l'oggetto nella scheda famiglia. */
 const originalShowItem=window.showItem;
