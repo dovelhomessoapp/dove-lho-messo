@@ -198,7 +198,7 @@ el('familyInviteForm').onsubmit=async e=>{
 };
 el('familyAcceptBtn').onclick=async()=>{
  if(!token){notice('Prima accedi con la tua email e password.');return}
- try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;notice('Benvenuta nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}
+ try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;el('familyHouse').textContent='💜 Archivio familiare condiviso';notice('Benvenuta nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}
 };
 el('familySignup').onsubmit=async e=>{
  e.preventDefault();
@@ -217,11 +217,12 @@ el('familyForm').onsubmit=async e=>{
  try{
  const r=await fetch(base+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({email:el('familyEmail').value.trim(),password:el('familyPass').value})});
  const d=await r.json();el('familyPass').value='';if(!r.ok)throw Error(d.msg||d.message||'Accesso non riuscito');
+ token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);
  const houses=await get('/rest/v1/homes?select=id,name',d.access_token);
  if(houses.length!==1){
   if(houses.length===0&&pendingFamilyInvite()){
    token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);
-   el('familyAcceptBox').hidden=false;notice('Accesso effettuato. Premi “Accetta invito” per entrare nella casa.');return;
+   el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyAcceptBox').hidden=false;notice('Accesso effettuato. Premi “Accetta invito” per entrare nella casa.');return;
   }
   throw Error('Questa prova richiede una sola casa');
  }
@@ -333,7 +334,7 @@ window.familyDeleteItem=async id=>{
  finally{setTimeout(()=>deletingIds.delete(id),1500)}
 };
 el('familyReload').onclick=()=>syncEdits().then(load).then(uploadNew).catch(err=>notice(err.message));
-el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;notice('Disconnessa. I dati già caricati restano in questa copia di prova.')};
+el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano in questa copia di prova.')};
 async function restoreSession(){
  const saved=localStorage.getItem(SESSION_KEY);
  if(!saved)return;
@@ -342,7 +343,12 @@ async function restoreSession(){
  try{
   await renew();
   const houses=await get('/rest/v1/homes?select=id,name',token);
-  if(houses.length!==1)throw Error('Casa non disponibile');
+  if(houses.length!==1){
+   if(houses.length===0&&pendingFamilyInvite()){
+    house=null;el('familyForm').hidden=true;el('familySignupBox').hidden=true;updateFamilyAccept();notice('Sessione ripristinata: accetta il tuo invito per entrare nella casa.');return;
+   }
+   throw Error('Casa non disponibile');
+  }
   house=houses[0];el('familyHouse').textContent='💜 Archivio familiare condiviso';
   await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
   notice('Accesso ripristinato.');
