@@ -31,7 +31,7 @@ BEGIN
  THEN RAISE EXCEPTION 'Utente già membro'; END IF;
  v_token := encode(gen_random_bytes(32),'hex');
  INSERT INTO public.family_invites(home_id,email,token_hash,created_by)
- VALUES(p_home,v_email,encode(extensions.digest(v_token,'sha256'),'hex'),auth.uid());
+ VALUES(p_home,v_email,encode(digest(v_token,'sha256'),'hex'),auth.uid());
  RETURN v_token;
 END $$;
 
@@ -44,15 +44,15 @@ BEGIN
  SELECT lower(email) INTO v_email FROM auth.users WHERE id=auth.uid() AND email_confirmed_at IS NOT NULL;
  IF v_email IS NULL THEN RAISE EXCEPTION 'Conferma prima la tua email'; END IF;
  SELECT * INTO v_inv FROM public.family_invites
- WHERE token_hash=encode(extensions.digest(p_token,'sha256'),'hex')
+ WHERE token_hash=encode(digest(p_token,'sha256'),'hex')
  AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now()
  FOR UPDATE;
  IF NOT FOUND OR v_inv.email<>v_email THEN RAISE EXCEPTION 'Invito non valido, scaduto o destinato a un’altra email'; END IF;
  IF EXISTS (SELECT 1 FROM public.home_members WHERE user_id=auth.uid() AND home_id<>v_inv.home_id)
  THEN RAISE EXCEPTION 'Account già associato a un’altra casa'; END IF;
- INSERT INTO public.home_members(home_id,user_id,role)
- VALUES(v_inv.home_id,auth.uid(),'member')
- ON CONFLICT DO NOTHING;
+ IF NOT EXISTS (SELECT 1 FROM public.home_members WHERE home_id=v_inv.home_id AND user_id=auth.uid()) THEN
+  INSERT INTO public.home_members(home_id,user_id,role) VALUES(v_inv.home_id,auth.uid(),'member');
+ END IF;
  UPDATE public.family_invites SET accepted_at=now() WHERE id=v_inv.id;
  RETURN 'Invito accettato';
 END $$;
