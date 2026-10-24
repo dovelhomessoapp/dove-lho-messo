@@ -5,3 +5,28 @@ self.addEventListener('install',event=>{event.waitUntil((async()=>{const cache=a
 self.addEventListener('activate',event=>{event.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(k=>k.startsWith('dlm-')&&k!==CACHE).map(k=>caches.delete(k)));await self.clients.claim()})())});
 self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting()});
 self.addEventListener('fetch',event=>{const req=event.request;if(req.method!=='GET')return;const url=new URL(req.url);if(url.origin!==self.location.origin)return;event.respondWith((async()=>{try{const res=await fetch(req,{cache:'no-store'});if(res.ok&&res.type==='basic'){const cache=await caches.open(CACHE);await cache.put(req,res.clone())}return res}catch(e){const cached=await caches.match(req,{ignoreSearch:true});if(cached)return cached;if(req.mode==='navigate'){const fallback=await caches.match('./index.html');if(fallback)return fallback}throw e}})())});
+
+/* Push notification handlers. Delivery requires a separately configured VAPID sender
+   and an authenticated subscription registration endpoint. */
+self.addEventListener('push',event=>{
+  event.waitUntil((async()=>{
+    let data={};try{data=event.data?.json()||{}}catch(e){}
+    if(data.type!=='pantry-expiry')return;
+    const title='🔔 Dove l’ho messo?';
+    const body=typeof data.body==='string'?data.body.slice(0,180):'Controlla gli alimenti in scadenza nella tua dispensa.';
+    await self.registration.showNotification(title,{
+      body,icon:'./icon-192.png',badge:'./icon-192.png',
+      tag:'dlm-expiry-'+String(data.date||'today').replace(/[^0-9-]/g,'').slice(0,12),
+      data:{url:'./casa-dolce-casa.html#pantry'}
+    });
+  })());
+});
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();
+  event.waitUntil((async()=>{
+    const target=new URL('./casa-dolce-casa.html',self.registration.scope).href;
+    const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+    for(const client of windows){if(new URL(client.url).pathname===new URL(target).pathname){await client.focus();client.postMessage({type:'DLM_OPEN_PANTRY'});return}}
+    await self.clients.openWindow(target);
+  })());
+});
