@@ -4,7 +4,7 @@ const base='https://ephdnunjudbwlgbxdadm.supabase.co';
 const key='sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT';
 const home=document.getElementById('home');
 const panel=document.createElement('section');panel.className='panel cd-family-panel';
-panel.innerHTML='<div class="cd-family-heading"><img class="cd-family-icon" src="./assets/casa-dolce-casa-3d.png" alt="" style="object-fit:contain;overflow:visible"><div><h3>Casa dolce casa</h3><p>Archivio familiare condiviso</p></div></div><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>Crea un accesso personale</summary><form id="familySignup"><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Per entrare nella Casa dolce casa servirà anche un invito del proprietario.</p></details><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
+panel.innerHTML='<div class="cd-family-heading"><img class="cd-family-icon" src="./assets/casa-dolce-casa-3d.png" alt="" style="object-fit:contain;overflow:visible"><div><h3>Casa dolce casa</h3><p>Archivio familiare condiviso</p></div></div><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>Crea un accesso personale</summary><form id="familySignup"><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Per entrare nella Casa dolce casa servirà anche un invito del proprietario.</p></details><section id="familyAcceptBox" hidden><h3>💌 Accetta invito familiare</h3><p>Accedi con la stessa email a cui è destinato l’invito, poi premi il pulsante qui sotto.</p><button id="familyAcceptBtn" class="secondary" type="button">Accetta invito</button></section><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><details id="familyMembersBox" style="margin:12px 0"><summary>👨‍👩‍👧‍👦 La mia famiglia</summary><div id="familyMembersList"></div><form id="familyInviteForm" hidden><label>Email del familiare<input id="familyInviteEmail" type="email" required></label><button class="secondary" type="submit">Crea link di invito</button></form><div id="familyInviteResult" aria-live="polite"></div></details><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
 home.append(panel);
 const el=id=>document.getElementById(id);
 let token=null,house=null,sending=false;
@@ -144,8 +144,20 @@ async function syncPlacePhotos(){
 async function load(){
  const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,description,image_url,location_id,estimated_value,created_at,created_by,updated_by&home_id=eq.'+house.id,token);
  const places=await get('/rest/v1/locations?select=id,name,parent_id&home_id=eq.'+house.id,token);
- const members=await get('/rest/v1/home_members?select=user_id,nickname&home_id=eq.'+house.id,token);
+ const members=await get('/rest/v1/home_members?select=user_id,nickname,role&home_id=eq.'+house.id,token);
  familyNicknames=new Map(members.map(m=>[m.user_id,m.nickname]).filter(x=>x[1]));
+ const list=el('familyMembersList');list.replaceChildren();
+ const me=currentFamilyUserId(),owner=members.some(m=>m.user_id===me&&m.role==='owner');
+ for(const m of members){
+  const line=document.createElement('div');line.style.cssText='display:flex;align-items:center;gap:8px;margin:8px 0;padding:8px;background:#faf3ff;border-radius:10px';
+  const label=document.createElement('span');label.style.flex='1';label.textContent=(m.role==='owner'?'👑 ':'👤 ')+(m.nickname||'Familiare')+(m.user_id===me?' (tu)':'');line.append(label);
+  if(owner&&m.role!=='owner'){
+   const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Rimuovi';
+   remove.onclick=async()=>{if(!confirm('Rimuovere questo familiare dalla casa condivisa?'))return;try{await familyRpc('family_remove_member',{p_home:house.id,p_user:m.user_id});await load();notice('Familiare rimosso.')}catch(e){notice(e.message)}};
+   line.append(remove);
+  }list.append(line);
+ }
+ el('familyInviteForm').hidden=!owner;
  for(const i of objects){if(i.image_url&&i.image_url.startsWith(house.id+'/')){try{i.image_url=await signPhoto(i.image_url)}catch(e){i.image_url='';notice('Foto non disponibile')}}}
  // Aggiorna solo la copia locale usata dalle schermate dell'app di prova.
  cloudIds.clear();objects.forEach(i=>{cloudIds.add(i.id);seenIds.add(i.id);if(pendingCreates.delete(i.id))saveCreates()});saveSeen();
@@ -161,6 +173,33 @@ async function load(){
  el('familyCount').textContent='Oggetti online: '+objects.length;
  notice('Inventario familiare aggiornato.');
 }
+async function familyRpc(name,args){
+ const response=await familyFetch(base+'/rest/v1/rpc/'+name,{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify(args)});
+ const data=await response.json().catch(()=>null);
+ if(!response.ok)throw Error(data?.message||'Funzione non ancora attiva su Supabase');
+ return data;
+}
+function pendingFamilyInvite(){return new URLSearchParams(location.hash.slice(1)).get('family_invite')||''}
+function updateFamilyAccept(){el('familyAcceptBox').hidden=!pendingFamilyInvite()||!!house}
+updateFamilyAccept();
+window.addEventListener('hashchange',updateFamilyAccept);
+el('familyInviteForm').onsubmit=async e=>{
+ e.preventDefault();if(!house)return;
+ const button=e.submitter;button.disabled=true;
+ try{
+  const email=el('familyInviteEmail').value.trim();
+  const secret=await familyRpc('family_create_invite',{p_home:house.id,p_email:email});
+  const url=new URL(location.href);url.hash='family_invite='+encodeURIComponent(secret);
+  const result=el('familyInviteResult');result.replaceChildren();
+  const p=document.createElement('p');p.textContent='Link personale valido 7 giorni. Condividilo solo con '+email+'. Non inoltrarlo ad altre persone.';result.append(p);
+  const input=document.createElement('input');input.readOnly=true;input.value=url.href;input.setAttribute('aria-label','Link di invito');result.append(input);
+  const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent='Copia link';copy.onclick=async()=>{try{await navigator.clipboard.writeText(url.href);notice('Link copiato.')}catch{input.select();notice('Seleziona e copia il link.')}};result.append(copy);
+ }catch(err){notice('Invito: '+err.message)}finally{button.disabled=false}
+};
+el('familyAcceptBtn').onclick=async()=>{
+ if(!token){notice('Prima accedi con la tua email e password.');return}
+ try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;notice('Benvenuta nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}
+};
 el('familySignup').onsubmit=async e=>{
  e.preventDefault();
  const btn=e.submitter;btn.disabled=true;
@@ -179,7 +218,13 @@ el('familyForm').onsubmit=async e=>{
  const r=await fetch(base+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({email:el('familyEmail').value.trim(),password:el('familyPass').value})});
  const d=await r.json();el('familyPass').value='';if(!r.ok)throw Error(d.msg||d.message||'Accesso non riuscito');
  const houses=await get('/rest/v1/homes?select=id,name',d.access_token);
- if(houses.length!==1)throw Error('Questa prova richiede una sola casa');
+ if(houses.length!==1){
+  if(houses.length===0&&pendingFamilyInvite()){
+   token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);
+   el('familyAcceptBox').hidden=false;notice('Accesso effettuato. Premi “Accetta invito” per entrare nella casa.');return;
+  }
+  throw Error('Questa prova richiede una sola casa');
+ }
  token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);house=houses[0];el('familyHouse').textContent='💜 Archivio familiare condiviso';
  await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
  }catch(err){notice('Errore: '+err.message)}finally{btn.disabled=false}
