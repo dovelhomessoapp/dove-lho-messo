@@ -4,7 +4,7 @@ const base='https://ephdnunjudbwlgbxdadm.supabase.co';
 const key='sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT';
 const home=document.getElementById('home');
 const panel=document.createElement('section');panel.className='panel cd-family-panel';
-panel.innerHTML='<div class="cd-family-heading"><img class="cd-family-icon" src="./assets/casa-dolce-casa-3d.png" alt="" style="object-fit:contain;overflow:visible"><div><h3>Casa dolce casa</h3><p>Archivio familiare condiviso</p></div></div><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>✨ Crea il tuo account</summary><form id="familySignup"><label>Nome o nickname<input id="signupNickname" type="text" maxlength="40" autocomplete="nickname" required></label><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Dopo la conferma dell’email potrai accedere e creare la tua casa, oppure entrare in quella di un familiare tramite invito.</p></details><section id="familyAcceptBox" hidden><h3>💌 Accetta invito familiare</h3><p>Accedi con la stessa email a cui è destinato l’invito, poi premi il pulsante qui sotto.</p><button id="familyAcceptBtn" class="secondary" type="button">Accetta invito</button></section><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><details id="familyMembersBox" style="margin:12px 0"><summary>👨‍👩‍👧‍👦 La mia famiglia</summary><div id="familyMembersList"></div><form id="familyNicknameForm"><label>Il mio nome o nickname<input id="familyNickname" type="text" maxlength="40" required></label><button type="submit" class="secondary">Salva nome</button></form><form id="familyInviteForm" hidden><label>Email del familiare<input id="familyInviteEmail" type="email" required></label><button class="secondary" type="submit">Crea link di invito</button></form><div id="familyInviteResult" aria-live="polite"></div></details><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
+panel.innerHTML='<div class="cd-family-heading"><img class="cd-family-icon" src="./assets/casa-dolce-casa-3d.png" alt="" style="object-fit:contain;overflow:visible"><div><h3>Casa dolce casa</h3><p>Archivio familiare condiviso</p></div></div><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>✨ Crea il tuo account</summary><form id="familySignup"><label>Nome o nickname<input id="signupNickname" type="text" maxlength="40" autocomplete="nickname" required></label><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Dopo la conferma dell’email potrai accedere e creare la tua casa, oppure entrare in quella di un familiare tramite invito.</p></details><section id="familyAcceptBox" hidden><h3>💌 Accetta invito familiare</h3><p>Accedi con la stessa email a cui è destinato l’invito, poi premi il pulsante qui sotto.</p><button id="familyAcceptBtn" class="secondary" type="button">Accetta invito</button></section><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><details id="familyMembersBox" style="margin:12px 0"><summary>👨‍👩‍👧‍👦 La mia famiglia</summary><div id="familyMembersList"></div><form id="familyNicknameForm"><label>Il mio nome o nickname<input id="familyNickname" type="text" maxlength="40" required></label><button type="submit" class="secondary">Salva nome</button></form><form id="familyInviteForm" hidden><label>Email del familiare<input id="familyInviteEmail" type="email" required></label><button class="secondary" type="submit">Invia invito via email</button></form><div id="familyInviteResult" aria-live="polite"></div></details><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
 home.append(panel);
 // Primo passo guidato per una casa appena creata, senza modificare i dati.
 const firstObjectGuide=document.createElement('div');
@@ -286,16 +286,26 @@ el('familyNicknameForm').onsubmit=async e=>{
  catch(err){notice('Nome: '+err.message)}finally{btn.disabled=false}
 };
 el('familyInviteForm').onsubmit=async e=>{
- e.preventDefault();if(!house)return;
+ e.preventDefault();if(!house||!token)return;
  const button=e.submitter;button.disabled=true;
  try{
   const email=el('familyInviteEmail').value.trim();
-  const secret=await familyRpc('family_create_invite',{p_home:house.id,p_email:email});
-  const url=new URL(location.href);url.hash='family_invite='+encodeURIComponent(secret);
+  const response=await familyFetch(base+'/functions/v1/invia-invito-famiglia',{
+   method:'POST',
+   headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},
+   body:JSON.stringify({home_id:house.id,email})
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok&&!data.invite_url)throw Error(data.error||data.message||'Invito non riuscito');
   const result=el('familyInviteResult');result.replaceChildren();
-  const p=document.createElement('p');p.textContent='Link personale valido 7 giorni. Condividilo solo con '+email+'. Non inoltrarlo ad altre persone.';result.append(p);
-  const input=document.createElement('input');input.readOnly=true;input.value=url.href;input.setAttribute('aria-label','Link di invito');result.append(input);
-  const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent='Copia link';copy.onclick=async()=>{try{await navigator.clipboard.writeText(url.href);notice('Link copiato.')}catch{input.select();notice('Seleziona e copia il link.')}};result.append(copy);
+  const p=document.createElement('p');
+  p.textContent=data.success?'💌 Invito inviato via email a '+email+'! Il link è valido 7 giorni.':'Non è stato possibile inviare l’email. Puoi condividere il link personale con '+email+'.';
+  result.append(p);
+  if(data.invite_url){
+   const input=document.createElement('input');input.readOnly=true;input.value=data.invite_url;input.setAttribute('aria-label','Link di invito');result.append(input);
+   const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent='Copia link';copy.onclick=async()=>{try{await navigator.clipboard.writeText(data.invite_url);notice('Link copiato.')}catch{input.select();notice('Seleziona e copia il link.')}};result.append(copy);
+  }
+  notice(data.success?'💜 Email di invito inviata!':'Invito creato, ma email non inviata.');
  }catch(err){notice('Invito: '+err.message)}finally{button.disabled=false}
 };
 el('familyAcceptBtn').onclick=async()=>{
