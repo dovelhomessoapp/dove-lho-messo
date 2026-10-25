@@ -219,9 +219,26 @@ if(initialInvite)sessionStorage.setItem(INVITE_KEY,initialInvite);
 function pendingFamilyInvite(){return new URLSearchParams(location.hash.slice(1)).get('family_invite')||sessionStorage.getItem(INVITE_KEY)||''}
 function updateFamilyAccept(){const waiting=!!token&&!house;el('familyAcceptBox').hidden=!!house||(!pendingFamilyInvite()&&!waiting);el('familyAcceptBtn').hidden=!pendingFamilyInvite();}
 updateFamilyAccept();
+// L'invito è il punto di ingresso: mostra prima una scelta chiara, non due moduli sovrapposti.
 if(pendingFamilyInvite()){
- el('familySignupBox').open=true;
- el('familyAcceptBox').hidden=false;
+ const welcome=document.createElement('div');
+ welcome.id='familyInviteWelcome';
+ welcome.style.cssText='padding:18px 16px;margin:0 0 16px;border-radius:20px;background:#f7edff;text-align:center;border:1px solid #e5c9f4';
+ welcome.innerHTML='<h3 style="margin:0 0 8px">💌 Benvenuto in Casa dolce casa!</h3><p style="margin:0 0 14px">Hai ricevuto un invito a condividere una casa. Come vuoi continuare?</p><button type="button" class="primary" id="familyInviteRegister" style="margin:4px">✨ Sono nuovo, registrami</button><button type="button" class="secondary" id="familyInviteLogin" style="margin:4px">Ho già un account</button>';
+ panel.prepend(welcome);
+ const signup=el('familySignupBox'),login=el('familyForm');
+ function chooseInviteMode(mode){
+  signup.hidden=mode!=='register';signup.open=mode==='register';
+  login.hidden=mode!=='login';
+  el('familyAcceptBox').hidden=true;
+  el('familyInviteRegister').setAttribute('aria-pressed',String(mode==='register'));
+  el('familyInviteLogin').setAttribute('aria-pressed',String(mode==='login'));
+ }
+ el('familyInviteRegister').onclick=()=>chooseInviteMode('register');
+ el('familyInviteLogin').onclick=()=>chooseInviteMode('login');
+ chooseInviteMode('register');
+}
+if(pendingFamilyInvite()){
  el('familyAcceptBtn').hidden=true;
  el('familyAcceptBox').querySelector('h3').textContent='💌 Sei stato invitato in una casa!';
  el('familyAcceptBox').querySelector('p').textContent='Prima volta qui? Compila il modulo di registrazione. Hai già un account? Accedi qui sopra. Dopo la verifica della tua email entrerai nella casa.';
