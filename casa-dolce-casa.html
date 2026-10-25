@@ -273,7 +273,7 @@ if(sbn&&!sbn.querySelector('details')){
 #dlmGuideDialog p{line-height:1.6;color:#624b7d;white-space:pre-line;font-size:15px}
 #dlmGuideDialog .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
 #dlmGuideDialog .actions button{flex:1;min-width:90px}
-</style><button id="dlmHelpBtn" type="button" aria-label="Apri il tutorial di questa sezione" title="Come funziona questa sezione?">❔</button><div id="dlmGuideOverlay" role="presentation"><div id="dlmGuideDialog" role="dialog" aria-modal="true" aria-labelledby="dlmGuideTitle"><div style="font-size:34px">💜📖</div><h2 id="dlmGuideTitle"></h2><p id="dlmGuideText"></p><small id="dlmGuideCount" style="color:#9162b3"></small><div class="actions"><button id="dlmGuideBack" class="secondary" type="button">← Indietro</button><button id="dlmGuideNext" class="primary" type="button">Avanti →</button><button id="dlmGuideClose" class="secondary" type="button">Chiudi</button></div></div></div>
+</style><button id="dlmHelpBtn" type="button" aria-label="Apri il tutorial di questa sezione" title="Come funziona questa sezione?">❔</button><div id="dlmGuideOverlay" role="presentation"><div id="dlmGuideDialog" role="dialog" aria-modal="true" aria-labelledby="dlmGuideTitle"><div id="dlmGuideIcon" style="font-size:34px">💜📖</div><h2 id="dlmGuideTitle"></h2><p id="dlmGuideText"></p><small id="dlmGuideCount" style="color:#9162b3"></small><div class="actions"><button id="dlmGuideBack" class="secondary" type="button">← Indietro</button><button id="dlmGuideNext" class="primary" type="button">Avanti →</button><button id="dlmGuideClose" class="secondary" type="button">Chiudi</button></div></div></div>
 <script id="dlm-section-guides">
 (function(){
 const guides={
@@ -298,10 +298,10 @@ books:[
 ],
 places:[
 '📍 LE MIE POSIZIONI\nNon devi più ricordare dove hai messo ogni cosa: crea una posizione per ogni stanza, mobile, scaffale o scatola.',
-'🗂️ CREA POSIZIONI ANNIDATE\nPer esempio Garage → Scaffale 2 → Scatola 4. Puoi indicare una posizione principale e una contenuta al suo interno.',
-'📷 RICONOSCI LE POSIZIONI\nQuando disponibile, aggiungi una foto della posizione per identificarla più facilmente.',
+'🗂️ CREA POSIZIONI ANNIDATE\nOrganizza le posizioni su più livelli, per esempio Garage → Scaffale 2 → Scatola 4. Ogni posizione può contenerne altre.',
+'📷 RICONOSCI LE POSIZIONI\nAggiungi una foto della posizione per riconoscerla subito.',
 '🔳 ETICHETTE QR\nGenera e stampa il codice QR della posizione. Scansionandolo potrai risalire alla posizione e agli oggetti associati.',
-'🔎 CERCA UNA POSIZIONE\nUsa la ricerca nella pagina per trovare più rapidamente un luogo o una scatola.'
+'🔎 CERCA UNA POSIZIONE\nUsa la ricerca per trovare rapidamente un luogo o una scatola. Apri una posizione per vedere anche gli oggetti che contiene.'
 ],
 add:[
 '📷 AGGIUNGI UNA FOTO (FACOLTATIVA)\nScatta una foto oppure scegline una dalla galleria. Puoi anche continuare senza foto.',
@@ -343,7 +343,7 @@ let section='home',step=0,previous='',initial=true;
 const key=id=>'dlm-guide-seen-v4-'+id;
 function active(){return document.querySelector('main .page.active')?.id||'home'}
 function show(id){id=id==='add' && document.getElementById('kind')?.value==='book'?'addBook':id;section=guides[id]?id:'home';step=0;try{localStorage.setItem(key(section),'1')}catch(e){};render();overlay.classList.add('open');next.focus()}
-function render(){const arr=guides[section];title.textContent=({home:'Benvenuto in Dove l’ho messo!',items:'I miei oggetti',books:'I miei libri',places:'Le posizioni',add:'Aggiungi oggetto',addBook:'Aggiungi libro',detail:'Dettagli',scan:'Scansiona',pantry:'La dispensa',premium:'Scopri Premium'})[section];body.textContent=arr[step];count.textContent='Passaggio '+(step+1)+' di '+arr.length;back.hidden=step===0;next.textContent=step===arr.length-1?'Ho capito 💜':'Avanti →'}
+function render(){const arr=guides[section];document.getElementById('dlmGuideIcon').textContent=({places:'💜🏡',books:'💜📚',addBook:'💜📚',items:'💜📦',add:'💜📦'})[section]||'💜📖';title.textContent=({home:'Benvenuto in Dove l’ho messo!',items:'I miei oggetti',books:'I miei libri',places:'Le posizioni',add:'Aggiungi oggetto',addBook:'Aggiungi libro',detail:'Dettagli',scan:'Scansiona',pantry:'La dispensa',premium:'Scopri Premium'})[section];body.textContent=arr[step];count.textContent='Passaggio '+(step+1)+' di '+arr.length;back.hidden=step===0;next.textContent=step===arr.length-1?'Ho capito 💜':'Avanti →'}
 function sync(){const id=active();if(id===previous&&!initial)return;previous=id;initial=false;if(!overlay.classList.contains('open')&&guides[id]){let seen=false;try{seen=localStorage.getItem(key(id))==='1'}catch(e){};if(!seen && !(id==='home' && (new URLSearchParams(location.hash.slice(1)).has('family_invite') || sessionStorage.getItem('dlm-pending-family-invite'))))show(id)}}
 document.getElementById('dlmHelpBtn').addEventListener('click',()=>show(active()));
 back.addEventListener('click',()=>{if(step>0){step--;render()}});
