@@ -198,7 +198,7 @@ async function load(){
   }list.append(line);
  }
  el('familyInviteForm').hidden=!owner;
- el('familyAcceptBox').hidden=true;
+ el('familyAcceptBox').hidden=true;updateFamilyAccept();
  for(const i of objects){if(i.image_url&&i.image_url.startsWith(house.id+'/')){try{i.image_url=await signPhoto(i.image_url)}catch(e){i.image_url='';notice('Foto non disponibile')}}}
  // Aggiorna solo la copia locale usata dalle schermate dell'app di prova.
  cloudIds.clear();objects.forEach(i=>{cloudIds.add(i.id);seenIds.add(i.id);if(pendingCreates.delete(i.id))saveCreates()});saveSeen();
@@ -243,7 +243,7 @@ el('familyCreateHomeForm').onsubmit=async e=>{
  }catch(err){notice('Creazione casa: '+err.message)}
  finally{button.disabled=false}
 };
-function updateFamilyAccept(){const waiting=!!token&&!house;el('familyAcceptBox').hidden=!!house||!pendingFamilyInvite();el('familyAcceptBtn').hidden=!pendingFamilyInvite();}
+function updateFamilyAccept(){el('familyAcceptBox').hidden=!!house||!pendingFamilyInvite();el('familyAcceptBtn').hidden=!pendingFamilyInvite();const welcome=el('familyInviteWelcome');if(welcome)welcome.hidden=!!house;}
 updateFamilyAccept();
 // L'invito è il punto di ingresso: mostra prima una scelta chiara, non due moduli sovrapposti.
 if(pendingFamilyInvite()){
@@ -295,7 +295,7 @@ el('familyAcceptBtn').onclick=async()=>{
  if(!pendingFamilyInvite())return;
  if(el('familyAcceptBtn').disabled)return;
  el('familyAcceptBtn').disabled=true;
- try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});sessionStorage.removeItem(INVITE_KEY);history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;el('familyHouse').textContent='💜 '+house.name;el('familyAcceptBox').hidden=true;notice('Benvenuto nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}finally{el('familyAcceptBtn').disabled=false}
+ try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});sessionStorage.removeItem(INVITE_KEY);history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;el('familyHouse').textContent='💜 '+house.name;updateFamilyAccept();notice('Benvenuto nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}finally{el('familyAcceptBtn').disabled=false}
 };
 el('familySignup').onsubmit=async e=>{
  e.preventDefault();
@@ -313,7 +313,7 @@ el('familySignup').onsubmit=async e=>{
   modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');
   const content=document.createElement('div');
   content.style.cssText='max-width:420px;width:100%;padding:26px 22px;box-sizing:border-box;border-radius:24px;background:#fff9ff;color:#603281;text-align:center;box-shadow:0 12px 40px #30144055';
-  content.innerHTML='<div style="font-size:44px">💌</div><h2 style="margin:12px 0;color:#7937a4">Registrazione effettuata!</h2><p>Controlla la tua email e premi il link di conferma.</p><p>Poi torna qui, accedi e crea la tua casa. 🏡</p><button type="button" class="primary">Ho capito 💜</button>';
+  content.innerHTML='<div style="font-size:44px">💌</div><h2 style="margin:12px 0;color:#7937a4">Registrazione effettuata!</h2><p>Controlla la tua email e premi il link di conferma.</p><p>'+ (pendingFamilyInvite()?'Poi torna qui, accedi e potrai entrare nella casa che ti ha invitato. 💜':'Poi torna qui, accedi e crea la tua casa. 🏡') +'</p><button type="button" class="primary">Ho capito 💜</button>';
   modal.append(content);document.body.append(modal);
   const closeButton=content.querySelector('button');
   closeButton.onclick=()=>{modal.remove();el('familySignupBox').open=false;el('familyForm').hidden=false;el('familyEmail').focus()};
@@ -340,7 +340,7 @@ el('familyForm').onsubmit=async e=>{
   throw Error('Questo account risulta collegato a più case: contatta il proprietario.');
  }
  token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);house=houses[0];el('familyHouse').textContent='💜 '+house.name;
- await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
+ await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;updateFamilyAccept();
  }catch(err){notice('Errore: '+err.message)}finally{btn.disabled=false}
 };
 async function uploadNew(){
