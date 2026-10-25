@@ -219,7 +219,13 @@ if(initialInvite)sessionStorage.setItem(INVITE_KEY,initialInvite);
 function pendingFamilyInvite(){return new URLSearchParams(location.hash.slice(1)).get('family_invite')||sessionStorage.getItem(INVITE_KEY)||''}
 function updateFamilyAccept(){const waiting=!!token&&!house;el('familyAcceptBox').hidden=!!house||(!pendingFamilyInvite()&&!waiting);el('familyAcceptBtn').hidden=!pendingFamilyInvite();}
 updateFamilyAccept();
-if(pendingFamilyInvite())el('familySignupBox').open=true;
+if(pendingFamilyInvite()){
+ el('familySignupBox').open=true;
+ el('familyAcceptBox').hidden=false;
+ el('familyAcceptBtn').hidden=true;
+ el('familyAcceptBox').querySelector('h3').textContent='💌 Sei stato invitato in una casa!';
+ el('familyAcceptBox').querySelector('p').textContent='Prima volta qui? Compila il modulo di registrazione. Hai già un account? Accedi qui sopra. Dopo la verifica della tua email entrerai nella casa.';
+}
 window.addEventListener('hashchange',()=>{const invite=new URLSearchParams(location.hash.slice(1)).get('family_invite');if(invite)sessionStorage.setItem(INVITE_KEY,invite);updateFamilyAccept()});
 el('familyNicknameForm').onsubmit=async e=>{
  e.preventDefault();if(!house||!token)return;
@@ -243,7 +249,10 @@ el('familyInviteForm').onsubmit=async e=>{
 };
 el('familyAcceptBtn').onclick=async()=>{
  if(!token){notice('Prima accedi con la tua email e password.');return}
- try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});sessionStorage.removeItem(INVITE_KEY);history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;el('familyHouse').textContent='💜 Archivio familiare condiviso';el('familyAcceptBox').hidden=true;notice('Benvenuto nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}
+ if(!pendingFamilyInvite())return;
+ if(el('familyAcceptBtn').disabled)return;
+ el('familyAcceptBtn').disabled=true;
+ try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});sessionStorage.removeItem(INVITE_KEY);history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;el('familyHouse').textContent='💜 Archivio familiare condiviso';el('familyAcceptBox').hidden=true;notice('Benvenuto nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}finally{el('familyAcceptBtn').disabled=false}
 };
 el('familySignup').onsubmit=async e=>{
  e.preventDefault();
@@ -272,7 +281,7 @@ el('familyForm').onsubmit=async e=>{
    el('familyForm').hidden=true;el('familySignupBox').hidden=true;
    el('familyAcceptBox').hidden=false;
    el('familyAcceptBtn').hidden=!pendingFamilyInvite();
-   notice(pendingFamilyInvite()?'Accesso riuscito! Premi “Accetta invito” per entrare nella casa.':'Accesso riuscito! Il tuo account non è ancora collegato a una casa. Apri di nuovo il link personale di invito ricevuto su WhatsApp, in questo stesso browser.');
+   if(pendingFamilyInvite()){notice('Accesso riuscito! Ti stiamo aggiungendo alla casa…');await el('familyAcceptBtn').onclick()}else notice('Accesso riuscito! Il tuo account non è ancora collegato a una casa. Apri il link personale di invito ricevuto.');
    return;
   }
   throw Error('Questo account risulta collegato a più case: contatta il proprietario.');
@@ -396,7 +405,7 @@ async function restoreSession(){
   const houses=await get('/rest/v1/homes?select=id,name',token);
   if(houses.length!==1){
    if(houses.length===0){
-    house=null;el('familyForm').hidden=true;el('familySignupBox').hidden=true;updateFamilyAccept();notice(pendingFamilyInvite()?'Sessione ripristinata: premi “Accetta invito”.':'Accesso ripristinato. Apri nuovamente il link personale di invito ricevuto su WhatsApp.');return;
+    house=null;el('familyForm').hidden=true;el('familySignupBox').hidden=true;updateFamilyAccept();if(pendingFamilyInvite()){notice('Invito trovato. Ti stiamo aggiungendo alla casa…');await el('familyAcceptBtn').onclick()}else notice('Accesso ripristinato. Apri il link personale di invito ricevuto.');return;
    }
    throw Error('Casa non disponibile');
   }
