@@ -6,6 +6,13 @@ const home=document.getElementById('home');
 const panel=document.createElement('section');panel.className='panel cd-family-panel';
 panel.innerHTML='<div class="cd-family-heading"><img class="cd-family-icon" src="./assets/casa-dolce-casa-3d.png" alt="" style="object-fit:contain;overflow:visible"><div><h3>Casa dolce casa</h3><p>Archivio familiare condiviso</p></div></div><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>✨ Non hai un account? Registrati qui</summary><form id="familySignup"><label>Nome o nickname<input id="signupNickname" type="text" maxlength="40" autocomplete="nickname" required></label><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Dopo la conferma dell’email potrai accedere. Per condividere la casa di un familiare ti servirà il suo invito.</p></details><section id="familyAcceptBox" hidden><h3>💌 Accetta invito familiare</h3><p>Accedi con la stessa email a cui è destinato l’invito, poi premi il pulsante qui sotto.</p><button id="familyAcceptBtn" class="secondary" type="button">Accetta invito</button></section><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><details id="familyMembersBox" style="margin:12px 0"><summary>👨‍👩‍👧‍👦 La mia famiglia</summary><div id="familyMembersList"></div><form id="familyNicknameForm"><label>Il mio nome o nickname<input id="familyNickname" type="text" maxlength="40" required></label><button type="submit" class="secondary">Salva nome</button></form><form id="familyInviteForm" hidden><label>Email del familiare<input id="familyInviteEmail" type="email" required></label><button class="secondary" type="submit">Crea link di invito</button></form><div id="familyInviteResult" aria-live="polite"></div></details><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
 home.append(panel);
+// Creazione autonoma della casa: visibile solo a utenti autenticati senza casa e senza invito.
+const createHomeBox=document.createElement('section');
+createHomeBox.id='familyCreateHomeBox';
+createHomeBox.hidden=true;
+createHomeBox.style.cssText='margin:14px 0;padding:16px;border:1px solid #e5c9f4;border-radius:18px;background:#faf4ff';
+createHomeBox.innerHTML='<h3>🏡 Crea la mia casa</h3><p>Inizia il tuo archivio privato. Potrai invitare la tua famiglia in seguito.</p><form id="familyCreateHomeForm"><label>Come vuoi chiamare la tua casa?<input id="familyCreateHomeName" type="text" maxlength="60" minlength="2" placeholder="Es. Casa nostra" required></label><button class="primary" type="submit">Crea la mia casa</button></form>';
+panel.append(createHomeBox);
 // Recupero password Supabase: il link email apre questa pagina con un token temporaneo.
 const recoveryParams=new URLSearchParams(location.hash.replace(/^#/,''));
 const recoveryAccessToken=recoveryParams.get('type')==='recovery'?recoveryParams.get('access_token'):null;
@@ -217,6 +224,25 @@ const INVITE_KEY='dlm-pending-family-invite';
 const initialInvite=new URLSearchParams(location.hash.slice(1)).get('family_invite');
 if(initialInvite)sessionStorage.setItem(INVITE_KEY,initialInvite);
 function pendingFamilyInvite(){return new URLSearchParams(location.hash.slice(1)).get('family_invite')||sessionStorage.getItem(INVITE_KEY)||''}
+function updateCreateHomeVisibility(){createHomeBox.hidden=!token||!!house||!!pendingFamilyInvite()}
+el('familyCreateHomeForm').onsubmit=async e=>{
+ e.preventDefault();if(!token||house||pendingFamilyInvite())return;
+ const button=e.submitter;button.disabled=true;
+ try{
+  const name=el('familyCreateHomeName').value.trim();
+  const homeId=await familyRpc('family_create_home',{p_name:name});
+  if(!homeId)throw Error('La casa non è stata creata.');
+  const houses=await get('/rest/v1/homes?select=id,name',token);
+  if(houses.length!==1)throw Error('Impossibile caricare la nuova casa.');
+  house=houses[0];await load();
+  el('familyForm').hidden=true;el('familySignupBox').hidden=true;
+  el('familyOnline').hidden=false;
+  el('familyHouse').textContent='💜 '+house.name;
+  updateCreateHomeVisibility();
+  notice('🏡 La tua casa è pronta! Ora puoi invitare la tua famiglia.');
+ }catch(err){notice('Creazione casa: '+err.message)}
+ finally{button.disabled=false}
+};
 function updateFamilyAccept(){const waiting=!!token&&!house;el('familyAcceptBox').hidden=!!house||(!pendingFamilyInvite()&&!waiting);el('familyAcceptBtn').hidden=!pendingFamilyInvite();}
 updateFamilyAccept();
 // L'invito è il punto di ingresso: mostra prima una scelta chiara, non due moduli sovrapposti.
@@ -298,7 +324,7 @@ el('familyForm').onsubmit=async e=>{
    el('familyForm').hidden=true;el('familySignupBox').hidden=true;
    el('familyAcceptBox').hidden=false;
    el('familyAcceptBtn').hidden=!pendingFamilyInvite();
-   if(pendingFamilyInvite()){notice('Accesso riuscito! Ti stiamo aggiungendo alla casa…');await el('familyAcceptBtn').onclick()}else notice('Accesso riuscito! Il tuo account non è ancora collegato a una casa. Apri il link personale di invito ricevuto.');
+   if(pendingFamilyInvite()){notice('Accesso riuscito! Ti stiamo aggiungendo alla casa…');await el('familyAcceptBtn').onclick()}else {updateCreateHomeVisibility();notice('Accesso riuscito! Ora puoi creare la tua casa.')}
    return;
   }
   throw Error('Questo account risulta collegato a più case: contatta il proprietario.');
@@ -422,7 +448,7 @@ async function restoreSession(){
   const houses=await get('/rest/v1/homes?select=id,name',token);
   if(houses.length!==1){
    if(houses.length===0){
-    house=null;el('familyForm').hidden=true;el('familySignupBox').hidden=true;updateFamilyAccept();if(pendingFamilyInvite()){notice('Invito trovato. Ti stiamo aggiungendo alla casa…');await el('familyAcceptBtn').onclick()}else notice('Accesso ripristinato. Apri il link personale di invito ricevuto.');return;
+    house=null;el('familyForm').hidden=true;el('familySignupBox').hidden=true;updateFamilyAccept();if(pendingFamilyInvite()){notice('Invito trovato. Ti stiamo aggiungendo alla casa…');await el('familyAcceptBtn').onclick()}else {updateCreateHomeVisibility();notice('Bentornato! Puoi creare la tua casa.')}return;
    }
    throw Error('Casa non disponibile');
   }
