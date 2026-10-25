@@ -350,7 +350,7 @@ let section='home',step=0,previous='',initial=true;
 const key=id=>'dlm-guide-seen-v2-'+id;
 function active(){return document.querySelector('main .page.active')?.id||'home'}
 function show(id){section=guides[id]?id:'home';step=0;try{localStorage.setItem(key(section),'1')}catch(e){};render();overlay.classList.add('open');next.focus()}
-function render(){const arr=guides[section];title.textContent=({home:'Benvenuta!',items:'I miei oggetti',books:'I miei libri',places:'Le posizioni',add:'Aggiungi',detail:'Dettagli',scan:'Scansiona',pantry:'La dispensa',premium:'Scopri Premium'})[section];body.textContent=arr[step];count.textContent='Passaggio '+(step+1)+' di '+arr.length;back.hidden=step===0;next.textContent=step===arr.length-1?'Ho capito 💜':'Avanti →'}
+function render(){const arr=guides[section];title.textContent=({home:'Benvenuto in Dove l’ho messo!',items:'I miei oggetti',books:'I miei libri',places:'Le posizioni',add:'Aggiungi',detail:'Dettagli',scan:'Scansiona',pantry:'La dispensa',premium:'Scopri Premium'})[section];body.textContent=arr[step];count.textContent='Passaggio '+(step+1)+' di '+arr.length;back.hidden=step===0;next.textContent=step===arr.length-1?'Ho capito 💜':'Avanti →'}
 function sync(){const id=active();if(id===previous&&!initial)return;previous=id;initial=false;if(!overlay.classList.contains('open')&&guides[id]){let seen=false;try{seen=localStorage.getItem(key(id))==='1'}catch(e){};if(!seen)show(id)}}
 document.getElementById('dlmHelpBtn').addEventListener('click',()=>show(active()));
 back.addEventListener('click',()=>{if(step>0){step--;render()}});
