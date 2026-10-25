@@ -333,6 +333,20 @@ pantry:[
 '🧺 SCORTE DA REINTEGRARE\nTieni d’occhio i prodotti che stanno finendo per ricordarti cosa ricomprare.',
 '🛒 LA MIA LISTA DELLA SPESA\nUsa la lista della spesa per organizzare gli acquisti, separatamente dagli alimenti già presenti in casa.'
 ],
+familyOwner:[
+'🏡 LA TUA CASA\\nQuesta è la casa condivisa di cui sei proprietario. Qui trovi il nome della casa e il numero degli oggetti online.',
+'💌 INVITA UN FAMILIARE\\nInserisci la sua email e premi «Crea link di invito». Condividi il link con la persona invitata: potrà accedere con il proprio account.',
+'📦 ARCHIVIO CONDIVISO\\nGli oggetti della casa sono accessibili ai membri autorizzati. Premi «Aggiorna inventario» per caricare gli ultimi dati.',
+'💜 IL TUO NICKNAME\\nNella sezione «La mia famiglia» puoi cambiare il nome con cui gli altri ti vedono, poi premi «Salva nome».',
+'👑 GESTISCI I MEMBRI\\nCome proprietario puoi vedere i familiari e, quando necessario, rimuovere un membro. Gli altri membri non possono invitare o rimuovere persone.'
+],
+familyMember:[
+'🏡 LA CASA CONDIVISA\\nSei entrato nella casa di un familiare. Qui trovi il nome della casa e il numero degli oggetti online.',
+'📦 GLI OGGETTI DELLA FAMIGLIA\\nPuoi consultare gli oggetti condivisi della casa. Premi «Aggiorna inventario» per caricare gli ultimi dati.',
+'👨‍👩‍👧‍👦 LA MIA FAMIGLIA\\nApri «La mia famiglia» per vedere chi partecipa alla casa e riconoscere il proprietario dalla corona 👑.',
+'💜 IL TUO NICKNAME\\nPuoi modificare il nome con cui compari nella famiglia e premere «Salva nome».',
+'🔐 PERMESSI E ACCESSO\\nSolo il proprietario può invitare o rimuovere membri. Puoi usare «Esci» per disconnetterti senza cancellare gli oggetti condivisi.'
+],
 premium:[
 '👑 SCOPRI PREMIUM\nQui trovi un’anteprima dei piani previsti per Dove l’ho messo?.',
 '💜 PIANO GRATUITO\nLa proposta prevede fino a 30 oggetti e libri complessivi, con le funzioni essenziali.',
@@ -344,10 +358,19 @@ const overlay=document.getElementById('dlmGuideOverlay'),title=document.getEleme
 let section='home',step=0,previous='',initial=true;
 const key=id=>'dlm-guide-seen-v4-'+id;
 function active(){return document.querySelector('main .page.active')?.id||'home'}
-function show(id){id=id==='add' && document.getElementById('kind')?.value==='book'?'addBook':id;section=guides[id]?id:'home';step=0;try{localStorage.setItem(key(section),'1')}catch(e){};render();overlay.classList.add('open');next.focus()}
-function render(){const arr=guides[section];document.getElementById('dlmGuideIcon').innerHTML=section==='pantry'?'💜 <img src="./assets/dispensa-nuova.png" alt="Dispensa" style="width:42px;height:42px;object-fit:contain;vertical-align:middle">':({places:'💜🏡',books:'💜📚',addBook:'💜📚',items:'💜📦',add:'💜📦'})[section]||'💜📖';title.textContent=({home:'Benvenuto in Dove l’ho messo!',items:'I miei oggetti',books:'I miei libri',places:'Le posizioni',add:'Aggiungi oggetto',addBook:'Aggiungi libro',detail:'Dettagli',scan:'Scansiona',pantry:'La dispensa',premium:'Scopri Premium'})[section];body.textContent=arr[step];count.textContent='Passaggio '+(step+1)+' di '+arr.length;back.hidden=step===0;next.textContent=step===arr.length-1?'Ho capito 💜':'Avanti →'}
+function show(id){if(id==='family'){const owner=!!document.querySelector('#familyInviteForm:not([hidden])');id=owner?'familyOwner':'familyMember'}id=id==='add' && document.getElementById('kind')?.value==='book'?'addBook':id;section=guides[id]?id:'home';step=0;try{localStorage.setItem(key(section),'1')}catch(e){};render();overlay.classList.add('open');next.focus()}
+function render(){const arr=guides[section];document.getElementById('dlmGuideIcon').innerHTML=section==='pantry'?'💜 <img src="./assets/dispensa-nuova.png" alt="Dispensa" style="width:42px;height:42px;object-fit:contain;vertical-align:middle">':({places:'💜🏡',books:'💜📚',addBook:'💜📚',items:'💜📦',add:'💜📦'})[section]||'💜📖';title.textContent=({home:'Benvenuto in Dove l’ho messo!',items:'I miei oggetti',books:'I miei libri',places:'Le posizioni',add:'Aggiungi oggetto',addBook:'Aggiungi libro',detail:'Dettagli',scan:'Scansiona',pantry:'La dispensa',premium:'Scopri Premium',familyOwner:'Casa dolce casa',familyMember:'Casa dolce casa'})[section];body.textContent=arr[step];count.textContent='Passaggio '+(step+1)+' di '+arr.length;back.hidden=step===0;next.textContent=step===arr.length-1?'Ho capito 💜':'Avanti →'}
 function sync(){const id=active();if(id===previous&&!initial)return;previous=id;initial=false;if(!overlay.classList.contains('open')&&guides[id]){let seen=false;try{seen=localStorage.getItem(key(id))==='1'}catch(e){};if(!seen && !(id==='home' && (new URLSearchParams(location.hash.slice(1)).has('family_invite') || sessionStorage.getItem('dlm-pending-family-invite'))))show(id)}}
 document.getElementById('dlmHelpBtn').addEventListener('click',()=>show(active()));
+const familyPanel=document.querySelector('.cd-family-panel');
+if(familyPanel){
+ const familyHelp=document.createElement('button');
+ familyHelp.type='button';familyHelp.className='secondary';familyHelp.textContent='❔ Guida Casa dolce casa';
+ familyHelp.style.cssText='margin:12px 0 4px;display:inline-block';
+ familyPanel.querySelector('.cd-family-heading')?.after(familyHelp);
+ familyHelp.addEventListener('click',()=>show('family'));
+}
+
 back.addEventListener('click',()=>{if(step>0){step--;render()}});
 next.addEventListener('click',()=>{if(step<guides[section].length-1){step++;render()}else overlay.classList.remove('open')});
 close.addEventListener('click',()=>overlay.classList.remove('open'));
