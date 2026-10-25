@@ -6,6 +6,13 @@ const home=document.getElementById('home');
 const panel=document.createElement('section');panel.className='panel cd-family-panel';
 panel.innerHTML='<div class="cd-family-heading"><img class="cd-family-icon" src="./assets/casa-dolce-casa-3d.png" alt="" style="object-fit:contain;overflow:visible"><div><h3>Casa dolce casa</h3><p>Archivio familiare condiviso</p></div></div><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>✨ Crea il tuo account</summary><form id="familySignup"><label>Nome o nickname<input id="signupNickname" type="text" maxlength="40" autocomplete="nickname" required></label><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Dopo la conferma dell’email potrai accedere e creare la tua casa, oppure entrare in quella di un familiare tramite invito.</p></details><section id="familyAcceptBox" hidden><h3>💌 Accetta invito familiare</h3><p>Accedi con la stessa email a cui è destinato l’invito, poi premi il pulsante qui sotto.</p><button id="familyAcceptBtn" class="secondary" type="button">Accetta invito</button></section><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><details id="familyMembersBox" style="margin:12px 0"><summary>👨‍👩‍👧‍👦 La mia famiglia</summary><div id="familyMembersList"></div><form id="familyNicknameForm"><label>Il mio nome o nickname<input id="familyNickname" type="text" maxlength="40" required></label><button type="submit" class="secondary">Salva nome</button></form><form id="familyInviteForm" hidden><label>Email del familiare<input id="familyInviteEmail" type="email" required></label><button class="secondary" type="submit">Crea link di invito</button></form><div id="familyInviteResult" aria-live="polite"></div></details><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
 home.append(panel);
+// Primo passo guidato per una casa appena creata, senza modificare i dati.
+const firstObjectGuide=document.createElement('div');
+firstObjectGuide.id='familyFirstObjectGuide';firstObjectGuide.hidden=true;
+firstObjectGuide.style.cssText='margin:14px 0;padding:16px;border:1px solid #e5c9f4;border-radius:18px;background:#faf4ff';
+firstObjectGuide.innerHTML='<h3>✨ La tua casa è pronta!</h3><p>Inizia aggiungendo il tuo primo oggetto. Puoi fotografarlo, dargli un nome e scegliere dove si trova.</p><button type="button" class="primary" id="familyFirstObjectBtn">＋ Aggiungi il primo oggetto</button>';
+panel.append(firstObjectGuide);
+document.getElementById('familyFirstObjectBtn').onclick=()=>document.querySelector('#home [data-page="add"]')?.click();
 // Creazione autonoma della casa: visibile solo a utenti autenticati senza casa e senza invito.
 const createHomeBox=document.createElement('section');
 createHomeBox.id='familyCreateHomeBox';
@@ -212,6 +219,7 @@ async function load(){
  void restoreFamilyPhotos();
  await syncPlacePhotos();
  el('familyCount').textContent='Oggetti online: '+objects.length;
+ firstObjectGuide.hidden=objects.length!==0;
  notice('Inventario familiare aggiornato.');
 }
 async function familyRpc(name,args){
@@ -447,7 +455,7 @@ window.familyDeleteItem=async id=>{
  finally{setTimeout(()=>deletingIds.delete(id),1500)}
 };
 el('familyReload').onclick=()=>syncEdits().then(load).then(uploadNew).catch(err=>notice(err.message));
-el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano in questa copia di prova.')};
+el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;firstObjectGuide.hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano in questa copia di prova.')};
 async function restoreSession(){
  const saved=localStorage.getItem(SESSION_KEY);
  if(!saved)return;
