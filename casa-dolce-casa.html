@@ -278,19 +278,10 @@ if(sbn&&!sbn.querySelector('details')){
 (function(){
 const guides={
 home:[
-'👤 PRIMA DI TUTTO: IL TUO ACCOUNT\nScorri la Home fino al riquadro “Casa dolce casa”. Se hai già un account, inserisci email e password e premi “Accedi”. Se è la prima volta, apri “Crea un accesso personale”.',
-'✉️ CREA IL TUO ACCESSO PERSONALE\nSegui i campi mostrati sullo schermo per registrarti con la tua email e una password personale. Se ricevi un messaggio di conferma, apri la tua email e completa la verifica; poi torna nell’app e accedi.',
-'🏠 LA CASA CONDIVISA\nL’account è personale, mentre l’archivio di casa può essere condiviso. Ogni familiare deve usare il proprio accesso: non è necessario comunicare la password agli altri.',
-'👨‍👩‍👧‍👦 AGGIUNGERE I FAMILIARI\nFai creare a ogni componente della famiglia il proprio accesso personale. Per vedere tutti la stessa casa, gli account devono poi essere associati alla stessa famiglia: la semplice registrazione non basta. Il proprietario apre “La mia famiglia”, inserisce l’email del familiare e crea un link personale valido 7 giorni. Il familiare apre il link, crea il proprio account con quella stessa email, conferma l’indirizzo e accede. Infine preme “Accetta invito” per entrare nella casa condivisa.',
-'🏡 BENVENUTO IN DOVE L’HO MESSO?\nLa memoria della tua casa, sempre a portata di mano. Ritrova oggetti, libri e tutto ciò che hai riposto, senza dover ricordare dove.',
-'📦 CATALOGA I TUOI OGGETTI\nSalva nome, foto, descrizione, valore e posizione. Puoi organizzare ciò che hai in casa, in garage, in cantina o nelle scatole.',
-'📚 CREA LA TUA LIBRERIA\nTieni i libri separati dagli oggetti. Cerca per titolo o autore, visualizza le copertine e prova a recuperare i dati tramite ISBN.',
-'📍 SAPRAI SEMPRE DOVE SI TROVA\nCrea posizioni anche una dentro l’altra: Casa → Armadio → Scatola. Associa ogni oggetto alla sua posizione e ritrovalo in pochi tocchi.',
-'🔎 CERCA E SCANSIONA\nCerca per nome o posizione, leggi codici a barre e usa i QR delle posizioni. Puoi anche leggere un codice da una fotografia.',
-'📷 FOTOGRAFA E PROVA L’IA\nScatta una foto o sceglila dalla galleria. Le funzioni di riconoscimento possono suggerire informazioni sull’oggetto: controllale sempre prima di salvarle.',
-'🛒 DISPENSA E SPESA\nOrganizza le scorte, tieni d’occhio i prodotti da consumare e prepara la lista della spesa. Alcune funzioni possono richiedere una connessione.',
-'👨‍👩‍👧‍👦 CONDIVISIONE E SICUREZZA\nL’app prevede uno spazio di casa condiviso con la famiglia. Dalla Home puoi anche esportare una copia di sicurezza del tuo archivio.',
-'💜 PRONTI A COMINCIARE?\nUsa i riquadri della Home per esplorare le sezioni. Il pulsante ❔ riapre la guida in qualsiasi momento. Buona organizzazione!'
+'💜 BENVENUTO IN DOVE L’HO MESSO?\nQui puoi catalogare oggetti, libri e alimenti e ritrovare facilmente dove li hai riposti. Ogni sezione ha una piccola guida dedicata.',
+'👤 IL TUO ACCESSO PERSONALE\nScorri la Home fino a «Casa dolce casa». Crea un account con la tua email oppure accedi se ne hai già uno. Se richiesto, conferma l’indirizzo tramite l’email ricevuta.',
+'🏡 LA TUA CASA, ANCHE IN FAMIGLIA\nDopo l’accesso puoi creare la tua casa oppure entrare in quella di un familiare tramite invito. Ognuno usa il proprio account, ma gli oggetti della stessa casa sono condivisi.',
+'✨ ESPLORA CON CALMA\nApri Oggetti, Libreria, Posizioni o Dispensa: troverai le istruzioni quando ti servono. Per rivederle, premi il pulsante ❔ della sezione.'
 ],
 items:[
 '📦 I MIEI OGGETTI\nQuesta sezione contiene soltanto gli oggetti: i libri hanno una libreria separata.',
@@ -349,7 +340,7 @@ premium:[
 };
 const overlay=document.getElementById('dlmGuideOverlay'),title=document.getElementById('dlmGuideTitle'),body=document.getElementById('dlmGuideText'),count=document.getElementById('dlmGuideCount'),back=document.getElementById('dlmGuideBack'),next=document.getElementById('dlmGuideNext'),close=document.getElementById('dlmGuideClose');
 let section='home',step=0,previous='',initial=true;
-const key=id=>'dlm-guide-seen-v3-'+id;
+const key=id=>'dlm-guide-seen-v4-'+id;
 function active(){return document.querySelector('main .page.active')?.id||'home'}
 function show(id){id=id==='add' && document.getElementById('kind')?.value==='book'?'addBook':id;section=guides[id]?id:'home';step=0;try{localStorage.setItem(key(section),'1')}catch(e){};render();overlay.classList.add('open');next.focus()}
 function render(){const arr=guides[section];title.textContent=({home:'Benvenuto in Dove l’ho messo!',items:'I miei oggetti',books:'I miei libri',places:'Le posizioni',add:'Aggiungi oggetto',addBook:'Aggiungi libro',detail:'Dettagli',scan:'Scansiona',pantry:'La dispensa',premium:'Scopri Premium'})[section];body.textContent=arr[step];count.textContent='Passaggio '+(step+1)+' di '+arr.length;back.hidden=step===0;next.textContent=step===arr.length-1?'Ho capito 💜':'Avanti →'}
