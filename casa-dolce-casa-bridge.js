@@ -479,7 +479,7 @@ async function restoreSession(){
   const houses=await get('/rest/v1/homes?select=id,name',token);
   if(houses.length!==1){
    if(houses.length===0){
-    house=null;el('familyForm').hidden=true;el('familySignupBox').hidden=true;updateFamilyAccept();if(pendingFamilyInvite()){notice('Invito trovato. Ti stiamo aggiungendo alla casa…');await el('familyAcceptBtn').onclick()}else {updateCreateHomeVisibility();notice('Bentornato! Puoi creare la tua casa.')}return;
+    house=null;el('familyForm').hidden=true;el('familySignupBox').hidden=true;updateFamilyAccept();if(pendingFamilyInvite()){notice('Invito trovato. Ti stiamo aggiungendo alla casa…');await el('familyAcceptBtn').onclick()}else {updateCreateHomeVisibility();notice('💜 Che bello rivederti! Dai un nome alla tua casa e inizia a organizzare tutto ciò che ami.')}return;
    }
    throw Error('Casa non disponibile');
   }
