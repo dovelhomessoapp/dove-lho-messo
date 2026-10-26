@@ -253,24 +253,28 @@ el('familyCreateHomeForm').onsubmit=async e=>{
 };
 function updateFamilyAccept(){el('familyAcceptBox').hidden=!!house||!pendingFamilyInvite();el('familyAcceptBtn').hidden=!pendingFamilyInvite();const welcome=el('familyInviteWelcome');if(welcome)welcome.hidden=!!house;}
 updateFamilyAccept();
-// L'invito è il punto di ingresso: mostra prima una scelta chiara, non due moduli sovrapposti.
-if(pendingFamilyInvite()){
- const welcome=document.createElement('div');
- welcome.id='familyInviteWelcome';
- welcome.style.cssText='padding:18px 16px;margin:0 0 16px;border-radius:20px;background:#f7edff;text-align:center;border:1px solid #e5c9f4';
- welcome.innerHTML='<h3 style="margin:0 0 8px">💌 Benvenuto in Casa dolce casa!</h3><p style="margin:0 0 14px">Hai ricevuto un invito a condividere una casa. Come vuoi continuare?</p><button type="button" class="primary" id="familyInviteRegister" style="margin:4px">✨ Sono nuovo, registrami</button><button type="button" class="secondary" id="familyInviteLogin" style="margin:4px">Ho già un account</button>';
- panel.prepend(welcome);
+// L'invito appare immediatamente in una finestra centrale.
+if(pendingFamilyInvite()&&!house){
+ const overlay=document.createElement('div');
+ overlay.id='familyInviteOverlay';
+ overlay.setAttribute('role','dialog');
+ overlay.setAttribute('aria-modal','true');
+ overlay.setAttribute('aria-labelledby','familyInviteWelcomeTitle');
+ overlay.style.cssText='position:fixed;inset:0;z-index:2147483646;background:rgba(46,24,69,.58);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box';
+ overlay.innerHTML='<div style="width:min(100%,420px);max-height:85dvh;overflow:auto;padding:26px 20px;border-radius:26px;background:#fff8ff;border:2px solid #e6c8f4;box-shadow:0 20px 60px #2c17484d;text-align:center;color:#633b87"><div style="font-size:42px;margin-bottom:8px">💜🏡</div><h3 id="familyInviteWelcomeTitle" style="margin:0 0 12px;font-size:24px">Benvenuto in Casa dolce casa!</h3><p style="margin:0 0 20px;font-size:16px">Hai ricevuto un invito a condividere una casa. Come vuoi continuare?</p><button type="button" class="primary" id="familyInviteRegister" style="display:block;width:100%;margin:0 0 12px">✨ Sono nuovo, registrami</button><button type="button" class="secondary" id="familyInviteLogin" style="display:block;width:100%;margin:0">🏡 Ho già un account</button></div>';
+ document.body.appendChild(overlay);
  const signup=el('familySignupBox'),login=el('familyForm');
+ signup.hidden=true;login.hidden=true;
  function chooseInviteMode(mode){
+  overlay.remove();
   signup.hidden=mode!=='register';signup.open=mode==='register';
   login.hidden=mode!=='login';
   el('familyAcceptBox').hidden=true;
-  el('familyInviteRegister').setAttribute('aria-pressed',String(mode==='register'));
-  el('familyInviteLogin').setAttribute('aria-pressed',String(mode==='login'));
+  (mode==='register'?signup:login).scrollIntoView({behavior:'smooth',block:'center'});
  }
  el('familyInviteRegister').onclick=()=>chooseInviteMode('register');
  el('familyInviteLogin').onclick=()=>chooseInviteMode('login');
- chooseInviteMode('register');
+ el('familyInviteRegister').focus();
 }
 if(pendingFamilyInvite()){
  el('familyAcceptBtn').hidden=true;
