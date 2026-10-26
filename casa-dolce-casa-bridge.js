@@ -354,8 +354,7 @@ el('familyForm').onsubmit=async e=>{
   if(houses.length===0){
    house=null;
    el('familyForm').hidden=true;el('familySignupBox').hidden=true;
-   el('familyAcceptBox').hidden=false;
-   el('familyAcceptBtn').hidden=!pendingFamilyInvite();
+   updateFamilyAccept();
    if(pendingFamilyInvite()){notice('Accesso riuscito! Ti stiamo aggiungendo alla casa…');await el('familyAcceptBtn').onclick()}else {updateCreateHomeVisibility();notice('Accesso riuscito! Ora puoi creare la tua casa.')}
    return;
   }
