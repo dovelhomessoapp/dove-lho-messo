@@ -277,33 +277,53 @@ async function load(){
    finally{e.target.disabled=false}
   });
  }
- // Il consenso è personale per ogni telefono; non registra ancora una sottoscrizione push.
+ // Ogni dispositivo registra la propria sottoscrizione push, senza esporre la chiave privata.
  let devicePanel=el('familyDeviceNotifications');
  if(!devicePanel){
   devicePanel=document.createElement('section');devicePanel.id='familyDeviceNotifications';devicePanel.className='panel';
   devicePanel.style.cssText='margin:12px 0;padding:16px;border:1px solid #dfb9f2;border-radius:18px;background:#faf5ff';
-  devicePanel.innerHTML='<h3>📱 Notifiche su questo telefono</h3><p id="familyDeviceNotificationState" class="hint"></p><button type="button" class="primary" id="familyDeviceNotificationButton">🔔 Autorizza notifiche</button><p class="hint">Questo passaggio chiede il permesso al telefono. Gli avvisi automatici saranno disponibili quando avremo collegato il servizio di invio push.</p>';
+  devicePanel.innerHTML='<h3>📱 Notifiche su questo telefono</h3><p id="familyDeviceNotificationState" class="hint"></p><button type="button" class="primary" id="familyDeviceNotificationButton">🔔 Registra questo telefono</button><p class="hint">Registrare il telefono non attiva ancora gli avvisi automatici. Il servizio di invio verrà collegato in seguito.</p>';
   el('familyMembersList').before(devicePanel);
   devicePanel.querySelector('button').onclick=async()=>{
-   const button=devicePanel.querySelector('button');button.disabled=true;
+   const button=devicePanel.querySelector('button'),state=devicePanel.querySelector('#familyDeviceNotificationState');
+   button.disabled=true;state.textContent='Registrazione in corso…';
    try{
-    if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))throw Error('Le notifiche push non sono supportate da questo browser. Su iPhone apri l’app installata dalla schermata Home.');
-    await navigator.serviceWorker.register('./sw.js');
-    const permission=await Notification.requestPermission();
-    devicePanel.querySelector('#familyDeviceNotificationState').textContent=permission==='granted'?'💜 Permesso concesso! Il collegamento per ricevere le notifiche automatiche sarà il prossimo passaggio.':permission==='denied'?'Notifiche bloccate. Puoi modificarle nelle impostazioni del telefono.':'Autorizzazione non concessa.';
-   }catch(err){devicePanel.querySelector('#familyDeviceNotificationState').textContent=err.message}
-   finally{button.disabled=false;updateDeviceNotificationState()}
+    if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))throw Error('Le notifiche push non sono supportate. Su iPhone apri l’app dalla schermata Home.');
+    const registration=await navigator.serviceWorker.register('./sw.js');
+    const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
+    if(permission!=='granted')throw Error('Autorizzazione alle notifiche non concessa.');
+    const response=await fetch(base+'/functions/v1/push-config',{headers:{apikey:key,Authorization:'Bearer '+token},cache:'no-store'});
+    const config=await response.json().catch(()=>({}));
+    if(!response.ok||!config.publicKey)throw Error(config.error||'Chiave pubblica VAPID non disponibile.');
+    const keyString=config.publicKey.replace(/-/g,'+').replace(/_/g,'/');
+    const raw=atob(keyString.padEnd(Math.ceil(keyString.length/4)*4,'='));
+    const applicationServerKey=Uint8Array.from(raw,ch=>ch.charCodeAt(0));
+    let subscription=await registration.pushManager.getSubscription();
+    if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey});
+    const json=subscription.toJSON();
+    if(!json.endpoint||!json.keys?.p256dh||!json.keys?.auth)throw Error('Dati della sottoscrizione incompleti.');
+    const save=await familyFetch(base+'/rest/v1/home_push_subscriptions?on_conflict=user_id,endpoint',{
+     method:'POST',headers:{apikey:key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=representation'},
+     body:JSON.stringify({home_id:house.id,user_id:currentFamilyUserId(),endpoint:json.endpoint,p256dh:json.keys.p256dh,auth_secret:json.keys.auth,device_label:navigator.userAgent.includes('iPhone')?'iPhone':navigator.userAgent.includes('Android')?'Android':'Dispositivo'})
+    });
+    const saved=await save.json().catch(()=>null);
+    if(!save.ok)throw Error(saved?.message||'Salvataggio del dispositivo non riuscito.');
+    state.textContent='💜 Telefono registrato nella casa condivisa! Invio automatico non ancora attivo.';
+    button.textContent='🔄 Aggiorna registrazione';
+   }catch(err){state.textContent='Registrazione non riuscita: '+err.message}
+   finally{button.disabled=false}
   };
  }
- function updateDeviceNotificationState(){
-  const state=devicePanel.querySelector('#familyDeviceNotificationState'),button=devicePanel.querySelector('button');
-  if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){state.textContent='Per attivare gli avvisi serve un dispositivo compatibile e, su iPhone, l’app installata sulla schermata Home.';button.hidden=true;return}
-  button.hidden=Notification.permission==='granted';
-  if(Notification.permission==='granted')state.textContent='💜 Autorizzazione già concessa su questo telefono. Invio push non ancora attivo.';
-  else if(Notification.permission==='denied')state.textContent='Notifiche bloccate: abilitarle dalle impostazioni del telefono.';
-  else state.textContent='Le notifiche non sono ancora autorizzate su questo telefono.';
+ const deviceState=devicePanel.querySelector('#familyDeviceNotificationState');
+ if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){
+  deviceState.textContent='Le notifiche push non sono supportate in questo browser. Su iPhone apri l’app dalla schermata Home.';
+  devicePanel.querySelector('button').hidden=true;
+ }else{
+  devicePanel.querySelector('button').hidden=false;
+  if(!deviceState.textContent||deviceState.textContent==='Le notifiche non sono ancora autorizzate su questo telefono.'){
+   deviceState.textContent=Notification.permission==='granted'?'Autorizzazione concessa. Premi il pulsante per registrare il telefono.':'Premi il pulsante per autorizzare e registrare il telefono.';
+  }
  }
- updateDeviceNotificationState();
  expirySettings.hidden=!owner;
  try{await refreshExpiryAudience()}catch(err){expiryCloudExists=false;expirySettings.querySelector('#familyExpiryAudienceStatus').textContent='Impostazioni notifiche temporaneamente non disponibili: '+err.message;}
  if(owner){
