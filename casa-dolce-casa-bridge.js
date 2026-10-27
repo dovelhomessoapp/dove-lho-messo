@@ -6,6 +6,35 @@ const home=document.getElementById('home');
 const panel=document.createElement('section');panel.className='panel cd-family-panel';
 panel.innerHTML='<div class="cd-family-heading"><img class="cd-family-icon" src="./assets/casa-dolce-casa-3d.png" alt="" style="object-fit:contain;overflow:visible"><div><h3>Casa dolce casa</h3><p>Archivio familiare condiviso</p></div></div><form id="familyForm"><label>Email<input type="email" id="familyEmail" required autocomplete="email"></label><label>Password<input type="password" id="familyPass" required autocomplete="current-password"></label><button class="primary">Accedi</button></form><details id="familySignupBox"><summary>✨ Crea il tuo account</summary><form id="familySignup"><label>Nome o nickname<input id="signupNickname" type="text" maxlength="40" autocomplete="nickname" required></label><label>Email personale<input id="signupEmail" type="email" autocomplete="email" required></label><label>Nuova password<input id="signupPass" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="secondary">Crea account</button></form><p class="hint">Dopo la conferma dell’email potrai accedere e creare la tua casa, oppure entrare in quella di un familiare tramite invito.</p></details><section id="familyAcceptBox" hidden><h3>💌 Accetta invito familiare</h3><p>Accedi con la stessa email a cui è destinato l’invito, poi premi il pulsante qui sotto.</p><button id="familyAcceptBtn" class="secondary" type="button">Accetta invito</button></section><section id="familyOnline" hidden><p id="familyHouse"></p><p id="familyCount"></p><details id="familyMembersBox" style="margin:12px 0"><summary>👨‍👩‍👧‍👦 La mia famiglia</summary><div id="familyMembersList"></div><form id="familyNicknameForm"><label>Il mio nome o nickname<input id="familyNickname" type="text" maxlength="40" required></label><button type="submit" class="secondary">Salva nome</button></form><form id="familyInviteForm" hidden><label>Email del familiare<input id="familyInviteEmail" type="email" required></label><button class="secondary" type="submit">Invia invito via email</button></form><div id="familyInviteResult" aria-live="polite"></div></details><button type="button" class="secondary" id="familyReload">Aggiorna inventario</button><button type="button" class="secondary" id="familyExit">Esci</button></section><p class="hint" id="familyMsg" role="status">Gli oggetti online compariranno nella sezione Oggetti dopo l’accesso.</p>';
 home.append(panel);
+const forgotButton=document.createElement('button');
+forgotButton.id='familyForgotPassword';
+forgotButton.type='button';
+forgotButton.className='secondary';
+forgotButton.textContent='🔐 Password dimenticata?';
+forgotButton.style.margin='8px 0 12px';
+const forgotBox=document.createElement('section');
+forgotBox.id='familyForgotBox';
+forgotBox.hidden=true;
+forgotBox.style.cssText='margin:10px 0 16px;padding:16px;border:1px solid #e5c9f4;border-radius:16px;background:#faf4ff';
+forgotBox.innerHTML='<h3>💜 Recupera la password</h3><p>Inserisci la tua email per ricevere un link di recupero.</p><form id="familyForgotForm"><label>Email<input id="familyForgotEmail" type="email" autocomplete="email" required></label><button class="primary" type="submit">Invia link di recupero</button></form><p id="familyForgotStatus" role="status" aria-live="polite"></p>';
+panel.querySelector('#familyForm').after(forgotButton,forgotBox);
+forgotButton.onclick=()=>{forgotBox.hidden=!forgotBox.hidden;if(!forgotBox.hidden){document.getElementById('familyForgotEmail').value=document.getElementById('familyEmail').value;document.getElementById('familyForgotEmail').focus()}};
+forgotBox.querySelector('form').onsubmit=async e=>{
+ e.preventDefault();
+ const email=document.getElementById('familyForgotEmail').value.trim();
+ const status=document.getElementById('familyForgotStatus');
+ const button=forgotBox.querySelector('button[type="submit"]');
+ button.disabled=true;status.textContent='Invio in corso…';
+ try{
+  const redirectTo=new URL('./casa-dolce-casa.html',location.href).href;
+  const r=await fetch(base+'/auth/v1/recover?redirect_to='+encodeURIComponent(redirectTo),{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({email})});
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok)throw Error(data.msg||data.message||data.error_description||'Invio non riuscito');
+  status.textContent='💜 Se l’indirizzo è registrato, riceverai un’email. Controlla anche lo spam.';
+ }catch(err){status.textContent='Errore: '+err.message}
+ finally{button.disabled=false}
+};
+if(recoveryAccessToken){forgotButton.hidden=true;forgotBox.hidden=true;}
 // Primo passo guidato per una casa appena creata, senza modificare i dati.
 const firstObjectGuide=document.createElement('div');
 firstObjectGuide.id='familyFirstObjectGuide';firstObjectGuide.hidden=true;
