@@ -278,7 +278,7 @@ async function load(){
   });
  }
  expirySettings.hidden=!owner;
- await refreshExpiryAudience();
+ try{await refreshExpiryAudience()}catch(err){expiryCloudExists=false;expirySettings.querySelector('#familyExpiryAudienceStatus').textContent='Impostazioni notifiche temporaneamente non disponibili: '+err.message;}
  if(owner){
   // Chiedi la preferenza una sola volta per ogni casa, senza attivare prematuramente le push.
   const promptKey='dlm-expiry-audience-asked-v1-'+house.id;
