@@ -58,6 +58,9 @@ if(recoveryAccessToken){
  resetBox.style.cssText='margin:14px 0;padding:18px;border:2px solid #c9a1e8;border-radius:18px;background:#fff9ff';
  resetBox.innerHTML='<h3>🔐 Scegli una nuova password</h3><p>Inserisci una nuova password di almeno 8 caratteri. Non usare quella vecchia.</p><form id="familyPasswordResetForm"><label>Nuova password<input id="familyNewPassword" type="password" autocomplete="new-password" minlength="8" required></label><label>Ripeti la password<input id="familyRepeatPassword" type="password" autocomplete="new-password" minlength="8" required></label><button type="submit" class="primary">Salva nuova password</button></form><p id="familyResetStatus" role="status"></p>';
  panel.prepend(resetBox);
+ // Il recupero deve essere visibile subito, anche dalla prima apertura dell'app.
+ resetBox.id='familyRecoveryScreen';
+ resetBox.style.cssText+=';position:fixed;z-index:10020;inset:0;margin:0;border:0;border-radius:0;overflow-y:auto;padding:calc(env(safe-area-inset-top) + 30px) 22px calc(env(safe-area-inset-bottom) + 30px);background:#fff9ff';
  panel.querySelector('#familyForm').hidden=true;
  panel.querySelector('#familySignupBox').hidden=true;
  resetBox.querySelector('form').onsubmit=async e=>{
@@ -72,6 +75,7 @@ if(recoveryAccessToken){
    const data=await response.json().catch(()=>({}));
    if(!response.ok)throw Error(data.msg||data.message||data.error_description||'Impossibile aggiornare la password. Richiedi un nuovo link.');
    history.replaceState(null,'',location.pathname+location.search);
+   resetBox.style.position='static';resetBox.style.inset='auto';resetBox.style.zIndex='auto';resetBox.style.margin='14px 0';
    resetBox.querySelector('form').remove();
    status.textContent='💜 Password aggiornata! Ora puoi accedere con la tua email e la nuova password.';
    panel.querySelector('#familyForm').hidden=false;
