@@ -321,6 +321,28 @@ function renderShopping(){
  const card=x=>'<div class="panel" style="margin:9px 0;padding:12px"><div style="display:flex;gap:9px;align-items:center;justify-content:space-between"><strong style="'+(x.purchased?'text-decoration:line-through;opacity:.65':'')+'">'+escape(x.name)+' · '+x.quantity+'</strong><div class="row"><button type="button" class="secondary" data-shopping-toggle="'+x.id+'">'+(x.purchased?'↩️ Ripristina':'✓ Comprato')+'</button><button type="button" class="secondary" data-shopping-delete="'+x.id+'">Elimina</button></div></div></div>';
  $('shoppingList').innerHTML=(pending.length?pending.map(card).join(''):'<p class="hint">Nessun prodotto da acquistare.</p>')+(bought.length?'<details style="margin-top:12px"><summary>✅ Acquistati ('+bought.length+')</summary>'+bought.map(card).join('')+'</details>':'');
 }
+function choosePurchasedExpiry(){
+ return new Promise(resolve=>{
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(30,16,45,.48);display:flex;align-items:center;justify-content:center;padding:22px';
+  const panel=document.createElement('div');
+  panel.style.cssText='background:white;border-radius:22px;padding:24px;width:min(100%,420px);box-shadow:0 14px 50px #24133244';
+  const heading=document.createElement('h3');heading.textContent='📅 Nuova scadenza';heading.style.margin='0 0 8px';heading.style.color='#7432a6';
+  const hint=document.createElement('p');hint.textContent='Scegli la data dal calendario. Puoi anche lasciare il campo vuoto.';hint.style.cssText='margin:0 0 16px;color:#725a83';
+  const label=document.createElement('label');label.textContent='Data di scadenza (facoltativa)';label.style.cssText='display:block;font-weight:600;color:#63328b';
+  const input=document.createElement('input');input.type='date';input.lang='it-IT';input.style.cssText='display:block;box-sizing:border-box;width:100%;margin-top:8px;padding:14px;border:1px solid #d8b9eb;border-radius:12px;font-size:17px;background:#faf5ff;color:#42265c';
+  label.appendChild(input);
+  const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-top:18px';
+  const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='Annulla';
+  const noExpiry=document.createElement('button');noExpiry.type='button';noExpiry.className='secondary';noExpiry.textContent='Senza scadenza';
+  const save=document.createElement('button');save.type='button';save.className='primary';save.textContent='Conferma';
+  actions.append(cancel,noExpiry,save);panel.append(heading,hint,label,actions);overlay.appendChild(panel);document.body.appendChild(overlay);
+  const finish=value=>{overlay.remove();resolve(value)};
+  cancel.onclick=()=>finish(null);noExpiry.onclick=()=>finish('');
+  save.onclick=()=>{if(!input.value){input.focus();return}finish(input.value)};
+  overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+ });
+}
 async function offerPurchasedToPantry(item){
  if(!confirm('🛒 '+item.name+' acquistato! Vuoi aggiungerlo alla dispensa?'))return;
  const key=value=>String(value||'').normalize('NFKC').toLocaleLowerCase('it').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
@@ -331,18 +353,8 @@ async function offerPurchasedToPantry(item){
  const shelf=remembered?.last_shelf||current?.shelf||'';
  const placement=await choosePantryZone(zone,shelf);
  if(!placement)return;
- const entered=prompt('📅 Nuova scadenza (GG/MM/AAAA). Lascia vuoto se non prevista.','');
- if(entered===null)return;
- const typed=entered.trim();
- let expiry='';
- if(typed){
-  const parts=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(typed);
-  if(!parts){alert('Inserisci la data nel formato GG/MM/AAAA, per esempio 15/11/2026.');return}
-  const day=Number(parts[1]),month=Number(parts[2]),year=Number(parts[3]);
-  const date=new Date(year,month-1,day);
-  if(date.getFullYear()!==year||date.getMonth()!==month-1||date.getDate()!==day){alert('La data inserita non è valida.');return}
-  expiry=parts[3]+'-'+parts[2]+'-'+parts[1];
- }
+ const expiry=await choosePurchasedExpiry();
+ if(expiry===null)return;
  const amount=Number(item.quantity);
  if(!Number.isInteger(amount)||amount<1)throw Error('Quantità acquistata non valida');
  const match=lots.find(l=>key(l.name)===key(item.name)&&l.zone===placement.zone&&(l.shelf||'')===(placement.shelf||'')&&(l.expires_on||'')===expiry&&!l.opened_on);
