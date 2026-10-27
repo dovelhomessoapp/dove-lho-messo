@@ -277,6 +277,33 @@ async function load(){
    finally{e.target.disabled=false}
   });
  }
+ // Il consenso è personale per ogni telefono; non registra ancora una sottoscrizione push.
+ let devicePanel=el('familyDeviceNotifications');
+ if(!devicePanel){
+  devicePanel=document.createElement('section');devicePanel.id='familyDeviceNotifications';devicePanel.className='panel';
+  devicePanel.style.cssText='margin:12px 0;padding:16px;border:1px solid #dfb9f2;border-radius:18px;background:#faf5ff';
+  devicePanel.innerHTML='<h3>📱 Notifiche su questo telefono</h3><p id="familyDeviceNotificationState" class="hint"></p><button type="button" class="primary" id="familyDeviceNotificationButton">🔔 Autorizza notifiche</button><p class="hint">Questo passaggio chiede il permesso al telefono. Gli avvisi automatici saranno disponibili quando avremo collegato il servizio di invio push.</p>';
+  el('familyMembersList').before(devicePanel);
+  devicePanel.querySelector('button').onclick=async()=>{
+   const button=devicePanel.querySelector('button');button.disabled=true;
+   try{
+    if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))throw Error('Le notifiche push non sono supportate da questo browser. Su iPhone apri l’app installata dalla schermata Home.');
+    await navigator.serviceWorker.register('./sw.js');
+    const permission=await Notification.requestPermission();
+    devicePanel.querySelector('#familyDeviceNotificationState').textContent=permission==='granted'?'💜 Permesso concesso! Il collegamento per ricevere le notifiche automatiche sarà il prossimo passaggio.':permission==='denied'?'Notifiche bloccate. Puoi modificarle nelle impostazioni del telefono.':'Autorizzazione non concessa.';
+   }catch(err){devicePanel.querySelector('#familyDeviceNotificationState').textContent=err.message}
+   finally{button.disabled=false;updateDeviceNotificationState()}
+  };
+ }
+ function updateDeviceNotificationState(){
+  const state=devicePanel.querySelector('#familyDeviceNotificationState'),button=devicePanel.querySelector('button');
+  if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){state.textContent='Per attivare gli avvisi serve un dispositivo compatibile e, su iPhone, l’app installata sulla schermata Home.';button.hidden=true;return}
+  button.hidden=Notification.permission==='granted';
+  if(Notification.permission==='granted')state.textContent='💜 Autorizzazione già concessa su questo telefono. Invio push non ancora attivo.';
+  else if(Notification.permission==='denied')state.textContent='Notifiche bloccate: abilitarle dalle impostazioni del telefono.';
+  else state.textContent='Le notifiche non sono ancora autorizzate su questo telefono.';
+ }
+ updateDeviceNotificationState();
  expirySettings.hidden=!owner;
  try{await refreshExpiryAudience()}catch(err){expiryCloudExists=false;expirySettings.querySelector('#familyExpiryAudienceStatus').textContent='Impostazioni notifiche temporaneamente non disponibili: '+err.message;}
  if(owner){
