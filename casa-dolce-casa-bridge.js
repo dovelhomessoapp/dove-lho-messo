@@ -246,6 +246,20 @@ async function load(){
    line.append(remove);
   }list.append(line);
  }
+ // Impostazioni promemoria: visibili solo al proprietario. La sincronizzazione cloud verrà abilitata separatamente.
+ let expirySettings=el('familyExpirySettings');
+ if(!expirySettings){
+  expirySettings=document.createElement('section');expirySettings.id='familyExpirySettings';expirySettings.className='panel';
+  expirySettings.style.cssText='margin:14px 0;padding:16px;border:2px solid #dfb9f2;border-radius:18px;background:#fff9ff';
+  expirySettings.innerHTML='<h3>🔔 Notifiche della dispensa</h3><p class="hint">Promemoria 5 giorni prima della scadenza, alle 13:00.</p><label style="display:block;margin:10px 0">Chi riceverà gli avvisi?<select id="familyExpiryAudience"><option value="owner">👑 Solo il proprietario</option><option value="all">👨‍👩‍👧‍👦 Tutti i familiari</option><option value="none">🔕 Nessuno</option></select></label><p class="hint">Questa scelta è una bozza salvata sul dispositivo. Non attiva ancora le notifiche né cambia le impostazioni degli altri familiari: il collegamento cloud e l’invio push sono in preparazione.</p><p id="familyExpiryAudienceStatus" class="hint" role="status"></p>';
+  el('familyMembersList').before(expirySettings);
+  expirySettings.querySelector('select').addEventListener('change',e=>{
+   try{localStorage.setItem('dlm-expiry-audience-draft-v1',e.target.value);expirySettings.querySelector('#familyExpiryAudienceStatus').textContent='💜 Preferenza salvata su questo dispositivo (non ancora attiva).'}
+   catch(err){expirySettings.querySelector('#familyExpiryAudienceStatus').textContent='Non riesco a salvare la preferenza.'}
+  });
+ }
+ expirySettings.hidden=!owner;
+ if(owner){let saved='owner';try{saved=localStorage.getItem('dlm-expiry-audience-draft-v1')||'owner'}catch(err){}expirySettings.querySelector('select').value=['owner','all','none'].includes(saved)?saved:'owner';}
  el('familyInviteForm').hidden=!owner;
  el('familyAcceptBox').hidden=true;updateFamilyAccept();
  for(const i of objects){if(i.image_url&&i.image_url.startsWith(house.id+'/')){try{i.image_url=await signPhoto(i.image_url)}catch(e){i.image_url='';notice('Foto non disponibile')}}}
