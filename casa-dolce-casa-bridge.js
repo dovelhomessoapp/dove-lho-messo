@@ -587,8 +587,9 @@ async function restoreSession(){
   notice('Accesso ripristinato.');
  }catch(e){
   if(!navigator.onLine||e instanceof TypeError){notice('Connessione non disponibile: gli oggetti salvati restano consultabili. Riprova quando torni online.');return}
-  localStorage.removeItem(SESSION_KEY);refreshToken=null;token=null;house=null;
-  notice('Effettua nuovamente l’accesso.');
+  // Non cancellare la sessione per errori temporanei di rete, RLS o caricamento delle impostazioni.
+  // Un errore durante il caricamento della casa non equivale a un logout volontario.
+  notice('Non sono riuscita a ripristinare la casa: '+(e?.message||'errore temporaneo')+'. Riprova con «Aggiorna app».');
  }
 }
 window.addEventListener('online',()=>{if(!token&&refreshToken)void restoreSession()});
