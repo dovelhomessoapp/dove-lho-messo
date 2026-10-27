@@ -331,11 +331,18 @@ async function offerPurchasedToPantry(item){
  const shelf=remembered?.last_shelf||current?.shelf||'';
  const placement=await choosePantryZone(zone,shelf);
  if(!placement)return;
- const entered=prompt('📅 Nuova scadenza (AAAA-MM-GG). Lascia vuoto se non prevista.','');
+ const entered=prompt('📅 Nuova scadenza (GG/MM/AAAA). Lascia vuoto se non prevista.','');
  if(entered===null)return;
- const expiry=entered.trim();
- if(expiry&&!/^\d{4}-\d{2}-\d{2}$/.test(expiry)){alert('Inserisci la data nel formato AAAA-MM-GG.');return}
- if(expiry){const d=new Date(expiry+'T12:00:00');if(!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==expiry){alert('La data inserita non è valida.');return}}
+ const typed=entered.trim();
+ let expiry='';
+ if(typed){
+  const parts=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(typed);
+  if(!parts){alert('Inserisci la data nel formato GG/MM/AAAA, per esempio 15/11/2026.');return}
+  const day=Number(parts[1]),month=Number(parts[2]),year=Number(parts[3]);
+  const date=new Date(year,month-1,day);
+  if(date.getFullYear()!==year||date.getMonth()!==month-1||date.getDate()!==day){alert('La data inserita non è valida.');return}
+  expiry=parts[3]+'-'+parts[2]+'-'+parts[1];
+ }
  const amount=Number(item.quantity);
  if(!Number.isInteger(amount)||amount<1)throw Error('Quantità acquistata non valida');
  const match=lots.find(l=>key(l.name)===key(item.name)&&l.zone===placement.zone&&(l.shelf||'')===(placement.shelf||'')&&(l.expires_on||'')===expiry&&!l.opened_on);
