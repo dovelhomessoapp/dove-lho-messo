@@ -295,9 +295,14 @@ async function load(){
     const response=await fetch(base+'/functions/v1/push-config',{headers:{apikey:key,Authorization:'Bearer '+token},cache:'no-store'});
     const config=await response.json().catch(()=>({}));
     if(!response.ok||!config.publicKey)throw Error(config.error||'Chiave pubblica VAPID non disponibile.');
-    const keyString=config.publicKey.replace(/-/g,'+').replace(/_/g,'/');
-    const raw=atob(keyString.padEnd(Math.ceil(keyString.length/4)*4,'='));
+    // Accetta la chiave VAPID pubblica in formato base64url, anche con spazi accidentali.
+    const publicKey=String(config.publicKey).trim().replace(/\s+/g,'').replace(/-/g,'+').replace(/_/g,'/');
+    if(!/^[A-Za-z0-9+/]*={0,2}$/.test(publicKey))throw Error('La chiave VAPID pubblica contiene caratteri non validi. Controlla il valore in Supabase Secrets.');
+    let raw;
+    try{raw=atob(publicKey.padEnd(Math.ceil(publicKey.length/4)*4,'='))}
+    catch(err){throw Error('La chiave VAPID pubblica non è in formato base64url valido. Controlla il valore in Supabase Secrets.')}
     const applicationServerKey=Uint8Array.from(raw,ch=>ch.charCodeAt(0));
+    if(applicationServerKey.length!==65||applicationServerKey[0]!==4)throw Error('La chiave VAPID pubblica non ha il formato previsto (65 byte). Controlla di aver incollato soltanto la Public Key, senza etichette o virgolette.');
     let subscription=await registration.pushManager.getSubscription();
     if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey});
     const json=subscription.toJSON();
