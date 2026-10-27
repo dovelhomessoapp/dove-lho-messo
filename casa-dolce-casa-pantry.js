@@ -343,8 +343,29 @@ function choosePurchasedExpiry(){
   overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
  });
 }
+function choosePurchasedQuantity(initial){
+ return new Promise(resolve=>{
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(30,16,45,.48);display:flex;align-items:center;justify-content:center;padding:22px';
+  const panel=document.createElement('div');
+  panel.style.cssText='background:white;border-radius:22px;padding:24px;width:min(100%,420px);box-shadow:0 14px 50px #24133244';
+  const title=document.createElement('h3');title.textContent='🛒 Quante confezioni hai comprato?';title.style.cssText='margin:0 0 10px;color:#7432a6';
+  const note=document.createElement('p');note.textContent='Puoi cambiare la quantità prevista nella lista.';note.style.cssText='margin:0 0 14px;color:#725a83';
+  const input=document.createElement('input');input.type='number';input.min='1';input.max='99999';input.step='1';input.value=String(initial);input.inputMode='numeric';input.setAttribute('aria-label','Quantità acquistata');input.style.cssText='box-sizing:border-box;width:100%;padding:14px;border:1px solid #d8b9eb;border-radius:12px;font-size:20px;background:#faf5ff;color:#42265c';
+  const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;margin-top:18px';
+  const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='Annulla';
+  const save=document.createElement('button');save.type='button';save.className='primary';save.textContent='Continua';
+  actions.append(cancel,save);panel.append(title,note,input,actions);overlay.appendChild(panel);document.body.appendChild(overlay);
+  const finish=value=>{overlay.remove();resolve(value)};
+  cancel.onclick=()=>finish(null);
+  save.onclick=()=>{const n=Number(input.value);if(!Number.isSafeInteger(n)||n<1||n>99999){alert('Inserisci una quantità intera tra 1 e 99999.');return}finish(n)};
+  overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+ });
+}
 async function offerPurchasedToPantry(item){
  if(!confirm('🛒 '+item.name+' acquistato! Vuoi aggiungerlo alla dispensa?'))return;
+ const amount=await choosePurchasedQuantity(item.quantity);
+ if(amount===null)return;
  const key=value=>String(value||'').normalize('NFKC').toLocaleLowerCase('it').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
  const rows=await request('pantry_product_positions?select=last_zone,last_shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&product_key=eq.'+encodeURIComponent(key(item.name))+'&limit=1');
  const remembered=rows&&rows[0];
@@ -355,8 +376,7 @@ async function offerPurchasedToPantry(item){
  if(!placement)return;
  const expiry=await choosePurchasedExpiry();
  if(expiry===null)return;
- const amount=Number(item.quantity);
- if(!Number.isInteger(amount)||amount<1)throw Error('Quantità acquistata non valida');
+
  const match=lots.find(l=>key(l.name)===key(item.name)&&l.zone===placement.zone&&(l.shelf||'')===(placement.shelf||'')&&(l.expires_on||'')===expiry&&!l.opened_on);
  if(match){
   await request('pantry_lots?id=eq.'+encodeURIComponent(match.id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:Number(match.quantity)+amount})});
