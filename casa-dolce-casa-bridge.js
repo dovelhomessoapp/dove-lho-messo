@@ -75,9 +75,18 @@ if(recoveryAccessToken){
    const data=await response.json().catch(()=>({}));
    if(!response.ok)throw Error(data.msg||data.message||data.error_description||'Impossibile aggiornare la password. Richiedi un nuovo link.');
    history.replaceState(null,'',location.pathname+location.search);
-   resetBox.style.position='static';resetBox.style.inset='auto';resetBox.style.zIndex='auto';resetBox.style.margin='14px 0';
-   resetBox.querySelector('form').remove();
-   status.textContent='💜 Password aggiornata! Ora puoi accedere con la tua email e la nuova password.';
+   // Mostra la conferma una sola volta e rimuovi completamente il modulo di recupero.
+   resetBox.remove();
+   const confirmation=document.createElement('div');
+   confirmation.setAttribute('role','status');
+   confirmation.textContent='💜 Password aggiornata con successo! Ora puoi usare la nuova password per accedere.';
+   confirmation.style.cssText='position:fixed;z-index:10021;top:calc(env(safe-area-inset-top) + 18px);left:16px;right:16px;max-width:560px;margin:0 auto;padding:18px 20px;border:2px solid #d8b9ed;border-radius:18px;background:#fff9ff;color:#63338e;box-shadow:0 8px 26px #44225533;font-weight:700;text-align:center';
+   document.body.append(confirmation);
+   const closeConfirmation=document.createElement('button');
+   closeConfirmation.type='button';closeConfirmation.textContent='Chiudi';
+   closeConfirmation.style.cssText='display:block;margin:12px auto 0;padding:8px 22px;border-radius:20px;background:#8b45c3;color:white;border:0';
+   closeConfirmation.onclick=()=>confirmation.remove();
+   confirmation.append(closeConfirmation);
    panel.querySelector('#familyForm').hidden=false;
   }catch(err){status.textContent='Errore: '+err.message}
   finally{button.disabled=false}
