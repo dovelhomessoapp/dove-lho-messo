@@ -228,6 +228,23 @@ async function syncPlacePhotos(){
  }
  renderPlaces();
 }
+let expiryCloudExists=false;
+async function refreshExpiryAudience(){
+ if(!house||!token)return;
+ const r=await familyFetch(base+'/rest/v1/home_notification_settings?select=audience&home_id=eq.'+encodeURIComponent(house.id),{headers:{apikey:key,Authorization:'Bearer '+token},cache:'no-store'});
+ const data=await r.json().catch(()=>[]);
+ if(!r.ok)throw Error(data?.message||'Lettura delle preferenze non riuscita');
+ expiryCloudExists=Array.isArray(data)&&data.length>0;
+ const select=el('familyExpiryAudience');
+ if(select)select.value=expiryCloudExists?data[0].audience:'owner';
+}
+async function saveExpiryAudience(value){
+ if(!house||!token||!['owner','all','none'].includes(value))throw Error('Preferenza non valida');
+ const r=await familyFetch(base+'/rest/v1/home_notification_settings?on_conflict=home_id',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({home_id:house.id,audience:value,reminder_days:[5,3,1,0],reminder_hour:13,updated_by:currentFamilyUserId()})});
+ const data=await r.json().catch(()=>null);
+ if(!r.ok)throw Error(data?.message||'Salvataggio non riuscito');
+ expiryCloudExists=true;
+}
 async function load(){
  const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,description,image_url,location_id,estimated_value,created_at,created_by,updated_by&home_id=eq.'+house.id,token);
  const places=await get('/rest/v1/locations?select=id,name,parent_id&home_id=eq.'+house.id,token);
@@ -246,39 +263,41 @@ async function load(){
    line.append(remove);
   }list.append(line);
  }
- // Impostazioni promemoria: visibili solo al proprietario. La sincronizzazione cloud verrà abilitata separatamente.
+ // Impostazioni promemoria: visibili solo al proprietario. Preferenze condivise via Supabase.
  let expirySettings=el('familyExpirySettings');
  if(!expirySettings){
   expirySettings=document.createElement('section');expirySettings.id='familyExpirySettings';expirySettings.className='panel';
   expirySettings.style.cssText='margin:14px 0;padding:16px;border:2px solid #dfb9f2;border-radius:18px;background:#fff9ff';
-  expirySettings.innerHTML='<h3>🔔 Notifiche della dispensa</h3><p class="hint">Promemoria alle 13:00 per gli alimenti in frigo, freezer e dispensa: 5, 3 e 1 giorno prima, e il giorno della scadenza.</p><label style="display:block;margin:10px 0">Chi riceverà gli avvisi?<select id="familyExpiryAudience"><option value="owner">👑 Solo il proprietario</option><option value="all">👨‍👩‍👧‍👦 Tutti i familiari</option><option value="none">🔕 Nessuno</option></select></label><p class="hint">Questa scelta è una bozza salvata sul dispositivo. Non attiva ancora le notifiche né cambia le impostazioni degli altri familiari: il collegamento cloud e l’invio push sono in preparazione.</p><p id="familyExpiryAudienceStatus" class="hint" role="status"></p>';
+  expirySettings.innerHTML='<h3>🔔 Notifiche della dispensa</h3><p class="hint">Promemoria alle 13:00 per gli alimenti in frigo, freezer e dispensa: 5, 3 e 1 giorno prima, e il giorno della scadenza.</p><label style="display:block;margin:10px 0">Chi riceverà gli avvisi?<select id="familyExpiryAudience"><option value="owner">👑 Solo il proprietario</option><option value="all">👨‍👩‍👧‍👦 Tutti i familiari</option><option value="none">🔕 Nessuno</option></select></label><p class="hint">La scelta viene salvata nella casa condivisa. L’invio automatico delle notifiche push non è ancora attivo.</p><p id="familyExpiryAudienceStatus" class="hint" role="status"></p>';
   el('familyMembersList').before(expirySettings);
-  expirySettings.querySelector('select').addEventListener('change',e=>{
-   try{localStorage.setItem('dlm-expiry-audience-draft-v1',e.target.value);expirySettings.querySelector('#familyExpiryAudienceStatus').textContent='💜 Preferenza salvata su questo dispositivo (non ancora attiva).'}
-   catch(err){expirySettings.querySelector('#familyExpiryAudienceStatus').textContent='Non riesco a salvare la preferenza.'}
+  expirySettings.querySelector('select').addEventListener('change',async e=>{
+   const value=e.target.value;const msg=expirySettings.querySelector('#familyExpiryAudienceStatus');e.target.disabled=true;msg.textContent='Salvataggio in corso…';
+   try{await saveExpiryAudience(value);msg.textContent='💜 Preferenza salvata nella casa condivisa.'}
+   catch(err){msg.textContent='Errore: '+err.message;await refreshExpiryAudience()}
+   finally{e.target.disabled=false}
   });
  }
  expirySettings.hidden=!owner;
+ await refreshExpiryAudience();
  if(owner){
-  let saved='owner';try{saved=localStorage.getItem('dlm-expiry-audience-draft-v1')||'owner'}catch(err){}
-  expirySettings.querySelector('select').value=['owner','all','none'].includes(saved)?saved:'owner';
   // Chiedi la preferenza una sola volta per ogni casa, senza attivare prematuramente le push.
   const promptKey='dlm-expiry-audience-asked-v1-'+house.id;
   let alreadyAsked=false;try{alreadyAsked=localStorage.getItem(promptKey)==='yes'}catch(err){}
-  if(!alreadyAsked&&!document.getElementById('familyExpiryFirstRun')){
+  if(!alreadyAsked&&!expiryCloudExists&&!document.getElementById('familyExpiryFirstRun')){
    const overlay=document.createElement('div');overlay.id='familyExpiryFirstRun';
    overlay.style.cssText='position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;padding:20px;background:#28133499';
    const dialog=document.createElement('div');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','Notifiche della dispensa');
    dialog.style.cssText='width:100%;max-width:440px;max-height:90vh;overflow:auto;padding:24px;border-radius:24px;background:#fff9ff;color:#602c89;box-shadow:0 14px 45px #210d3840';
-   dialog.innerHTML='<h2 style="margin:0 0 12px">🔔 Notifiche della dispensa</h2><p>Chi vuoi che riceva gli avvisi alle 13:00, a 5, 3 e 1 giorno dalla scadenza e il giorno stesso? Gli avvisi riguarderanno frigo, freezer e dispensa.</p><label style="display:block;margin:16px 0">Destinatari<select id="familyExpiryFirstRunChoice" style="width:100%;margin-top:8px"><option value="owner">👑 Solo il proprietario</option><option value="all">👨‍👩‍👧‍👦 Tutti i familiari</option><option value="none">🔕 Nessuno</option></select></label><p class="hint">Le notifiche non sono ancora attive: questa scelta prepara le impostazioni e potrai cambiarla in «La mia famiglia».</p><button type="button" class="primary full" id="familyExpiryFirstRunSave">💜 Salva preferenza</button>';
+   dialog.innerHTML='<h2 style="margin:0 0 12px">🔔 Notifiche della dispensa</h2><p>Chi vuoi che riceva gli avvisi alle 13:00, a 5, 3 e 1 giorno dalla scadenza e il giorno stesso? Gli avvisi riguarderanno frigo, freezer e dispensa.</p><label style="display:block;margin:16px 0">Destinatari<select id="familyExpiryFirstRunChoice" style="width:100%;margin-top:8px"><option value="owner">👑 Solo il proprietario</option><option value="all">👨‍👩‍👧‍👦 Tutti i familiari</option><option value="none">🔕 Nessuno</option></select></label><p class="hint">La preferenza sarà condivisa con la tua casa. L’invio automatico delle notifiche non è ancora attivo.</p><button type="button" class="primary full" id="familyExpiryFirstRunSave">💜 Salva preferenza</button>';
    overlay.append(dialog);document.body.append(overlay);
    dialog.querySelector('select').value=expirySettings.querySelector('select').value;
-   dialog.querySelector('button').onclick=()=>{
+   dialog.querySelector('button').onclick=async()=>{
     const value=dialog.querySelector('select').value;
-    try{localStorage.setItem('dlm-expiry-audience-draft-v1',value);localStorage.setItem(promptKey,'yes')}
-    catch(err){alert('Impossibile salvare la preferenza su questo dispositivo.');return}
+    const saveButton=dialog.querySelector('button');saveButton.disabled=true;
+    try{await saveExpiryAudience(value);localStorage.setItem(promptKey,'yes')}
+    catch(err){alert('Impossibile salvare: '+err.message);saveButton.disabled=false;return}
     expirySettings.querySelector('select').value=value;
-    expirySettings.querySelector('#familyExpiryAudienceStatus').textContent='💜 Preferenza salvata su questo dispositivo (notifiche non ancora attive).';
+    expirySettings.querySelector('#familyExpiryAudienceStatus').textContent='💜 Preferenza salvata nella casa condivisa (notifiche push non ancora attive).';
     overlay.remove();
    };
   }
