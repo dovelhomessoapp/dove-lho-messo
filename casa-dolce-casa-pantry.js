@@ -278,6 +278,15 @@ async function request(path,opts={}){
  if(!response.ok){const d=await response.json().catch(()=>({}));throw Error(d.message||'Errore '+response.status)}
  if(response.status===204)return null;const t=await response.text();return t?JSON.parse(t):null;
 }
+async function rememberPantryPosition(l){
+ const productName=String(l.name||'').trim().slice(0,120);
+ const productKey=productName.normalize('NFKC').toLocaleLowerCase('it').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
+ if(!productKey||!['frigo','freezer','dispensa'].includes(l.zone))return;
+ await request('pantry_product_positions?on_conflict=home_id,product_key',{
+  method:'POST',headers:{'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
+  body:JSON.stringify({home_id:access.homeId,product_name:productName,product_key:productKey,last_zone:l.zone,last_shelf:l.shelf||null,updated_at:new Date().toISOString()})
+ });
+}
 let shopping=[],minimumStocks=[];
 const stockKey=name=>String(name||'').trim().toLocaleLowerCase('it').slice(0,120);
 async function refreshMinimumStocks(){
@@ -472,7 +481,7 @@ $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume]
  }catch(err){status.textContent='Apertura non riuscita: '+err.message}finally{busy=false}
  return;
  }
- busy=true;try{if(b.dataset.delete||l.quantity<=1){await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'DELETE'})}
+ busy=true;try{if(b.dataset.consume&&l.quantity<=1)await rememberPantryPosition(l);if(b.dataset.delete||l.quantity<=1){await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'DELETE'})}
  else{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:l.quantity-1})})}
  await refresh();if(b.dataset.consume&&l.quantity<=1&&confirm('🛒 Hai finito '+l.name+'. Vuoi aggiungerlo alla mia lista della spesa?')){try{await addToShopping(l.name,1);$('shoppingBox').open=true;status.textContent='💜 Aggiunto alla lista della spesa'}catch(err){status.textContent='Alimento consumato, ma lista della spesa non aggiornata: '+err.message}}}catch(err){status.textContent='Modifica non riuscita: '+err.message}finally{busy=false}};
 })();
