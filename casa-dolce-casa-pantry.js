@@ -315,7 +315,7 @@ function renderShopping(){
 async function addToShopping(name,quantity=1){
  if(!access)throw Error('Accedi alla casa');
  const clean=String(name||'').trim().slice(0,120);if(!clean)throw Error('Nome mancante');
- const normalizedName=value=>String(value||'').normalize('NFKC').trim().replace(/\\s+/g,' ').toLocaleLowerCase('it');
+ const normalizedName=value=>String(value||'').normalize('NFKC').toLocaleLowerCase('it').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
  const existing=shopping.find(x=>!x.purchased&&normalizedName(x.name)===normalizedName(clean));
  if(existing)await request('shopping_items?id=eq.'+encodeURIComponent(existing.id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:existing.quantity+quantity})});
  else await request('shopping_items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_id:access.homeId,name:clean,quantity})});
