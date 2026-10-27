@@ -34,6 +34,8 @@ forgotBox.querySelector('form').onsubmit=async e=>{
  }catch(err){status.textContent='Errore: '+err.message}
  finally{button.disabled=false}
 };
+const recoveryParams=new URLSearchParams(location.hash.replace(/^#/,''));
+const recoveryAccessToken=recoveryParams.get('type')==='recovery'?recoveryParams.get('access_token'):null;
 if(recoveryAccessToken){forgotButton.hidden=true;forgotBox.hidden=true;}
 // Primo passo guidato per una casa appena creata, senza modificare i dati.
 const firstObjectGuide=document.createElement('div');
@@ -50,8 +52,6 @@ createHomeBox.style.cssText='margin:14px 0;padding:16px;border:1px solid #e5c9f4
 createHomeBox.innerHTML='<h3>🏡 Crea la mia casa</h3><p>Inizia il tuo archivio privato. Potrai invitare la tua famiglia in seguito.</p><form id="familyCreateHomeForm"><label>Come vuoi chiamare la tua casa?<input id="familyCreateHomeName" type="text" maxlength="60" minlength="2" placeholder="Es. Casa nostra" required></label><button class="primary" type="submit">Crea la mia casa</button></form>';
 panel.append(createHomeBox);
 // Recupero password Supabase: il link email apre questa pagina con un token temporaneo.
-const recoveryParams=new URLSearchParams(location.hash.replace(/^#/,''));
-const recoveryAccessToken=recoveryParams.get('type')==='recovery'?recoveryParams.get('access_token'):null;
 if(recoveryAccessToken){
  const resetBox=document.createElement('section');
  resetBox.className='panel';
