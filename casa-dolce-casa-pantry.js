@@ -490,7 +490,7 @@ $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume]
  if(b.dataset.move){
  const placement=await choosePantryZone(l.zone,l.shelf);if(placement===null)return;const newZone=placement.zone;const newShelf=placement.shelf||null;
  if(!['dispensa','frigo','freezer'].includes(newZone)){status.textContent='Scegli: dispensa, frigo oppure freezer.';return}
- busy=true;try{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({zone:newZone,shelf:newShelf})});await refresh();status.textContent='💜 Posizione aggiornata'}catch(err){status.textContent='Spostamento non riuscito: '+err.message}finally{busy=false}return;
+ busy=true;try{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({zone:newZone,shelf:newShelf})});await rememberPantryPosition({name:l.name,zone:newZone,shelf:newShelf});await refresh();status.textContent='💜 Posizione aggiornata e ricordata'}catch(err){status.textContent='Spostamento non riuscito: '+err.message}finally{busy=false}return;
  }
  if(b.dataset.delete&&!confirm('Eliminare questo lotto di '+l.name+'?'))return;
  if(b.dataset.open){
