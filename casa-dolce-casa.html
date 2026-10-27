@@ -396,22 +396,35 @@ for(const [days,label] of [[7,'7 giorni prima'],[3,'3 giorni prima'],[1,'Il gior
 }
 })();
 </script><style id="dlm-shopping-home-layout">
-/* Lista e dispensa affiancate, entrambe con dimensioni standard. */
-#home .tile.pantry-home-tile{grid-column:auto;min-height:152px;display:flex;flex-direction:column;align-content:normal;gap:6px;text-align:left;padding:20px 12px;background:linear-gradient(130deg,#fff0da,#ffe2bf)}
-#home .pantry-home-tile .emoji{grid-row:auto;grid-column:auto;margin:0 0 7px!important;align-self:auto;letter-spacing:normal;white-space:normal}
-#home .pantry-home-tile strong,#home .pantry-home-tile small{grid-column:auto;align-self:auto}
-#home .tile.shopping-home-tile{background:linear-gradient(130deg,#e4f4ff,#d9eafa)}
-#home .tile.shopping-home-tile .emoji .cd-icon{object-fit:contain}
-#home .tile.pantry-home-tile{display:flex!important;flex-direction:column!important;align-items:flex-start!important;justify-content:flex-start!important;position:relative!important;overflow:hidden!important}
-#home .tile.pantry-home-tile .emoji{position:relative!important;top:auto!important;right:auto!important;left:auto!important;bottom:auto!important;transform:none!important;display:block!important;width:88px!important;height:82px!important;margin:0 0 7px!important;grid-area:auto!important;align-self:flex-start!important}
-#home .tile.pantry-home-tile .emoji .cd-icon{position:static!important;transform:none!important;width:88px!important;height:82px!important;max-width:100%!important;object-fit:contain!important}
-#home .tile.pantry-home-tile strong,#home .tile.pantry-home-tile small{position:static!important;grid-area:auto!important;max-width:100%!important}
-#home .tile.shopping-home-tile{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important;gap:7px!important;padding:18px 14px!important;overflow:hidden!important}
-#home .tile.shopping-home-tile .emoji{position:static!important;transform:none!important;grid-area:auto!important;align-self:center!important;display:flex!important;align-items:center!important;justify-content:center!important;width:110px!important;height:104px!important;margin:0 auto 6px!important}
-#home .tile.shopping-home-tile .emoji .cd-icon{position:static!important;transform:none!important;width:105px!important;height:100px!important;object-fit:contain!important}
-#home .tile.shopping-home-tile strong{position:static!important;grid-area:auto!important;align-self:center!important;max-width:100%!important;font-size:clamp(15px,3.7vw,21px)!important;line-height:1.2!important;text-align:center!important;white-space:normal!important}
-#home .tile.shopping-home-tile small{position:static!important;grid-area:auto!important;align-self:center!important;max-width:100%!important;text-align:center!important;line-height:1.25!important}
-#home .tile.shopping-home-tile .go{position:absolute!important;right:10px!important;bottom:10px!important}
+/* Stesso allineamento delle tessere Oggetti, Libri, Posizioni e Scansiona. */
+#home .tile.shopping-home-tile,#home .tile.pantry-home-tile{
+  display:flex!important;flex-direction:column!important;align-items:flex-start!important;
+  justify-content:flex-end!important;text-align:left!important;gap:6px!important;
+  grid-column:auto!important;grid-template-columns:none!important;grid-template-rows:none!important;
+  min-height:164px!important;padding:12px!important;position:relative!important;
+}
+#home .tile.shopping-home-tile{background:linear-gradient(145deg,#e4f4ff,#d9eafa)!important}
+#home .tile.pantry-home-tile{background:linear-gradient(145deg,#ffe9f5,#f9dbed)!important}
+#home .tile.shopping-home-tile .emoji,#home .tile.pantry-home-tile .emoji{
+  position:relative!important;top:auto!important;right:auto!important;left:auto!important;
+  transform:none!important;display:block!important;align-self:flex-start!important;
+  width:74px!important;height:74px!important;margin:0 0 7px!important;
+  grid-area:auto!important;letter-spacing:normal!important;white-space:normal!important;
+}
+#home .tile.shopping-home-tile .emoji .cd-icon,#home .tile.pantry-home-tile .emoji .cd-icon{
+  position:static!important;transform:none!important;width:74px!important;height:74px!important;object-fit:contain!important;
+}
+#home .tile.shopping-home-tile strong,#home .tile.pantry-home-tile strong,
+#home .tile.shopping-home-tile small,#home .tile.pantry-home-tile small{
+  position:static!important;grid-area:auto!important;align-self:auto!important;
+  text-align:left!important;max-width:100%!important;
+}
+#home .tile.shopping-home-tile strong{font-size:clamp(14px,3.6vw,18px)!important;padding-right:17px!important}
+#home .tile.pantry-home-tile:after{
+  content:'›'!important;position:absolute!important;right:12px!important;bottom:16px!important;
+  border-radius:50%;width:32px;height:32px;background:#ffffffd9;color:#7412b1;
+  display:grid;place-items:center;font-size:29px;font-weight:800;
+}
 </style><script id="dlm-home-shopping-shortcut">
 (function(){
   const shortcut=document.getElementById('homeShoppingShortcut');
