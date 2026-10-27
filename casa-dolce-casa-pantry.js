@@ -321,6 +321,33 @@ function renderShopping(){
  const card=x=>'<div class="panel" style="margin:9px 0;padding:12px"><div style="display:flex;gap:9px;align-items:center;justify-content:space-between"><strong style="'+(x.purchased?'text-decoration:line-through;opacity:.65':'')+'">'+escape(x.name)+' · '+x.quantity+'</strong><div class="row"><button type="button" class="secondary" data-shopping-toggle="'+x.id+'">'+(x.purchased?'↩️ Ripristina':'✓ Comprato')+'</button><button type="button" class="secondary" data-shopping-delete="'+x.id+'">Elimina</button></div></div></div>';
  $('shoppingList').innerHTML=(pending.length?pending.map(card).join(''):'<p class="hint">Nessun prodotto da acquistare.</p>')+(bought.length?'<details style="margin-top:12px"><summary>✅ Acquistati ('+bought.length+')</summary>'+bought.map(card).join('')+'</details>':'');
 }
+async function offerPurchasedToPantry(item){
+ if(!confirm('🛒 '+item.name+' acquistato! Vuoi aggiungerlo alla dispensa?'))return;
+ const key=value=>String(value||'').normalize('NFKC').toLocaleLowerCase('it').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
+ const rows=await request('pantry_product_positions?select=last_zone,last_shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&product_key=eq.'+encodeURIComponent(key(item.name))+'&limit=1');
+ const remembered=rows&&rows[0];
+ const current=lots.find(l=>key(l.name)===key(item.name));
+ const zone=remembered?.last_zone||current?.zone||'dispensa';
+ const shelf=remembered?.last_shelf||current?.shelf||'';
+ const placement=await choosePantryZone(zone,shelf);
+ if(!placement)return;
+ const entered=prompt('📅 Nuova scadenza (AAAA-MM-GG). Lascia vuoto se non prevista.','');
+ if(entered===null)return;
+ const expiry=entered.trim();
+ if(expiry&&!/^\d{4}-\d{2}-\d{2}$/.test(expiry)){alert('Inserisci la data nel formato AAAA-MM-GG.');return}
+ if(expiry){const d=new Date(expiry+'T12:00:00');if(!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==expiry){alert('La data inserita non è valida.');return}}
+ const amount=Number(item.quantity);
+ if(!Number.isInteger(amount)||amount<1)throw Error('Quantità acquistata non valida');
+ const match=lots.find(l=>key(l.name)===key(item.name)&&l.zone===placement.zone&&(l.shelf||'')===(placement.shelf||'')&&(l.expires_on||'')===expiry&&!l.opened_on);
+ if(match){
+  await request('pantry_lots?id=eq.'+encodeURIComponent(match.id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:Number(match.quantity)+amount})});
+ }else{
+  await request('pantry_lots',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_id:access.homeId,name:item.name,zone:placement.zone,shelf:placement.shelf||null,quantity:amount,expires_on:expiry||null})});
+ }
+ await rememberPantryPosition({name:item.name,zone:placement.zone,shelf:placement.shelf});
+ await refresh();
+ $('shoppingStatus').textContent='💜 Acquisto aggiunto alla dispensa nella posizione scelta';
+}
 async function addToShopping(name,quantity=1){
  if(!access)throw Error('Accedi alla casa');
  const clean=String(name||'').trim().slice(0,120);if(!clean)throw Error('Nome mancante');
@@ -341,7 +368,7 @@ $('shoppingList').onclick=async e=>{
  const id=b.dataset.shoppingToggle||b.dataset.shoppingDelete,x=shopping.find(y=>y.id===id);if(!x)return;
  busy=true;try{
   if(b.dataset.shoppingDelete){if(!confirm('Eliminare '+x.name+' dalla lista?'))return;await request('shopping_items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'DELETE'})}
-  else await request('shopping_items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({purchased:!x.purchased})});
+  else {await request('shopping_items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({purchased:!x.purchased})});if(!x.purchased)await offerPurchasedToPantry(x);}
   await refreshShopping();
  }catch(err){$('shoppingStatus').textContent=err.message}finally{busy=false}
 };
