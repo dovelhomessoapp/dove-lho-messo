@@ -221,6 +221,16 @@ if(premiumPage){
   checkoutBtn.style.cssText='min-height:58px;font-size:17px;margin-top:12px';
   const backBtn=premiumPage.querySelector('[data-page="home"]');
   if(backBtn)premiumPage.insertBefore(checkoutBtn,backBtn);else premiumPage.append(checkoutBtn);
+  // Accesso al portale Stripe: verifica dell'email gestita da Stripe.
+  const manageBtn=document.createElement('a');
+  manageBtn.id='stripeManageSubscription';
+  manageBtn.href='https://billing.stripe.com/p/login/28E3cv5g19qCcaIbmOdEs00';
+  manageBtn.target='_blank';
+  manageBtn.rel='noopener noreferrer';
+  manageBtn.className='secondary full';
+  manageBtn.textContent='⚙️ Gestisci abbonamento';
+  manageBtn.style.cssText='display:block;box-sizing:border-box;text-align:center;text-decoration:none;font-size:14px;padding:11px 16px;margin-top:12px;border-radius:999px;background:#f5eafa;color:#713a9b;border:1px solid #e1c6ee';
+  checkoutBtn.after(manageBtn);
   const status=document.createElement('p');
   status.id='stripeCheckoutStatus';
   status.className='hint';
