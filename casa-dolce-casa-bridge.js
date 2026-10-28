@@ -193,6 +193,48 @@ window.casaDolceCasaRecognize=async function(imageBase64){
  if(!response.ok)throw Error(data.error||data.message||'Errore '+response.status);
  return data;
 };
+
+window.startStripeCheckout=async function(){
+ if(!token||!refreshToken)throw Error('Accedi prima a Casa dolce casa con il tuo account.');
+ const response=await familyFetch(base+'/functions/v1/stripe-create-checkout',{
+  method:'POST',
+  headers:{apikey:key,'Content-Type':'application/json'},
+  body:JSON.stringify({})
+ });
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok)throw Error(data.error||data.message||'Impossibile aprire il pagamento.');
+ if(!data.url)throw Error('Stripe non ha restituito il link di pagamento.');
+ location.href=data.url;
+};
+
+const premiumPage=document.getElementById('premium');
+if(premiumPage){
+ const oldHint=premiumPage.querySelector('.hint');
+ if(oldHint)oldHint.textContent='Prova Premium Famiglia per 30 giorni. L’addebito inizierà solo al termine della prova, salvo disdetta.';
+ if(!document.getElementById('stripeCheckoutBtn')){
+  const checkoutBtn=document.createElement('button');
+  checkoutBtn.id='stripeCheckoutBtn';
+  checkoutBtn.type='button';
+  checkoutBtn.className='primary full';
+  checkoutBtn.textContent='💳 Prova Premium per 30 giorni';
+  checkoutBtn.style.cssText='min-height:58px;font-size:17px;margin-top:12px';
+  const backBtn=premiumPage.querySelector('[data-page="home"]');
+  if(backBtn)premiumPage.insertBefore(checkoutBtn,backBtn);else premiumPage.append(checkoutBtn);
+  const status=document.createElement('p');
+  status.id='stripeCheckoutStatus';
+  status.className='hint';
+  status.setAttribute('role','status');
+  checkoutBtn.after(status);
+  checkoutBtn.addEventListener('click',async()=>{
+   checkoutBtn.disabled=true;
+   const old=checkoutBtn.textContent;
+   checkoutBtn.textContent='Apro Stripe…';
+   status.textContent='';
+   try{await window.startStripeCheckout()}
+   catch(err){status.textContent='Errore: '+err.message;checkoutBtn.disabled=false;checkoutBtn.textContent=old}
+  });
+ }
+}
 async function get(path,t){const r=await familyFetch(base+path,{headers:{apikey:key,Authorization:'Bearer '+t},cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'Errore di lettura');return d}
 const PLACE_PHOTOS_KEY='dlm-casa-dolce-casa-location-photos-v37';
 function localPlacePhotos(){try{return JSON.parse(localStorage.getItem(PLACE_PHOTOS_KEY)||'{}')}catch{return {}}}
