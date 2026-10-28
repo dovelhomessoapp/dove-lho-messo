@@ -209,7 +209,8 @@ window.startStripeCheckout=async function(){
 
 const premiumPage=document.getElementById('premium');
 if(premiumPage){
- const oldHint=premiumPage.querySelector('.hint');
+ const premiumHints=[...premiumPage.querySelectorAll('.hint')];
+ const oldHint=premiumHints.find(el=>/Anteprima:|nessun abbonamento|non è possibile acquistare/i.test(el.textContent||'')) || premiumHints[premiumHints.length-1];
  if(oldHint)oldHint.textContent='Prova Premium Famiglia per 30 giorni. L’addebito inizierà solo al termine della prova, salvo disdetta.';
  if(!document.getElementById('stripeCheckoutBtn')){
   const checkoutBtn=document.createElement('button');
