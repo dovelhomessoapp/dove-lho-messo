@@ -217,7 +217,7 @@ nav .nav-art .cd-icon{filter:drop-shadow(0 3px 3px #76519940)!important}
   window.open('https://opac.sbn.it/it/risultati-ricerca-avanzata?isbn='+encodeURIComponent(isbn),'_blank','noopener,noreferrer');
  });
 })();
-</script><script src="./qr.js"></script><script src="./casa-dolce-casa.js?v=20261029-premium-title2"></script><script src="./casa-dolce-casa-pantry.js?v=20261027-quantity1"></script><script src="./casa-dolce-casa-bridge.js?v=20261029-notification-setup-v2"></script><script defer src="./casa-dolce-casa-gemini.js?v=20261023-gemini1"></script><script type="module" src="./casa-dolce-casa-photo-ai.js?v=20261023-ocr19"></script><script defer src="./casa-dolce-casa-value-estimate.js?v=20261023-2"></script><script id="book-smart-compact-js">
+</script><script src="./qr.js"></script><script src="./casa-dolce-casa.js?v=20261029-final-sync1"></script><script src="./casa-dolce-casa-pantry.js?v=20261027-quantity1"></script><script src="./casa-dolce-casa-bridge.js?v=20261029-final-sync1"></script><script defer src="./casa-dolce-casa-gemini.js?v=20261023-gemini1"></script><script type="module" src="./casa-dolce-casa-photo-ai.js?v=20261023-ocr19"></script><script defer src="./casa-dolce-casa-value-estimate.js?v=20261023-2"></script><script id="book-smart-compact-js">
 document.addEventListener('DOMContentLoaded',function(){
 const covers=document.getElementById('bookCoverTools');
 if(covers&&!covers.querySelector('details')){
@@ -348,7 +348,7 @@ familyMember:[
 '🔐 PERMESSI E ACCESSO\nSolo il proprietario può invitare o rimuovere membri. Puoi usare «Esci» per disconnetterti senza cancellare gli oggetti condivisi.'
 ],
 premium:[
-'👑 SCOPRI PREMIUM\nQui trovi un’anteprima dei piani previsti per Dove l’ho messo?.',
+'👑 SCOPRI PREMIUM\nQui trovi i piani disponibili per Dove l’ho messo?.',
 '💜 PIANO GRATUITO\nLa proposta prevede fino a 30 oggetti e libri complessivi, con le funzioni essenziali.',
 '✨ PREMIUM FAMIGLIA\nLa proposta prevede oggetti e libri illimitati e funzionalità aggiuntive per la famiglia.',
 '🎁 30 GIORNI GRATIS\nNessun addebito oggi. Attivi subito Premium Famiglia e paghi solo al termine della prova: 4,99 €/mese in offerta lancio, salvo disdetta.'
@@ -378,22 +378,6 @@ overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.rem
 document.addEventListener('keydown',e=>{if(e.key==='Escape')overlay.classList.remove('open')});
 const observer=new MutationObserver(sync);document.querySelectorAll('main .page').forEach(p=>observer.observe(p,{attributes:true,attributeFilter:['class']}));
 setTimeout(sync,650);
-})();
-</script><script id="dlm-expiry-preferences">
-(function(){
-const root=document.getElementById('pantry');if(!root)return;
-const key='dlm-expiry-alert-preferences-v1';
-const wrap=document.createElement('details');wrap.className='panel';wrap.style.cssText='border:2px solid #dfb9f2;background:linear-gradient(145deg,#f9efff,#fff8fd);margin-top:14px';
-wrap.innerHTML='<summary style="cursor:pointer;font-weight:800;font-size:17px;color:#723aa1">🔔 Promemoria scadenze · ore 13:00</summary><p class="hint">Prepara gli avvisi per gli alimenti della dispensa. Scegli quando vuoi essere avvisata.</p><div id="dlmExpiryChoices"></div><p class="hint">⏳ Le preferenze vengono salvate su questo dispositivo. Le notifiche push automatiche, anche ad app chiusa, non sono ancora attive: serviranno l’autorizzazione e il collegamento al servizio di invio.</p><p id="dlmExpirySaved" role="status" class="hint"></p>';
-root.prepend(wrap);
-const area=wrap.querySelector('#dlmExpiryChoices');
-let prefs={7:true,3:true,1:true,0:true};try{prefs={...prefs,...JSON.parse(localStorage.getItem(key)||'{}')}}catch(e){}
-for(const [days,label] of [[7,'7 giorni prima'],[3,'3 giorni prima'],[1,'Il giorno prima'],[0,'Il giorno della scadenza']]){
- const row=document.createElement('label');row.style.cssText='display:flex;align-items:center;gap:12px;padding:7px 2px;font-weight:600';
- const input=document.createElement('input');input.type='checkbox';input.checked=Boolean(prefs[days]);input.style.cssText='width:20px;height:20px;margin:0;flex-shrink:0';
- const caption=document.createElement('span');caption.textContent=label;row.append(input,caption);area.append(row);
- input.addEventListener('change',()=>{prefs[days]=input.checked;try{localStorage.setItem(key,JSON.stringify(prefs));wrap.querySelector('#dlmExpirySaved').textContent='💜 Preferenze salvate su questo dispositivo'}catch(e){wrap.querySelector('#dlmExpirySaved').textContent='Impossibile salvare le preferenze su questo dispositivo'}});
-}
 })();
 </script><style id="dlm-shopping-home-layout">
 /* Stesso allineamento delle tessere Oggetti, Libri, Posizioni e Scansiona. */
