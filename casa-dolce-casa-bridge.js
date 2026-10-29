@@ -218,7 +218,7 @@ if(premiumPage){
   checkoutBtn.type='button';
   checkoutBtn.className='primary full';
   checkoutBtn.textContent='💳 Prova Premium per 30 giorni';
-  checkoutBtn.style.cssText='min-height:58px;font-size:17px;margin-top:12px';
+  checkoutBtn.style.cssText='min-height:58px;font-size:clamp(13px,4vw,17px);margin-top:12px;box-sizing:border-box;width:100%;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.35;padding:12px 16px';
   const backBtn=premiumPage.querySelector('[data-page="home"]');
   if(backBtn)premiumPage.insertBefore(checkoutBtn,backBtn);else premiumPage.append(checkoutBtn);
   // Accesso al portale Stripe: verifica dell'email gestita da Stripe.
