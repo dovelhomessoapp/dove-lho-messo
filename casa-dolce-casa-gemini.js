@@ -6,11 +6,12 @@
  const button=document.createElement('button');
  button.type='button';button.className='primary full';button.textContent='✨ Riconosci oggetto con Gemini';
  button.style.margin='12px 0 8px';
+ const privacy=document.createElement('p');privacy.className='hint';privacy.textContent='Con Gemini, una copia ridotta della foto viene inviata al servizio IA per riconoscere l’oggetto. Usa questa funzione solo se vuoi procedere con l’analisi online.';
  const status=document.createElement('p');status.className='hint';status.setAttribute('role','status');
  status.setAttribute('aria-live','polite');
  const results=document.createElement('div');
  panel.insertBefore(button,panel.firstChild);
- button.after(status,results);
+ button.after(privacy,status,results);
  const firstString=(obj,keys)=>{for(const k of keys){if(typeof obj?.[k]==='string'&&obj[k].trim())return obj[k].trim()}return ''};
  button.addEventListener('click',async()=>{
   if(preview.hidden||!preview.src){status.textContent='Prima scatta o scegli una fotografia.';return}
