@@ -705,7 +705,7 @@ window.familyUpdateItem=async item=>{
  const editorId=currentFamilyUserId();
  if(editorId){item.updatedBy=editorId;item.updatedByName=familyNicknames.get(editorId)||null;}
  pendingEdits.set(item.id,{name:item.name,kind:item.kind,author:item.author||'',barcode:item.barcode||'',desc:item.desc,place:item.place,value:item.value,updatedBy:editorId});saveEdits();
- if(!token||!house||!cloudIds.has(item.id)){notice('Modifica salvata soltanto sul dispositivo di prova.');return}
+ if(!token||!house||!cloudIds.has(item.id)){notice('Modifica salvata soltanto su questo dispositivo.');return}
  if(!navigator.onLine){notice('Modifica salvata sul telefono: sarà sincronizzata quando torni online.');return}
  try{
   const res=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(item.id)+'&home_id=eq.'+encodeURIComponent(house.id),{
@@ -800,7 +800,7 @@ window.familyDeleteItem=async id=>{
  finally{setTimeout(()=>deletingIds.delete(id),1500)}
 };
 el('familyReload').onclick=()=>syncEdits().then(load).then(loadPremiumStatus).then(uploadNew).then(loadPremiumStatus).catch(err=>notice(err.message));
-el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);localStorage.setItem('dlm-premium-enabled-v1','false');document.documentElement.dataset.premium='false';window.dlmRefreshLimits?.();refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;firstObjectGuide.hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano in questa copia di prova.')};
+el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);localStorage.setItem('dlm-premium-enabled-v1','false');document.documentElement.dataset.premium='false';window.dlmRefreshLimits?.();refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;firstObjectGuide.hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano disponibili su questo dispositivo.')};
 async function restoreSession(){
  const saved=localStorage.getItem(SESSION_KEY);
  if(!saved)return;
