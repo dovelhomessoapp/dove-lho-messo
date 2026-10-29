@@ -194,12 +194,12 @@ window.casaDolceCasaRecognize=async function(imageBase64){
  return data;
 };
 
-window.startStripeCheckout=async function(){
+window.startStripeCheckout=async function(plan='monthly'){
  if(!token||!refreshToken)throw Error('Accedi prima a Casa dolce casa con il tuo account.');
  const response=await familyFetch(base+'/functions/v1/stripe-create-checkout',{
   method:'POST',
   headers:{apikey:key,'Content-Type':'application/json'},
-  body:JSON.stringify({})
+  body:JSON.stringify({plan:plan==='annual'?'annual':'monthly'})
  });
  const data=await response.json().catch(()=>({}));
  if(!response.ok)throw Error(data.error||data.message||'Impossibile aprire il pagamento.');
@@ -217,10 +217,20 @@ if(premiumPage){
   checkoutBtn.id='stripeCheckoutBtn';
   checkoutBtn.type='button';
   checkoutBtn.className='primary full';
-  checkoutBtn.textContent='💳 Prova Premium per 30 giorni';
+  checkoutBtn.textContent='💳 Mensile — 30 giorni gratis';
   checkoutBtn.style.cssText='min-height:58px;font-size:clamp(13px,4vw,17px);margin-top:12px;box-sizing:border-box;width:100%;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.35;padding:12px 16px';
+
+  const annualBtn=document.createElement('button');
+  annualBtn.id='stripeAnnualCheckoutBtn';
+  annualBtn.type='button';
+  annualBtn.className='secondary full';
+  annualBtn.textContent='💜 Annuale — 49,99 €/anno · 30 giorni gratis';
+  annualBtn.style.cssText='min-height:56px;font-size:clamp(13px,3.8vw,16px);margin-top:8px;box-sizing:border-box;width:100%;max-width:100%;white-space:normal;line-height:1.35;padding:12px 16px;border:2px solid #d9b8ef;background:#f8edff;color:#6e3499';
+
   const backBtn=premiumPage.querySelector('[data-page="home"]');
   if(backBtn)premiumPage.insertBefore(checkoutBtn,backBtn);else premiumPage.append(checkoutBtn);
+  checkoutBtn.after(annualBtn);
+
   // Accesso al portale Stripe: verifica dell'email gestita da Stripe.
   const manageBtn=document.createElement('a');
   manageBtn.id='stripeManageSubscription';
@@ -230,20 +240,28 @@ if(premiumPage){
   manageBtn.className='secondary full';
   manageBtn.textContent='⚙️ Gestisci abbonamento';
   manageBtn.style.cssText='display:none;box-sizing:border-box;text-align:center;text-decoration:none;font-size:14px;padding:11px 16px;margin-top:12px;border-radius:999px;background:#f5eafa;color:#713a9b;border:1px solid #e1c6ee';
-  checkoutBtn.after(manageBtn);
+  annualBtn.after(manageBtn);
+
   const status=document.createElement('p');
   status.id='stripeCheckoutStatus';
   status.className='hint';
   status.setAttribute('role','status');
-  checkoutBtn.after(status);
-  checkoutBtn.addEventListener('click',async()=>{
-   checkoutBtn.disabled=true;
-   const old=checkoutBtn.textContent;
-   checkoutBtn.textContent='Apro Stripe…';
+  manageBtn.after(status);
+
+  const openCheckout=async(plan,button)=>{
+   checkoutBtn.disabled=true;annualBtn.disabled=true;
+   const old=button.textContent;
+   button.textContent='Apro Stripe…';
    status.textContent='';
-   try{await window.startStripeCheckout()}
-   catch(err){status.textContent='Errore: '+err.message;checkoutBtn.disabled=false;checkoutBtn.textContent=old}
-  });
+   try{await window.startStripeCheckout(plan)}
+   catch(err){
+    status.textContent='Errore: '+err.message;
+    checkoutBtn.disabled=false;annualBtn.disabled=false;
+    button.textContent=old;
+   }
+  };
+  checkoutBtn.addEventListener('click',()=>openCheckout('monthly',checkoutBtn));
+  annualBtn.addEventListener('click',()=>openCheckout('annual',annualBtn));
  }
 }
 async function get(path,t){const r=await familyFetch(base+path,{headers:{apikey:key,Authorization:'Bearer '+t},cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'Errore di lettura');return d}
@@ -257,6 +275,8 @@ function formatPremiumDate(value){
 async function loadPremiumStatus(){
  if(!token||!house)return null;
  const checkoutBtn=document.getElementById('stripeCheckoutBtn');
+ const annualBtn=document.getElementById('stripeAnnualCheckoutBtn');
+ const manageBtn=document.getElementById('stripeManageSubscription');
  const statusEl=document.getElementById('stripeCheckoutStatus');
  try{
   const response=await familyFetch(base+'/rest/v1/rpc/home_subscription_status',{
@@ -281,7 +301,11 @@ async function loadPremiumStatus(){
   }
   if(checkoutBtn){
    checkoutBtn.disabled=enabled;
-   checkoutBtn.textContent=enabled?'✓ Premium già attivo':'💳 Prova Premium per 30 giorni';
+   checkoutBtn.textContent=enabled?'✓ Premium già attivo':'💳 Mensile — 30 giorni gratis';
+  }
+  if(annualBtn){
+   annualBtn.disabled=enabled;
+   annualBtn.textContent=enabled?'✓ Premium già attivo':'💜 Annuale — 49,99 €/anno · 30 giorni gratis';
   }
   if(manageBtn){
    manageBtn.style.display=(sub&&['trialing','active','past_due','unpaid','paused'].includes(sub.status))?'block':'none';
