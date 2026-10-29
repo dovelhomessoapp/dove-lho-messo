@@ -247,6 +247,51 @@ if(premiumPage){
  }
 }
 async function get(path,t){const r=await familyFetch(base+path,{headers:{apikey:key,Authorization:'Bearer '+t},cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'Errore di lettura');return d}
+function premiumEnabled(status){return status==='trialing'||status==='active'}
+function formatPremiumDate(value){
+ if(!value)return '';
+ const d=new Date(value);
+ if(Number.isNaN(d.getTime()))return '';
+ return new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}).format(d);
+}
+async function loadPremiumStatus(){
+ if(!token||!house)return null;
+ const checkoutBtn=document.getElementById('stripeCheckoutBtn');
+ const statusEl=document.getElementById('stripeCheckoutStatus');
+ try{
+  const response=await familyFetch(base+'/rest/v1/rpc/home_subscription_status',{
+   method:'POST',
+   headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},
+   body:JSON.stringify({p_home:house.id})
+  });
+  const rows=await response.json().catch(()=>[]);
+  if(!response.ok)throw Error(rows?.message||'Stato Premium non disponibile');
+  const sub=Array.isArray(rows)&&rows.length?rows[0]:null;
+  const enabled=!!sub&&premiumEnabled(sub.status);
+  document.documentElement.dataset.premium=enabled?'true':'false';
+  localStorage.setItem('dlm-premium-enabled-v1',enabled?'true':'false');
+  window.dlmRefreshLimits?.();
+  if(statusEl){
+   if(enabled){
+    const until=formatPremiumDate(sub.current_period_end||sub.trial_end);
+    statusEl.textContent='💜 '+(sub.status==='trialing'?'Prova Premium attiva':'Premium attivo')+(until?' · fino al '+until:'')+(sub.cancel_at_period_end?' · rinnovo disattivato':'');
+   }else{
+    statusEl.textContent='💜 Piano gratuito · fino a 30 oggetti e libri';
+   }
+  }
+  if(checkoutBtn){
+   checkoutBtn.disabled=enabled;
+   checkoutBtn.textContent=enabled?'✓ Premium già attivo':'💳 Prova Premium per 30 giorni';
+  }
+  return sub;
+ }catch(error){
+  const cached=localStorage.getItem('dlm-premium-enabled-v1')==='true';
+  document.documentElement.dataset.premium=cached?'true':'false';
+  window.dlmRefreshLimits?.();
+  if(statusEl&&!cached)statusEl.textContent='Stato Premium non disponibile: '+error.message;
+  return null;
+ }
+}
 const PLACE_PHOTOS_KEY='dlm-casa-dolce-casa-location-photos-v37';
 function localPlacePhotos(){try{return JSON.parse(localStorage.getItem(PLACE_PHOTOS_KEY)||'{}')}catch{return {}}}
 async function syncPlacePhotos(){
@@ -467,7 +512,7 @@ el('familyCreateHomeForm').onsubmit=async e=>{
   if(!homeId)throw Error('La casa non è stata creata.');
   const houses=await get('/rest/v1/homes?select=id,name',token);
   if(houses.length!==1)throw Error('Impossibile caricare la nuova casa.');
-  house=houses[0];await load();
+  house=houses[0];await load();await loadPremiumStatus();
   el('familyForm').hidden=true;el('familySignupBox').hidden=true;
   el('familyOnline').hidden=false;
   el('familyHouse').textContent='💜 '+house.name;
@@ -542,7 +587,7 @@ el('familyAcceptBtn').onclick=async()=>{
  if(!pendingFamilyInvite())return;
  if(el('familyAcceptBtn').disabled)return;
  el('familyAcceptBtn').disabled=true;
- try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});sessionStorage.removeItem(INVITE_KEY);history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;el('familyHouse').textContent='💜 '+house.name;updateFamilyAccept();notice('Benvenuto nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}finally{el('familyAcceptBtn').disabled=false}
+ try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});sessionStorage.removeItem(INVITE_KEY);history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();await loadPremiumStatus();await syncEdits();await load();await uploadNew();await loadPremiumStatus();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;el('familyHouse').textContent='💜 '+house.name;updateFamilyAccept();notice('Benvenuto nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}finally{el('familyAcceptBtn').disabled=false}
 };
 el('familySignup').onsubmit=async e=>{
  e.preventDefault();
@@ -586,7 +631,7 @@ el('familyForm').onsubmit=async e=>{
   throw Error('Questo account risulta collegato a più case: contatta il proprietario.');
  }
  token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);house=houses[0];el('familyHouse').textContent='💜 '+house.name;
- await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;updateFamilyAccept();
+ await load();await loadPremiumStatus();await syncEdits();await load();await uploadNew();await loadPremiumStatus();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;updateFamilyAccept();
  }catch(err){notice('Errore: '+err.message)}finally{btn.disabled=false}
 };
 async function uploadNew(){
@@ -600,7 +645,7 @@ async function uploadNew(){
    if(i.place&&!cloudPlaceIds.has(i.place)){notice('Posizione locale da sincronizzare prima dell’oggetto.');continue}
    const row={id:i.id,home_id:house.id,title:i.name,kind:i.kind==='book'?'book':'object',author:i.author||null,isbn:i.kind==='book'?i.barcode||null:null,description:i.desc||null,location_id:i.place||null,estimated_value:i.value===''?null:Number(i.value),created_by:i.createdBy||currentFamilyUserId(),image_url:imagePath};
    const res=await familyFetch(base+'/rest/v1/items?on_conflict=id',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(row)});
-   if(!res.ok){const err=await res.json().catch(()=>({}));throw Error(err.message||'Errore salvataggio')}
+   if(!res.ok){const err=await res.json().catch(()=>({}));if(err.message==='FREE_PLAN_ITEM_LIMIT_REACHED'){notice('Hai raggiunto il limite gratuito di 30 elementi. Attiva Premium per aggiungerne altri. 💜');window.dlmRefreshLimits?.();throw Error('Limite gratuito raggiunto')}throw Error(err.message||'Errore salvataggio')}
    cloudIds.add(i.id);seenIds.add(i.id);saveSeen();pendingCreates.delete(i.id);saveCreates();
    const confirmed=await get('/rest/v1/items?select=id,location_id&id=eq.'+encodeURIComponent(i.id)+'&home_id=eq.'+encodeURIComponent(house.id),token);
    if(confirmed.length!==1||confirmed[0].location_id!==(i.place||null))throw Error('Posizione non confermata online per '+i.name);
@@ -692,8 +737,8 @@ window.familyDeleteItem=async id=>{
  }catch(e){notice('Eliminazione non eseguita: '+e.message);return false}
  finally{setTimeout(()=>deletingIds.delete(id),1500)}
 };
-el('familyReload').onclick=()=>syncEdits().then(load).then(uploadNew).catch(err=>notice(err.message));
-el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;firstObjectGuide.hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano in questa copia di prova.')};
+el('familyReload').onclick=()=>syncEdits().then(load).then(loadPremiumStatus).then(uploadNew).then(loadPremiumStatus).catch(err=>notice(err.message));
+el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);localStorage.setItem('dlm-premium-enabled-v1','false');document.documentElement.dataset.premium='false';window.dlmRefreshLimits?.();refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;firstObjectGuide.hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano in questa copia di prova.')};
 async function restoreSession(){
  const saved=localStorage.getItem(SESSION_KEY);
  if(!saved)return;
@@ -709,7 +754,7 @@ async function restoreSession(){
    throw Error('Casa non disponibile');
   }
   house=houses[0];el('familyHouse').textContent='💜 '+house.name;
-  await load();await syncEdits();await load();await uploadNew();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
+  await load();await loadPremiumStatus();await syncEdits();await load();await uploadNew();await loadPremiumStatus();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
   notice('Accesso ripristinato.');
  }catch(e){
   if(!navigator.onLine||e instanceof TypeError){notice('Connessione non disponibile: gli oggetti salvati restano consultabili. Riprova quando torni online.');return}
