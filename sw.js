@@ -1,5 +1,5 @@
-/* Dove l'ho messo? - aggiornamento PWA v16 */
-const CACHE='dlm-v16-app-shell';
+/* Dove l'ho messo? - aggiornamento PWA v17 */
+const CACHE='dlm-v17-app-shell';
 const APP_SHELL=['./','./index.html','./casa-dolce-casa.html','./style.css','./app.js','./casa-dolce-casa.js','./casa-dolce-casa-bridge.js','./casa-dolce-casa-pantry.js','./casa-dolce-casa-gemini.js','./casa-dolce-casa-photo-ai.js','./casa-dolce-casa-value-estimate.js','./qr.js','./manifest.webmanifest','./casa-dolce-casa.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png'];
 self.addEventListener('install',event=>{event.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(APP_SHELL);await self.skipWaiting()})())});
 self.addEventListener('activate',event=>{event.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(k=>k.startsWith('dlm-')&&k!==CACHE).map(k=>caches.delete(k)));await self.clients.claim()})())});
@@ -11,22 +11,31 @@ self.addEventListener('fetch',event=>{const req=event.request;if(req.method!=='G
 self.addEventListener('push',event=>{
   event.waitUntil((async()=>{
     let data={};try{data=event.data?.json()||{}}catch(e){}
-    if(data.type!=='pantry-expiry')return;
-    const title='🔔 Dove l’ho messo?';
-    const body=typeof data.body==='string'?data.body.slice(0,180):'Controlla gli alimenti in scadenza nella tua dispensa.';
+    if(data.type!=='pantry-expiry'&&data.type!=='admin-event')return;
+    const isAdmin=data.type==='admin-event';
+    const title=isAdmin?(typeof data.title==='string'?data.title.slice(0,80):'👑 Dove l’ho messo? Admin'):'🔔 Dove l’ho messo?';
+    const body=typeof data.body==='string'?data.body.slice(0,180):(isAdmin?'Nuovo evento amministratore.':'Controlla gli alimenti in scadenza nella tua dispensa.');
     await self.registration.showNotification(title,{
       body,icon:'./icon-192.png',badge:'./icon-192.png',
-      tag:'dlm-expiry-'+String(data.date||'today').replace(/[^0-9-]/g,'').slice(0,12),
-      data:{url:'./casa-dolce-casa.html#pantry'}
+      tag:isAdmin?'dlm-admin-'+String(data.event_id||Date.now()):'dlm-expiry-'+String(data.date||'today').replace(/[^0-9-]/g,'').slice(0,12),
+      data:{url:isAdmin?'./casa-dolce-casa.html#admin':'./casa-dolce-casa.html#pantry',type:data.type}
     });
   })());
 });
 self.addEventListener('notificationclick',event=>{
+  const data=event.notification.data||{};
   event.notification.close();
   event.waitUntil((async()=>{
-    const target=new URL('./casa-dolce-casa.html',self.registration.scope).href;
+    const target=new URL(data.url||'./casa-dolce-casa.html',self.registration.scope).href;
     const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-    for(const client of windows){if(new URL(client.url).pathname===new URL(target).pathname){await client.focus();client.postMessage({type:'DLM_OPEN_PANTRY'});return}}
+    for(const client of windows){
+      if(new URL(client.url).pathname===new URL(target).pathname){
+        await client.focus();
+        if(data.type==='pantry-expiry')client.postMessage({type:'DLM_OPEN_PANTRY'});
+        else if(data.type==='admin-event')client.postMessage({type:'DLM_OPEN_ADMIN'});
+        return;
+      }
+    }
     await self.clients.openWindow(target);
   })());
 });
