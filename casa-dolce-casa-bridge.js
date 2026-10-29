@@ -391,6 +391,99 @@ async function saveExpiryAudience(value,days=expiryReminderDays){
  expiryCloudExists=true;
  expiryReminderDays=reminderDays;
 }
+
+let deviceHeartbeatTimer=null;
+function currentDeviceId(){
+ let id='';
+ try{id=localStorage.getItem('dlm-device-id-v1')||''}catch{}
+ if(!id){
+  id=(crypto.randomUUID?.()||('dev-'+Date.now()+'-'+Math.random().toString(36).slice(2)));
+  try{localStorage.setItem('dlm-device-id-v1',id)}catch{}
+ }
+ return id;
+}
+function currentPlatform(){
+ const ua=navigator.userAgent||'';
+ if(/iPhone|iPad|iPod/i.test(ua))return 'iOS';
+ if(/Android/i.test(ua))return 'Android';
+ if(/Macintosh|Mac OS X/i.test(ua))return 'macOS';
+ if(/Windows/i.test(ua))return 'Windows';
+ return 'Altro';
+}
+function currentInstallMode(){
+ return (window.matchMedia?.('(display-mode: standalone)').matches||window.navigator.standalone===true)?'standalone':'browser';
+}
+async function registerCurrentDevice(){
+ if(!token)return;
+ const notifications=('Notification' in window)?Notification.permission:'unsupported';
+ try{
+  await familyRpc('register_app_device',{
+   p_device_id:currentDeviceId(),
+   p_platform:currentPlatform(),
+   p_install_mode:currentInstallMode(),
+   p_notifications:notifications
+  });
+ }catch(e){console.warn('Registro dispositivo:',e)}
+ if(!deviceHeartbeatTimer){
+  deviceHeartbeatTimer=setInterval(()=>{if(token&&document.visibilityState==='visible')void registerCurrentDevice()},10*60*1000);
+  document.addEventListener('visibilitychange',()=>{if(token&&document.visibilityState==='visible')void registerCurrentDevice()});
+ }
+}
+function adminPlanLabel(code,status){
+ if(status==='free'||code==='free')return 'Gratuito';
+ if(code==='annual_4999_v1')return 'Premium annuale 49,99 €';
+ if(code==='launch_12_paid_v1'||code==='monthly_launch')return 'Premium mensile lancio';
+ if(code==='monthly_standard')return 'Premium mensile 5,99 €';
+ return status==='trialing'?'Premium · prova':'Premium';
+}
+function adminDate(value){
+ if(!value)return '—';
+ const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
+ return new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);
+}
+async function refreshAdminPanel(){
+ if(!token)return;
+ let rows,summary;
+ try{
+  const r=await familyFetch(base+'/rest/v1/rpc/admin_dashboard',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
+  if(!r.ok){const e=await r.json().catch(()=>({}));if(String(e.message||'').includes('ADMIN_ONLY'))return;throw Error(e.message||'Pannello admin non disponibile')}
+  rows=await r.json();
+  const s=await familyFetch(base+'/rest/v1/rpc/admin_summary',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
+  summary=s.ok?await s.json():{};
+ }catch(e){console.warn('Pannello amministratore:',e);return}
+
+ const anchor=el('familyMembersList')?.parentElement||el('familyOnline');
+ if(!anchor)return;
+ let panel=el('dlmAdminPanel');
+ if(!panel){
+  panel=document.createElement('section');panel.id='dlmAdminPanel';panel.className='panel';
+  panel.style.cssText='margin:18px 0;padding:16px;border:2px solid #ceb0ec;border-radius:20px;background:#fffaff;overflow:hidden';
+  anchor.append(panel);
+ }
+ const data=Array.isArray(rows)?rows:[];
+ const sum=summary&&typeof summary==='object'?summary:{};
+ const activeCutoff=Date.now()-30*24*60*60*1000;
+ const esc=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ const body=data.map(r=>{
+  const active=r.last_seen_at&&new Date(r.last_seen_at).getTime()>=activeCutoff;
+  const state=r.subscription_status==='trialing'?'Prova':r.subscription_status==='active'?'Attivo':r.subscription_status==='canceled'?'Terminato':'Gratuito';
+  return '<tr><td style="padding:9px;min-width:180px"><strong>'+esc(r.email||'—')+'</strong><br><small>'+esc(r.home_name||'Nessuna casa')+' · '+esc(r.role||'—')+'</small></td>'+
+   '<td style="padding:9px;min-width:150px">'+esc(adminPlanLabel(r.plan_code,r.subscription_status))+'<br><small>'+esc(state)+(r.cancel_at_period_end?' · disdetto':'')+'</small></td>'+
+   '<td style="padding:9px;text-align:center">'+Number(r.installed_device_count||0)+' / '+Number(r.device_count||0)+'</td>'+
+   '<td style="padding:9px">'+(active?'🟢 ':'⚪ ')+esc(adminDate(r.last_seen_at))+'</td>'+
+   '<td style="padding:9px">'+esc(adminDate(r.registered_at))+'</td></tr>';
+ }).join('');
+ panel.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><h3 style="margin:0">👑 Pannello amministratore</h3><p class="hint" style="margin:5px 0 0">Visibile solo al tuo account sviluppatrice.</p></div><button type="button" class="secondary" id="dlmAdminRefresh">↻ Aggiorna</button></div>'+
+ '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0">'+
+ '<div style="padding:11px;border-radius:14px;background:#f5eaff"><strong style="font-size:1.35em">'+Number(sum.users||0)+'</strong><br><small>Utenti iscritti</small></div>'+
+ '<div style="padding:11px;border-radius:14px;background:#f5eaff"><strong style="font-size:1.35em">'+Number(sum.active_30d||0)+'</strong><br><small>Attivi 30 giorni</small></div>'+
+ '<div style="padding:11px;border-radius:14px;background:#f5eaff"><strong style="font-size:1.35em">'+Number(sum.installed_devices||0)+'</strong><br><small>Installazioni rilevate</small></div>'+
+ '<div style="padding:11px;border-radius:14px;background:#f5eaff"><strong style="font-size:1.35em">'+Number(sum.premium_homes||0)+'</strong><br><small>Case Premium</small></div></div>'+
+ '<p class="hint">“Installata” significa aperta in modalità PWA/standalone da quando questo registro è attivo. Gli utenti che la usano solo da Safari risultano come browser.</p>'+
+ '<div style="overflow:auto;-webkit-overflow-scrolling:touch"><table style="width:100%;border-collapse:collapse;font-size:.86rem"><thead><tr><th style="text-align:left;padding:9px">Utente</th><th style="text-align:left;padding:9px">Piano</th><th style="padding:9px">Installata / dispositivi</th><th style="text-align:left;padding:9px">Ultimo utilizzo</th><th style="text-align:left;padding:9px">Iscritto</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+ panel.querySelector('#dlmAdminRefresh')?.addEventListener('click',()=>void refreshAdminPanel());
+}
+
 async function load(){
  const objects=await get('/rest/v1/items?select=id,kind,title,author,isbn,barcode,description,image_url,location_id,estimated_value,created_at,created_by,updated_by&home_id=eq.'+house.id,token);
  const places=await get('/rest/v1/locations?select=id,name,parent_id&home_id=eq.'+house.id,token);
@@ -527,6 +620,8 @@ async function load(){
  await syncPlacePhotos();
  el('familyCount').textContent='Oggetti online: '+objects.length;
  firstObjectGuide.hidden=objects.length!==0;
+ void registerCurrentDevice();
+ void refreshAdminPanel();
  notice('Inventario familiare aggiornato.');
 }
 async function familyRpc(name,args){
