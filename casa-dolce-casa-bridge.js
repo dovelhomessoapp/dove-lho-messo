@@ -229,7 +229,7 @@ if(premiumPage){
   manageBtn.rel='noopener noreferrer';
   manageBtn.className='secondary full';
   manageBtn.textContent='⚙️ Gestisci abbonamento';
-  manageBtn.style.cssText='display:block;box-sizing:border-box;text-align:center;text-decoration:none;font-size:14px;padding:11px 16px;margin-top:12px;border-radius:999px;background:#f5eafa;color:#713a9b;border:1px solid #e1c6ee';
+  manageBtn.style.cssText='display:none;box-sizing:border-box;text-align:center;text-decoration:none;font-size:14px;padding:11px 16px;margin-top:12px;border-radius:999px;background:#f5eafa;color:#713a9b;border:1px solid #e1c6ee';
   checkoutBtn.after(manageBtn);
   const status=document.createElement('p');
   status.id='stripeCheckoutStatus';
@@ -282,6 +282,9 @@ async function loadPremiumStatus(){
   if(checkoutBtn){
    checkoutBtn.disabled=enabled;
    checkoutBtn.textContent=enabled?'✓ Premium già attivo':'💳 Prova Premium per 30 giorni';
+  }
+  if(manageBtn){
+   manageBtn.style.display=(sub&&['trialing','active','past_due','unpaid','paused'].includes(sub.status))?'block':'none';
   }
   return sub;
  }catch(error){
