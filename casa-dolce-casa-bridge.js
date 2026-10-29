@@ -247,7 +247,7 @@ if(premiumPage){
  }
 }
 async function get(path,t){const r=await familyFetch(base+path,{headers:{apikey:key,Authorization:'Bearer '+t},cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'Errore di lettura');return d}
-function premiumEnabled(status){return status==='trialing'||status==='active'}
+function premiumEnabled(status){return status==='trialing'||status==='active'||status==='developer'}
 function formatPremiumDate(value){
  if(!value)return '';
  const d=new Date(value);
@@ -274,7 +274,7 @@ async function loadPremiumStatus(){
   if(statusEl){
    if(enabled){
     const until=formatPremiumDate(sub.current_period_end||sub.trial_end);
-    statusEl.textContent='💜 '+(sub.status==='trialing'?'Prova Premium attiva':'Premium attivo')+(until?' · fino al '+until:'')+(sub.cancel_at_period_end?' · rinnovo disattivato':'');
+    statusEl.textContent=sub.status==='developer'?'💜 Premium sviluppatore attivo':'💜 '+(sub.status==='trialing'?'Prova Premium attiva':'Premium attivo')+(until?' · fino al '+until:'')+(sub.cancel_at_period_end?' · rinnovo disattivato':'');
    }else{
     statusEl.textContent='💜 Piano gratuito · fino a 30 oggetti e libri';
    }
