@@ -412,27 +412,6 @@ async function load(){
   devicePanel.style.cssText='margin:12px 0;padding:16px;border:1px solid #dfb9f2;border-radius:18px;background:#faf5ff';
   devicePanel.innerHTML='<h3>📱 Notifiche su questo telefono</h3><p id="familyDeviceNotificationState" class="hint"></p><button type="button" class="primary" id="familyDeviceNotificationButton">🔔 Registra questo telefono</button><p class="hint">Registrando questo telefono potrai ricevere automaticamente gli avvisi della dispensa.</p>';
   el('familyMembersList').before(devicePanel);
-  const testButton=document.createElement('button');
-  testButton.type='button';testButton.className='secondary';testButton.id='familyPushTestButton';
-  testButton.textContent='🧪 Invia notifica di prova';
-  testButton.style.marginLeft='8px';
-  devicePanel.querySelector('#familyDeviceNotificationButton').after(testButton);
-  testButton.onclick=async()=>{
-   const state=devicePanel.querySelector('#familyDeviceNotificationState');
-   testButton.disabled=true;state.textContent='Invio della notifica di prova in corso…';
-   try{
-    if(!token||!house)throw Error('Accedi prima alla casa condivisa.');
-    if(!('Notification' in window)||Notification.permission!=='granted')throw Error('Autorizza prima le notifiche e registra il telefono.');
-    const response=await fetch(base+'/functions/v1/send-expiry-push',{
-     method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},
-     body:JSON.stringify({type:'test'})
-    });
-    const result=await response.json().catch(()=>({}));
-    if(!response.ok)throw Error(result.error||result.message||'Errore HTTP '+response.status);
-    state.textContent='💜 Richiesta inviata! Controlla se arriva la notifica sul telefono.';
-   }catch(err){state.textContent='Test non riuscito: '+err.message}
-   finally{testButton.disabled=false}
-  };
   devicePanel.querySelector('button').onclick=async()=>{
    const button=devicePanel.querySelector('button'),state=devicePanel.querySelector('#familyDeviceNotificationState');
    button.disabled=true;state.textContent='Registrazione in corso…';
