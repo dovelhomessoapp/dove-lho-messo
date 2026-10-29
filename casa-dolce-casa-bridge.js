@@ -741,6 +741,34 @@ window.familyEditPlace=async place=>{
   return true;
  }catch(err){notice('Modifica non riuscita: '+err.message);return false}
 };
+window.familyDeletePlace=async id=>{
+ if(!token||!house){notice('Accedi a Casa dolce casa prima di eliminare una posizione condivisa.');return false}
+ if(!cloudPlaceIds.has(id))return true;
+ if(!navigator.onLine){notice('Offline: eliminazione posizione annullata.');return false}
+ try{
+  const editorId=currentFamilyUserId();
+  const affected=db.items.filter(item=>item.place===id&&cloudIds.has(item.id));
+  if(affected.length){
+   const update=await familyFetch(base+'/rest/v1/items?home_id=eq.'+encodeURIComponent(house.id)+'&location_id=eq.'+encodeURIComponent(id),{
+    method:'PATCH',
+    headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},
+    body:JSON.stringify({location_id:null,updated_by:editorId})
+   });
+   const rows=await update.json().catch(()=>null);
+   if(!update.ok||!Array.isArray(rows)||rows.length!==affected.length)throw Error(rows?.message||'Non sono riuscita a scollegare tutti gli oggetti dalla posizione');
+  }
+  const response=await familyFetch(base+'/rest/v1/locations?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{
+   method:'DELETE',
+   headers:{apikey:key,Authorization:'Bearer '+token,Prefer:'return=representation'}
+  });
+  const rows=await response.json().catch(()=>null);
+  if(!response.ok||!Array.isArray(rows)||rows.length!==1)throw Error(rows?.message||'Eliminazione posizione non confermata dal server');
+  cloudPlaceIds.delete(id);
+  notice('Posizione eliminata anche dalla casa condivisa.');
+  return true;
+ }catch(err){notice('Eliminazione posizione non riuscita: '+err.message);return false}
+};
+
 window.familyCreatePlace=async place=>{
  if(!token||!house){notice('Posizione salvata solo in locale: accedi a Casa dolce casa.');return}
  try{
