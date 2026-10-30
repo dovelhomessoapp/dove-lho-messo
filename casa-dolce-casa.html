@@ -178,7 +178,7 @@ nav .nav-art .cd-icon{filter:drop-shadow(0 3px 3px #76519940)!important}
 #add:has(#kind option[value="book"]:checked) #bookCoverTools button{margin:0!important}
 #add:has(#kind option[value="book"]:checked) #bookCoverTools #coverChoices{order:0}
 #add:has(#kind option[value="book"]:checked) #bookCoverTools #findCoversBtn{order:1}
-#add:has(#kind option[value="book"]:checked) #bookCoverTools #findAlternateCoversBtn{order:2}
+#add:has(#kind option[value="book"]:checked) #bookCoverTools #suggestBookCoversBtn{order:2}
 #add:has(#kind option[value="book"]:checked) #bookCoverTools #googleCoverSearchBtn{order:3}
 #add:has(#kind option[value="book"]:checked) #bookCoverTools #pasteBookCoverBtn{order:4}
 #add:has(#kind option[value="book"]:checked) #bookCoverTools #pasteCoverHelp{order:5}
@@ -466,9 +466,9 @@ setTimeout(sync,650);
  const observer=new MutationObserver(movePanel);
  observer.observe(tools,{childList:true,subtree:true});
  movePanel();
- const alternative=document.getElementById('findAlternateCoversBtn');
+ const alternative=document.getElementById('suggestBookCoversBtn');
  if(alternative&&alternative.parentElement!==document.getElementById('bookCoverTools')){
-  alternative.textContent='🔎 Cerca altre edizioni nei cataloghi';
+  alternative.textContent='🔎 Cerca altre edizioni nei cataloghi';alternative.style.marginTop='0';
   document.getElementById('bookCoverTools')?.append(alternative);
  }
  document.getElementById('findCoversBtn')?.addEventListener('click',()=>{dropdown.open=true});
