@@ -279,9 +279,6 @@ document.getElementById('newPlaceRemovePhoto').onclick=()=>{
  document.getElementById('newPlaceRemovePhoto').hidden=true;
 };
 document.getElementById('dlmSaveAndAddChild')?.addEventListener('click',()=>{const form=document.getElementById('placeForm');if(!form)return;form.requestSubmit();});
-const dlmInlinePlaceCreator=document.getElementById('dlmInlinePlaceCreator');
-document.getElementById('dlmOpenNewPlace')?.addEventListener('click',()=>{dlmInlinePlaceCreator.hidden=false;document.getElementById('dlmItemPlacePanel').hidden=true;document.getElementById('dlmItemPlaceButton').setAttribute('aria-expanded','false');dlmInlinePlaceCreator.scrollIntoView({behavior:'smooth',block:'nearest'})});
-document.getElementById('dlmCancelNewPlace')?.addEventListener('click',()=>{dlmInlinePlaceCreator.hidden=true});
 const dlmHierarchyLevels=document.getElementById('dlmHierarchyLevels');
 function dlmAddHierarchyLevel(){
  const count=dlmHierarchyLevels.children.length;
@@ -329,7 +326,7 @@ $('#placeForm').addEventListener('submit',async e=>{
    db.places.push(place);created.push(place);parent=place;
   }
   if(!save()){db.places=db.places.filter(p=>!created.includes(p));return}
-  renderPlaces();renderItems();document.getElementById('itemPlace').value=parent.id;document.getElementById('itemPlace').dispatchEvent(new Event('change',{bubbles:true}));if(typeof dlmItemPlaceRefresh==='function')dlmItemPlaceRefresh();if(typeof saveDraft==='function')saveDraft();dlmInlinePlaceCreator.hidden=true;
+  renderPlaces();renderItems();
   for(const place of created){if(window.familyCreatePlace){try{await window.familyCreatePlace(place)}catch(err){console.warn('Sincronizzazione posizione',err)}}}
   dlmHierarchyLevels.innerHTML='';dlmAddHierarchyLevel();dlmRefreshHierarchy();toast('Percorso creato con QR per ogni livello 💜');
  }catch(err){toast('Non è stato possibile salvare il percorso');console.error(err)}
