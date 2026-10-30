@@ -279,22 +279,58 @@ document.getElementById('newPlaceRemovePhoto').onclick=()=>{
  document.getElementById('newPlaceRemovePhoto').hidden=true;
 };
 document.getElementById('dlmSaveAndAddChild')?.addEventListener('click',()=>{const form=document.getElementById('placeForm');if(!form)return;form.requestSubmit();});
-$('#placeForm').addEventListener('submit',e=>{
+const dlmHierarchyLevels=document.getElementById('dlmHierarchyLevels');
+function dlmAddHierarchyLevel(){
+ const count=dlmHierarchyLevels.children.length;
+ if(count>=4){toast('Puoi creare fino a quattro sottolivelli per ambiente');return}
+ const row=document.createElement('div');row.className='dlm-hierarchy-level';
+ row.style.cssText='border:1.5px solid #e4cef2;border-radius:17px;padding:14px;margin:12px 0;background:#fcf8ff';
+ row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center"><strong style="color:#633b91">Livello '+(count+2)+'</strong><button type="button" class="secondary dlm-remove-level" style="width:auto;padding:7px 12px">✕</button></div><label>Nome personalizzato<input class="dlm-level-name" maxlength="80" placeholder="Es. Scaffale, Ripiano, Scatola" required></label><label style="display:block;margin-top:9px;color:#633b91;font-weight:700">📷 Foto di questo livello (facoltativa)<input class="dlm-level-photo" type="file" accept="image/*" style="margin-top:7px"></label><img class="dlm-level-preview" hidden alt="Anteprima foto" style="width:100%;max-height:180px;object-fit:contain;margin-top:8px;border-radius:12px">';
+ row.querySelector('.dlm-remove-level').onclick=()=>{row.remove();dlmRefreshHierarchy()};
+ row.querySelector('.dlm-level-name').addEventListener('input',dlmRefreshHierarchy);
+ row.querySelector('.dlm-level-photo').addEventListener('change',e=>{const img=row.querySelector('.dlm-level-preview');if(img.dataset.url)URL.revokeObjectURL(img.dataset.url);const file=e.target.files[0];img.hidden=!file;if(file){img.dataset.url=URL.createObjectURL(file);img.src=img.dataset.url}});
+ dlmHierarchyLevels.appendChild(row);dlmRefreshHierarchy();
+}
+function dlmRefreshHierarchy(){
+ [...dlmHierarchyLevels.children].forEach((row,i)=>row.querySelector('strong').textContent='Livello '+(i+2));
+ const names=[dlmPlacePresetSelect.value||'Ambiente',...[...dlmHierarchyLevels.querySelectorAll('.dlm-level-name')].map(x=>x.value.trim()||'Nuovo livello')];
+ document.getElementById('dlmHierarchyPath').textContent=names.join(' → ');
+ document.getElementById('dlmAddHierarchyLevel').hidden=dlmHierarchyLevels.children.length>=4;
+}
+document.getElementById('dlmAddHierarchyLevel').addEventListener('click',dlmAddHierarchyLevel);
+dlmPlacePresetSelect.addEventListener('change',dlmRefreshHierarchy);
+dlmAddHierarchyLevel();
+async function dlmHierarchyPhoto(file){
+ if(!file)return '';
+ const url=URL.createObjectURL(file);
+ try{const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+ const scale=Math.min(1,640/Math.max(img.width,img.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.65)}
+ finally{URL.revokeObjectURL(url)}
+}
+$('#placeForm').addEventListener('submit',async e=>{
  e.preventDefault();
- const place={id:crypto.randomUUID(),name:$('#placeName').value.trim(),parentId:$('#placeParent')?.value||null};
- if(dlmNewPlacePhoto)place.photo=dlmNewPlacePhoto;
- db.places.push(place);
- if(save()){
-  if(dlmNewPlacePhoto){
-   try{const photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}');photos[place.id]=dlmNewPlacePhoto;localStorage.setItem('dlm-casa-dolce-casa-location-photos-v37',JSON.stringify(photos))}
-   catch{toast('Posizione creata, ma la foto potrebbe non essere conservata sul dispositivo')}
+ const environment=dlmPlacePresetSelect.value;
+ if(!environment){toast('Scegli prima un ambiente con icona 3D');return}
+ const rows=[...dlmHierarchyLevels.children];
+ const names=rows.map(row=>row.querySelector('.dlm-level-name').value.trim());
+ if(!names.length||names.some(n=>!n)){toast('Inserisci il nome di ogni livello');return}
+ const button=e.target.querySelector('[type=submit]');button.disabled=true;
+ try{
+  let parent=db.places.find(p=>p.name.toLocaleLowerCase('it')===environment.toLocaleLowerCase('it')&&!p.parentId);
+  const created=[];
+  if(!parent){parent={id:crypto.randomUUID(),name:environment,parentId:null};db.places.push(parent);created.push(parent)}
+  for(let i=0;i<rows.length;i++){
+   const place={id:crypto.randomUUID(),name:names[i],parentId:parent.id};
+   const photo=await dlmHierarchyPhoto(rows[i].querySelector('.dlm-level-photo').files[0]);
+   if(photo){place.photo=photo;try{const photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}');photos[place.id]=photo;localStorage.setItem('dlm-casa-dolce-casa-location-photos-v37',JSON.stringify(photos))}catch{}}
+   db.places.push(place);created.push(place);parent=place;
   }
-  dlmNewPlacePhoto='';e.target.reset();dlmUpdatePlacePhotoContext();dlmPlacePresetPreview.hidden=true;dlmPlacePresetPreview.innerHTML='';
-  const preview=document.getElementById('newPlacePhotoPreview');preview.hidden=true;preview.removeAttribute('src');
-  document.getElementById('newPlaceRemovePhoto').hidden=true;
-  renderPlaces();renderItems();if($('#placeParent'))$('#placeParent').value=place.id;dlmUpdatePlacePhotoContext();toast('Posizione e QR creati! Ora puoi aggiungere una sottoposizione 💜');
-  if(window.familyCreatePlace)window.familyCreatePlace(place);
- }
+  if(!save()){db.places=db.places.filter(p=>!created.includes(p));return}
+  renderPlaces();renderItems();
+  for(const place of created){if(window.familyCreatePlace){try{await window.familyCreatePlace(place)}catch(err){console.warn('Sincronizzazione posizione',err)}}}
+  dlmHierarchyLevels.innerHTML='';dlmAddHierarchyLevel();dlmRefreshHierarchy();toast('Percorso creato con QR per ogni livello 💜');
+ }catch(err){toast('Non è stato possibile salvare il percorso');console.error(err)}
+ finally{button.disabled=false}
 });function fullPlacePath(id){
  if(!id)return 'Posizione non assegnata';
  const names=[],seen=new Set();let p=db.places.find(x=>x.id===id);
