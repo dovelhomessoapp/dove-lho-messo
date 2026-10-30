@@ -860,7 +860,7 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
   const sync=()=>{btn.hidden=document.getElementById('kind')?.value!=='book'};
   document.getElementById('kind')?.addEventListener('change',sync);
   document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>setTimeout(sync,0)));
-  btn.addEventListener('click',()=>{
+  btn.addEventListener('click',async()=>{
     const title=document.getElementById('itemName')?.value.trim()||'';
     const author=document.getElementById('author')?.value.trim()||'';
     const isbn=normISBN(document.getElementById('barcode')?.value||'');
@@ -874,8 +874,20 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
     // Non navigare mai la scheda dell'app: su iOS il ritorno può apparire bianco.
     try{sessionStorage.setItem('dlm-returning-from-cover-search','1')}catch(e){}
     coverPromptShown=false;
-    const opened=window.open(url,'_blank','noopener');
-    if(!opened)toast('Apri Google da Safari se il browser blocca la nuova finestra. La scheda del libro resta qui.');
+    // iOS standalone PWA: prova il foglio di condivisione per passare il link a Safari
+    // invece di aprire un browser interno che può rimanere bianco al ritorno.
+    const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+    if(standalone&&navigator.share){
+      try{
+        await navigator.share({title:'Cerca copertina su Google',url});
+        toast('Apri il collegamento in Safari. Poi torna all’app per incollare la copertina.');
+      }catch(error){
+        if(error?.name!=='AbortError')toast('Non è stato possibile condividere il collegamento. Riprova.');
+      }
+    }else{
+      const opened=window.open(url,'_blank','noopener,noreferrer');
+      if(!opened)toast('Il browser ha bloccato Google. Apri il collegamento da Safari.');
+    }
   });
   sync();
   let coverPromptShown=false;
