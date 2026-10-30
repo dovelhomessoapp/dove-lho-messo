@@ -237,6 +237,7 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
    let commands=['1 1 1 rg 0 0 595 842 re f','0.27 0.15 0.40 rg','BT /F1 15 Tf 24 810 Td (ETICHETTE QR - DOVE L HO MESSO) Tj ET'];
    const batch=labels.slice(start,start+perPage);
    batch.forEach((item,index)=>{
+    const globalIndex=start+index;
     const col=index%3,row=Math.floor(index/3);
     const x=16+col*188,y=773-row*123;
     commands.push('0.86 0.81 0.91 RG 0.7 w '+x+' '+(y-103)+' 181 115 re S');
@@ -244,8 +245,9 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
     const title=plain(item.name);const max=28;
     commands.push('BT /F1 9 Tf '+(x+8)+' '+(y-26)+' Td ('+esc(title.slice(0,max))+') Tj ET');
     if(title.length>max)commands.push('BT /F1 8 Tf '+(x+8)+' '+(y-37)+' Td ('+esc(title.slice(max,max*2))+') Tj ET');
+    if(includeImages&&imageData[globalIndex])commands.push('q 44 0 0 44 '+(x+9)+' '+(y-94)+' cm /Im'+globalIndex+' Do Q');
     const q=new LocalQRCode(-1,LocalQRError.M);q.addData(item.code);q.make();
-    const n=q.getModuleCount(),module=66/(n+8),qx=x+58,qy=y-100;
+    const n=q.getModuleCount(),module=70/(n+8),qx=x+91,qy=y-103;
     commands.push('0.27 0.15 0.40 rg');
     for(let yy=0;yy<n;yy++)for(let xx=0;xx<n;xx++)if(q.isDark(yy,xx)){
      commands.push((qx+(xx+4)*module).toFixed(3)+' '+(qy+(n+4-yy)*module).toFixed(3)+' '+(module+.03).toFixed(3)+' '+(module+.03).toFixed(3)+' re f');
@@ -256,10 +258,18 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
   }
   const objects=[null],add=body=>{objects.push(body);return objects.length-1};
   const catalog=add(''),rootPages=add(''),font=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const imageRefs={};
+  if(includeImages)for(let i=0;i<imageData.length;i++){
+   const bytes=imageData[i];if(!bytes)continue;
+   imageRefs[i]=add('<< /Type /XObject /Subtype /Image /Width 128 /Height 128 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+bytes.length+' >>\\nstream\\n'+bytes+'\\nendstream');
+  }
   const refs=[];
-  for(const content of pages){
+  for(let pageIndex=0;pageIndex<pages.length;pageIndex++){
+   const content=pages[pageIndex];
+   const xObjects=Object.keys(imageRefs).filter(i=>Math.floor(Number(i)/perPage)===pageIndex).map(i=>'/Im'+i+' '+imageRefs[i]+' 0 R').join(' ');
+
    const stream=add('<< /Length '+content.length+' >>\nstream\n'+content+'endstream');
-   const page=add('<< /Type /Page /Parent '+rootPages+' 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 '+font+' 0 R >> >> /Contents '+stream+' 0 R >>');
+   const page=add('<< /Type /Page /Parent '+rootPages+' 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 '+font+' 0 R >> /XObject << '+xObjects+' >> >> /Contents '+stream+' 0 R >>');
    refs.push(page+' 0 R');
   }
   objects[rootPages]='<< /Type /Pages /Kids ['+refs.join(' ')+'] /Count '+refs.length+' >>';
@@ -269,7 +279,8 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
   const xref=pdf.length;pdf+='xref\n0 '+objects.length+'\n0000000000 65535 f \n';
   for(let i=1;i<objects.length;i++)pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
   pdf+='trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';
-  const url=URL.createObjectURL(new Blob([pdf],{type:'application/pdf'}));
+  const pdfBytes=new Uint8Array(pdf.length);for(let j=0;j<pdf.length;j++)pdfBytes[j]=pdf.charCodeAt(j)&255;
+  const url=URL.createObjectURL(new Blob([pdfBytes],{type:'application/pdf'}));
   const a=document.createElement('a');a.href=url;a.download='etichette-qr-A4.pdf';document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),60000);
   toast('PDF A4 pronto: '+labels.length+' etichette 💜');
