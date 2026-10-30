@@ -9,8 +9,8 @@ const pantryContainer=$('pantryOnline');
 const shoppingSection=$('shoppingBox');
 const addSection=$('pantryAddDetails');
 const pantryList=$('pantryList');
-const refresh=$('pantryRefresh');
-if(pantryContainer&&shoppingSection&&addSection&&pantryList&&refresh){
+const pantryRefreshButton=$('pantryRefresh');
+if(pantryContainer&&shoppingSection&&addSection&&pantryList&&pantryRefreshButton){
  const inventoryTitle=pantryList.previousElementSibling;
  if(inventoryTitle)inventoryTitle.classList.add('pantry-inventory-heading');
  const zonesTitle=document.createElement('h3');
@@ -25,7 +25,7 @@ if(pantryContainer&&shoppingSection&&addSection&&pantryList&&refresh){
  const shopTitle=document.createElement('h3');
  shopTitle.className='pantry-section-heading';
  shopTitle.textContent='🛒 La spesa';
- refresh.after(shopTitle);
+ pantryRefreshButton.after(shopTitle);
  shopTitle.after(shoppingSection);
 }
 const status=$('pantryStatus'),online=$('pantryOnline');
