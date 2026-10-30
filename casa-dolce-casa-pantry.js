@@ -4,21 +4,29 @@ const base='https://ephdnunjudbwlgbxdadm.supabase.co',apikey='sb_publishable_3kc
 let lots=[],access=null,zone='tutte',busy=false;
 const $=id=>document.getElementById(id),escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 root.innerHTML='<div class="panel"><h2><img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> La mia dispensa</h2><p class="hint">Inventario condiviso della famiglia · avvisi 5 giorni prima della scadenza</p><p id="pantryStatus" role="status">Accedi alla tua Casa dolce casa per vedere la dispensa.</p><div id="pantryOnline" hidden><div style="margin:14px 0"><label>🔎 Cerca un alimento<input id="pantrySearch" type="search" placeholder="Es. latte, pasta, marca o ripiano" autocomplete="off"></label></div><div id="pantryOverview" class="pantry-overview" aria-label="Riepilogo dispensa"></div><div id="pantryAlerts"></div><details id="pantryAddDetails" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px">➕ Aggiungi alimento</summary><form id="pantryForm" style="margin-top:12px"><div class="panel" style="margin:12px 0;background:#faf5ff"><strong>📷 Riconosci dal codice a barre</strong><p class="hint">Cerca automaticamente nome, marca e formato. La scadenza va inserita dalla confezione.</p><label>Codice a barre<input id="pantryBarcode" inputmode="numeric" placeholder="Es. 8001234567890"></label><div class="row"><button type="button" class="secondary" id="pantryCamera">📷 Scansiona</button><button type="button" class="secondary" id="pantryLookup">🔎 Cerca prodotto</button></div><video id="pantryVideo" playsinline muted hidden style="width:100%;max-height:280px;border-radius:14px;margin-top:8px"></video><button type="button" class="secondary full" id="pantryStop" hidden>Chiudi fotocamera</button><label style="display:block;margin-top:10px">🖼️ Scegli una foto dalla galleria (oppure scattane una)<input id="pantryBarcodePhoto" type="file" accept="image/*" style="margin-top:6px"></label><p class="hint" id="pantryProductInfo" role="status"></p></div><label>Nome alimento<input id="pantryName" required maxlength="120" placeholder="Es. Yogurt alla fragola"></label><label>Marca<input id="pantryBrand" maxlength="80" placeholder="Es. Granarolo"></label><label>Formato<input id="pantryFormat" maxlength="50" placeholder="Es. 1 litro"></label><label>Dove si trova?<select id="pantryZone"><option value="dispensa">🥫 Dispensa</option><option value="frigo">🥬 Frigo</option><option value="freezer">🧊 Freezer</option></select></label><label>Ripiano o cassetto (facoltativo)<select id="pantryShelf"></select></label><button type="button" class="secondary full" id="pantryManageShelves">⚙️ Gestisci ripiani e cassetti</button><label>Quantità<input id="pantryQty" type="number" min="1" max="99999" value="1" required></label><label>Data di scadenza (facoltativa)<input id="pantryExpiry" type="date"></label><p class="hint">Se lo stesso prodotto ha scadenze diverse, aggiungilo una volta per ciascuna scadenza.</p><button class="primary full" type="submit">💜 Salva alimento</button></form></details><details id="shoppingBox" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px"><img class="pantry-real-3d-icon" src="assets/carrello-rosa-3d-corretto.png" alt=""> La mia lista della spesa <span id="shoppingCount"></span></summary><form id="shoppingForm" style="margin:12px 0"><label>Prodotto da comprare<input id="shoppingName" maxlength="120" required placeholder="Es. Latte · Parmalat · 1 litro"></label><label>Quantità<input id="shoppingQty" type="number" min="1" max="99999" value="1" required></label><button type="submit" class="primary full">➕ Aggiungi alla lista</button></form><p id="shoppingStatus" class="hint"></p><div id="shoppingList"></div><button type="button" class="secondary full" id="shoppingRefresh">↻ Aggiorna lista</button></details><h3><img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> Alimenti in casa</h3><div id="pantryList"></div><button type="button" class="secondary full" id="pantryRefresh">↻ Aggiorna dispensa</button></div></div>';
-// Keep the pantry sections in a natural reading order without changing their event handlers.
+// Compact pantry layout: existing controls and IDs are retained.
 const pantryContainer=$('pantryOnline');
 const shoppingSection=$('shoppingBox');
-const pantryRefreshButton=$('pantryRefresh');
-if(pantryContainer&&shoppingSection&&pantryRefreshButton){
- const shoppingHeading=document.createElement('h3');
- shoppingHeading.className='pantry-section-heading';
- shoppingHeading.textContent='🛒 La spesa';
- pantryRefreshButton.after(shoppingHeading);
- shoppingHeading.after(shoppingSection);
- const addHeading=document.createElement('h3');
- addHeading.className='pantry-section-heading';
- addHeading.textContent='➕ Gestisci gli alimenti';
- const addSection=$('pantryAddDetails');
- if(addSection){shoppingHeading.before(addHeading);addHeading.after(addSection)}
+const addSection=$('pantryAddDetails');
+const pantryList=$('pantryList');
+const refresh=$('pantryRefresh');
+if(pantryContainer&&shoppingSection&&addSection&&pantryList&&refresh){
+ const inventoryTitle=pantryList.previousElementSibling;
+ if(inventoryTitle)inventoryTitle.classList.add('pantry-inventory-heading');
+ const zonesTitle=document.createElement('h3');
+ zonesTitle.className='pantry-section-heading';
+ zonesTitle.textContent='🏠 Dove sono gli alimenti';
+ if(inventoryTitle)inventoryTitle.replaceWith(zonesTitle);
+ const manageTitle=document.createElement('h3');
+ manageTitle.className='pantry-section-heading';
+ manageTitle.textContent='➕ Aggiungi e gestisci';
+ zonesTitle.before(manageTitle);
+ manageTitle.after(addSection);
+ const shopTitle=document.createElement('h3');
+ shopTitle.className='pantry-section-heading';
+ shopTitle.textContent='🛒 La spesa';
+ refresh.after(shopTitle);
+ shopTitle.after(shoppingSection);
 }
 const status=$('pantryStatus'),online=$('pantryOnline');
 const pantryOverviewStyle=document.createElement('style');
@@ -261,7 +269,7 @@ function render(){
  }).join('');
  $('pantryList').innerHTML=(q?'<p class="hint">🔎 '+filtered.length+' risultati per «'+escape(q)+'»</p>':'')+
  '<details class="pantry-group pantry-priority" '+(q?'open':'')+' style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0"><img class="pantry-real-3d-icon" src="assets/cibi-in-scadenza-3d.png" alt=""> Aperti e da consumare prima ('+priority.length+')</summary><div style="margin-top:10px">'+(priority.length?cards(priority):'<p class="hint">Nessun alimento aperto o in scadenza'+(q?' tra i risultati':'')+'.</p>')+'</div></details>'+
- '<h3 style="margin-top:22px">📦 Tutti gli altri alimenti</h3>'+accordions;
+ '<div class="pantry-zone-tiles">'+accordions+'</div>';
 }
 
 async function editPantryLot(l){
