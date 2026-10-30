@@ -873,10 +873,37 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
     const url='https://www.google.com/search?udm=2&q='+encodeURIComponent(terms);
     // Non navigare mai la scheda dell'app: su iOS il ritorno può apparire bianco.
     try{sessionStorage.setItem('dlm-returning-from-cover-search','1')}catch(e){}
+    coverPromptShown=false;
     const opened=window.open(url,'_blank','noopener');
     if(!opened)toast('Apri Google da Safari se il browser blocca la nuova finestra. La scheda del libro resta qui.');
   });
   sync();
+  let coverPromptShown=false;
+  function promptCoverAfterReturn(){
+    let pending=false;
+    try{pending=sessionStorage.getItem('dlm-returning-from-cover-search')==='1'}catch(e){}
+    if(!pending||coverPromptShown||document.visibilityState==='hidden')return;
+    if(document.getElementById('kind')?.value!=='book')return;
+    coverPromptShown=true;
+    try{sessionStorage.removeItem('dlm-returning-from-cover-search')}catch(e){}
+    page('add');
+    const dropdown=document.getElementById('bookCoverDropdown');
+    if(dropdown)dropdown.open=true;
+    updateKind();
+    let notice=document.getElementById('dlmCoverReturnPrompt');
+    if(!notice){
+      notice=document.createElement('div');
+      notice.id='dlmCoverReturnPrompt';
+      notice.style.cssText='margin:12px 0;padding:15px;border:1px solid #dfc7f0;border-radius:16px;background:#f8edff;color:#62348c;';
+      notice.innerHTML='<strong>💜 Hai copiato la copertina?</strong><p style="margin:8px 0 12px">Se hai scelto «Copia immagine» su Google, tocca qui per inserirla nel libro.</p><button type="button" id="dlmCoverReturnPaste" style="width:100%;padding:12px;border-radius:30px;background:#ead5fa;color:#61318b;font-weight:700;border:1px solid #d8b7ed">📋 Incolla la copertina copiata</button><button type="button" id="dlmCoverReturnDismiss" style="margin-top:8px;background:transparent;border:0;color:#744b91;text-decoration:underline">Non ora</button>';
+      document.getElementById('bookCoverTools')?.prepend(notice);
+      notice.querySelector('#dlmCoverReturnPaste')?.addEventListener('click',()=>{notice.remove();document.getElementById('pasteBookCoverBtn')?.click()});
+      notice.querySelector('#dlmCoverReturnDismiss')?.addEventListener('click',()=>notice.remove());
+    }
+    notice.scrollIntoView({block:'center',behavior:'smooth'});
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')promptCoverAfterReturn()});
+  window.addEventListener('focus',promptCoverAfterReturn);
   window.addEventListener('pageshow',()=>{
     let returning=false;
     try{returning=sessionStorage.getItem('dlm-returning-from-cover-search')==='1';sessionStorage.removeItem('dlm-returning-from-cover-search')}catch(e){}
