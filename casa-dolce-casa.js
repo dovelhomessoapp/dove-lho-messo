@@ -100,9 +100,17 @@ function renderItems(){
  items.forEach(i=>{const category=fullPlacePath(i.place);if(!groups.has(category))groups.set(category,[]);groups.get(category).push(i)});
  const list=$('#itemList');
  const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(d=>d.dataset.category));
- const groupHtml=Array.from(groups.entries()).sort((a,b)=>a[0].localeCompare(b[0],'it')).map(([category,records])=>{
+ let locationPhotos={};
+ try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
+ const palettes=['lavender','rose','peach','mint','sky'];
+ const groupHtml=Array.from(groups.entries()).sort((a,b)=>a[0].localeCompare(b[0],'it')).map(([category,records],index)=>{
   const open=q||previouslyOpen.has(category)||groups.size===1?' open':'';
-  return `<details class="dlm-item-group" data-category="${safe(category)}"${open}><summary>📍 ${safe(category)} <span class="dlm-group-count">${records.length}</span></summary><div class="entries">${records.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')}</div></details>`;
+  const place=db.places.find(p=>p.id===records[0]?.place);
+  const image=place&&(locationPhotos[place.id]||place.photo);
+  const label=place?.name||category;
+  const subtitle=place?.description||place?.desc||place?.notes||(place?.parentId?'All’interno di '+fullPlacePath(place.parentId):'Esplora gli oggetti conservati qui');
+  const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">`:'<span aria-hidden="true">🏡</span>';
+  return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${records.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')}</div></details>`;
  }).join('');
  list.innerHTML=groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>';
  const books=db.items.filter(i=>i.kind==='book');
