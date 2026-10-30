@@ -314,6 +314,11 @@ document.addEventListener('DOMContentLoaded',()=>{
 #pantry #pantryStockAlerts>.panel .hint{margin:6px 0 0!important}
 #pantry #pantryAddDetails{background:linear-gradient(110deg,#f1e4ff,#f9edff)!important;border:1px solid #dfc5f4!important;box-shadow:0 5px 13px #8451aa12!important}
 #pantry #pantryAddDetails>summary{font-size:17px!important;text-align:center;padding:13px 5px!important}
+</style><style id="dlm-pantry-lot-actions-fix">
+#pantry .pantry-lot-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important;align-items:stretch!important;width:100%;box-sizing:border-box}
+#pantry .pantry-lot-actions>.pantry-lot-quantity{grid-column:1/-1;display:block;width:100%;font-weight:600;overflow-wrap:normal;word-break:normal}
+#pantry .pantry-lot-actions>button{display:flex!important;align-items:center;justify-content:center;width:100%!important;min-width:0!important;max-width:100%!important;min-height:48px!important;margin:0!important;padding:10px 8px!important;box-sizing:border-box!important;text-align:center!important;white-space:normal!important;overflow-wrap:normal!important;word-break:normal!important;line-height:1.25!important;font-size:14px!important}
+@media(max-width:350px){#pantry .pantry-lot-actions{grid-template-columns:1fr!important}}
 </style></head><body><svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden" xmlns="http://www.w3.org/2000/svg"><defs>
 <linearGradient id="cdBox" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffdfa8"/><stop offset=".65" stop-color="#d6a36f"/><stop offset="1" stop-color="#b77c50"/></linearGradient>
 <linearGradient id="cdPink" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff1f6"/><stop offset=".5" stop-color="#ff87b3"/><stop offset="1" stop-color="#d74478"/></linearGradient>
