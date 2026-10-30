@@ -768,9 +768,26 @@ let dlmBookView='grid';
 function dlmRenderBooks(){
  const holder=document.getElementById('bookList');if(!holder)return;
  const q=(document.getElementById('bookFilter')?.value||'').toLocaleLowerCase().trim();
- const books=db.items.filter(i=>i.kind==='book'&&[i.name,i.author,i.barcode].some(s=>String(s||'').toLocaleLowerCase().includes(q))).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+ const books=db.items.filter(i=>i.kind==='book'&&[i.name,i.author,i.barcode,i.category].some(s=>String(s||'').toLocaleLowerCase().includes(q))).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+ const previouslyOpen=new Set([...holder.querySelectorAll('details[open]')].map(el=>el.dataset.bookCategory));
+ const categories=new Map();
+ for(const book of books){
+  const category=String(book.category||'').trim()||'Da classificare';
+  if(!categories.has(category))categories.set(category,[]);
+  categories.get(category).push(book);
+ }
+ const palettes=['lavender','rose','peach','mint','sky'];
+ const icons=[['narrativa','📖'],['romanzo','📖'],['cucina','👩‍🍳'],['ricette','👩‍🍳'],['bambin','🧸'],['ragazz','🧸'],['fantasy','🪄'],['gialli','🔎'],['manual','🛠️'],['scienza','🔬'],['storia','🏛️'],['viaggi','🧳'],['fumett','💬']];
+ const tile=i=>`<button type="button" class="book-tile" onclick="showItem('${i.id}')"><span class="book-cover">${i.photo?`<img loading="lazy" src="${safe(i.photo)}" alt="Copertina di ${safe(i.name)}" onerror="this.replaceWith(document.createTextNode('📖'))">`:'📖'}</span><span class="book-text"><strong>${safe(i.name)}</strong><small>${safe(i.author||'Autore da inserire')}</small></span></button>`;
  holder.classList.toggle('book-list',dlmBookView==='list');
- holder.innerHTML=books.map(i=>`<button type="button" class="book-tile" onclick="showItem('${i.id}')"><span class="book-cover">${i.photo?`<img loading="lazy" src="${safe(i.photo)}" alt="Copertina di ${safe(i.name)}" onerror="this.replaceWith(document.createTextNode('📖'))">`:'📖'}</span><span class="book-text"><strong>${safe(i.name)}</strong><small>${safe(i.author||'Autore da inserire')}</small></span></button>`).join('')||'<div class="empty">Non ci sono libri da mostrare 💜</div>';
+ holder.classList.add('dlm-book-categories');
+ holder.innerHTML=[...categories.entries()].sort((a,b)=>a[0].localeCompare(b[0],'it')).map(([category,records],index)=>{
+  const icon=icons.find(([key])=>category.toLocaleLowerCase().includes(key))?.[1]||'📚';
+  const picture=records.find(book=>book.photo)?.photo;
+  const photo=picture?`<img src="${safe(picture)}" alt="Copertina di un libro della categoria ${safe(category)}" loading="lazy">`:`<span aria-hidden="true">${icon}</span>`;
+  const open=q||previouslyOpen.has(category)||categories.size===1?' open':'';
+  return `<details class="dlm-location-card dlm-location-${palettes[index%palettes.length]} dlm-book-category" data-book-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${photo}</span><span class="dlm-location-info"><strong>${safe(category)}</strong><small>Esplora i libri di questa tipologia</small><span class="dlm-location-total">${records.length} ${records.length===1?'libro':'libri'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="dlm-book-category-items">${records.map(tile).join('')}</div></details>`;
+ }).join('')||'<div class="empty">Non ci sono libri da mostrare 💜</div>';
  document.getElementById('booksGridBtn')?.setAttribute('aria-pressed',String(dlmBookView==='grid'));
  document.getElementById('booksListBtn')?.setAttribute('aria-pressed',String(dlmBookView==='list'));
 }
