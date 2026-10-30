@@ -871,10 +871,24 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
     const terms=[isbn,title,author,publisher,'copertina libro'].filter(Boolean).join(' ');
     // Azione diretta da un tocco dell'utente: funziona anche su Safari iOS.
     const url='https://www.google.com/search?udm=2&q='+encodeURIComponent(terms);
-    const opened=window.open(url,'_blank');
-    if(!opened)window.location.assign(url);
+    // Non navigare mai la scheda dell'app: su iOS il ritorno può apparire bianco.
+    try{sessionStorage.setItem('dlm-returning-from-cover-search','1')}catch(e){}
+    const opened=window.open(url,'_blank','noopener');
+    if(!opened)toast('Apri Google da Safari se il browser blocca la nuova finestra. La scheda del libro resta qui.');
   });
   sync();
+  window.addEventListener('pageshow',()=>{
+    let returning=false;
+    try{returning=sessionStorage.getItem('dlm-returning-from-cover-search')==='1';sessionStorage.removeItem('dlm-returning-from-cover-search')}catch(e){}
+    if(!returning)return;
+    if(document.getElementById('kind')?.value!=='book')restoreDraft(false);
+    if(document.getElementById('kind')?.value==='book'){
+      page('add');
+      const dropdown=document.getElementById('bookCoverDropdown');
+      if(dropdown)dropdown.open=true;
+      updateKind();
+    }
+  });
 })();
 
 
