@@ -889,10 +889,10 @@ async function dlmCheckUpdate(showFeedback=false){
     const registration=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
     await registration.update();
     // Aggiorna anche i documenti principali senza eliminare le cache offline.
-    const resp=await fetch('./index.html?update='+Date.now(),{cache:'no-store'});
+    const resp=await fetch('./casa-dolce-casa.html?update='+Date.now(),{cache:'no-store'});
     if(!resp.ok)throw Error('Non raggiungibile');
     const html=await resp.text();
-    const match=html.match(/app\.js\?v=([\w.-]+)/);
+    const match=html.match(/casa-dolce-casa\.js\?v=([\w.-]+)/);
     const latest=match?match[1]:null;
     if(latest && latest!== 'v'+DLM_VERSION && showFeedback){
       if(showFeedback)toast('Nuova versione trovata: la carico…');
