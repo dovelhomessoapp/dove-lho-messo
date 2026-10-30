@@ -181,6 +181,10 @@ window.openQRSelection=()=>{
    label.append(check,name);list.appendChild(label);
   }
  }
+ const imageOption=document.createElement('label');
+ imageOption.style.cssText='display:flex;align-items:center;gap:9px;margin:10px 0;padding:9px;border-radius:12px;background:#f6effb';
+ imageOption.innerHTML='<input type="checkbox" id="dlmQRIncludeImages" checked style="width:20px;height:20px;accent-color:#8c5bb6"><span>Includi foto e icone nelle etichette</span>';
+ list.parentNode.insertBefore(imageOption,overlay.querySelector('#dlmQRCount'));
  const choices=()=>[...overlay.querySelectorAll('.dlm-qr-choice')];
  function refresh(){const n=choices().filter(c=>c.checked).length;overlay.querySelector('#dlmQRCount').textContent=n+' di '+all.length+' QR selezionati';overlay.querySelector('#dlmQRGenerate').disabled=n===0}
  overlay.querySelector('#dlmQRAll').onclick=()=>{choices().forEach(c=>c.checked=true);refresh()};
@@ -189,11 +193,12 @@ window.openQRSelection=()=>{
  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
  overlay.querySelector('#dlmQRGenerate').onclick=()=>{
   const ids=new Set(choices().filter(c=>c.checked).map(c=>c.value));
-  overlay.remove();window.downloadAllQRA4(ids);
+  const includeImages=overlay.querySelector('#dlmQRIncludeImages').checked;
+  overlay.remove();window.downloadAllQRA4(ids,includeImages);
  };
  refresh();
 };
-window.downloadAllQRA4=(selectedIds)=>{
+window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
  const labels=[
   ...db.places.filter(p=>!selectedIds||selectedIds.has('P:'+p.id)).map(p=>({name:placePath(p.id),code:qrData(p.id),kind:'POSIZIONE'})),
   ...db.items.filter(i=>!selectedIds||selectedIds.has('I:'+i.id)).map(i=>({name:i.name,code:'DLM-I-'+i.id,kind:i.kind==='book'?'LIBRO':'OGGETTO'}))
@@ -202,6 +207,31 @@ window.downloadAllQRA4=(selectedIds)=>{
  try{
   const plain=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7e]/g,'?');
   const esc=v=>plain(v).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
+  const imageSources=labels.map(item=>{
+   const id=item.code.slice(6);
+   const p=db.places.find(x=>x.id===id);
+   const i=db.items.find(x=>x.id===id);
+   if(i)return i.photo||i.cover||'';
+   if(!p)return '';
+   let photos={};try{photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
+   const photo=photos[p.id]||p.photo;
+   if(photo)return photo;
+   const preset=dlmPlacePresetMatch(p.name,p.parentId);
+   return preset?'assets/icone-posizioni/'+encodeURIComponent(preset[0])+'.png':'';
+  });
+  const imageData=await Promise.all(imageSources.map(async src=>{
+   if(!includeImages||!src)return null;
+   try{
+    const img=new Image();img.crossOrigin='anonymous';
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=src});
+    const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,128,128);
+    const scale=Math.min(128/img.width,128/img.height);
+    ctx.drawImage(img,(128-img.width*scale)/2,(128-img.height*scale)/2,img.width*scale,img.height*scale);
+    const bytes=atob(canvas.toDataURL('image/jpeg',.78).split(',')[1]);
+    return bytes;
+   }catch{return null}
+  }));
   const pages=[];const perPage=18;
   for(let start=0;start<labels.length;start+=perPage){
    let commands=['1 1 1 rg 0 0 595 842 re f','0.27 0.15 0.40 rg','BT /F1 15 Tf 24 810 Td (ETICHETTE QR - DOVE L HO MESSO) Tj ET'];
