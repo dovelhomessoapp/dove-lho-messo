@@ -30,14 +30,20 @@ window.openSearchedPlace=function(id){
  if(target){target.scrollIntoView({behavior:'smooth',block:'center'});toast('Posizione trovata 💜')}
 };
 const dlmPlacePresets=[["Cucina","🍳"],["Camera matrimoniale","🛏️"],["Cameretta","🧸"],["Bagno","🛁"],["Salotto","🛋️"],["Ingresso","🚪"],["Corridoio","🚶"],["Ripostiglio","🧹"],["Lavanderia","🧺"],["Garage","🚗"],["Cantina","🍷"],["Soffitta","📦"],["Studio","💻"],["Balcone","🪴"],["Giardino","🌷"]];
-function dlmPlacePresetIcon(name,parentId){
- const raw=String(name||'').toLocaleLowerCase('it');
+function dlmPlacePresetMatch(name,parentId){
+ const raw=String(name||'').trim().toLocaleLowerCase('it');
  const match=dlmPlacePresets.find(([label])=>raw===label.toLocaleLowerCase('it')||raw.startsWith(label.toLocaleLowerCase('it')+' '));
- if(match)return match[1];
- if(parentId){const parent=db.places.find(p=>p.id===parentId);if(parent&&parent.name!==name)return dlmPlacePresetIcon(parent.name,parent.parentId)}
- return '🏡';
+ if(match)return match;
+ if(parentId){const parent=db.places.find(p=>p.id===parentId);if(parent&&parent.name!==name)return dlmPlacePresetMatch(parent.name,parent.parentId)}
+ return null;
 }
-function dlmPlaceIconHtml(name,parentId){return '<span class="dlm-place-preset-icon" aria-hidden="true">'+dlmPlacePresetIcon(name,parentId)+'</span>'}
+function dlmPlacePresetIcon(name,parentId){return dlmPlacePresetMatch(name,parentId)?.[1]||'🏡'}
+function dlmPlaceIconHtml(name,parentId){
+ const preset=dlmPlacePresetMatch(name,parentId);
+ if(!preset)return '<span class="dlm-place-preset-icon" aria-hidden="true">🏡</span>';
+ const src='assets/icone-posizioni/'+encodeURIComponent(preset[0])+'.png';
+ return '<img class="dlm-place-preset-image" src="'+src+'" alt="" loading="lazy" onerror="this.onerror=null;this.replaceWith(document.createTextNode('+JSON.stringify('🏡')+'))">';
+}
 function renderPlaces(){let locationPhotos={};try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{};for(const p of db.places){if(locationPhotos[p.id])p.photo=locationPhotos[p.id]}const ordered=[];const seen=new Set();function visit(parent,depth){for(const p of db.places.filter(x=>(x.parentId||'')===parent)){if(seen.has(p.id))continue;seen.add(p.id);ordered.push({p,depth});visit(p.id,depth+1)}}visit('',0);for(const p of db.places){if(!seen.has(p.id)){seen.add(p.id);ordered.push({p,depth:0});visit(p.id,1)}}const previousItemPlace=$('#itemPlace').value;const previousParent=$('#placeParent')?.value||'';const openPlaces=new Set([...document.querySelectorAll('#placeList details[data-place-id][open]')].map(el=>el.dataset.placeId));
 const openDetails=new Set([...document.querySelectorAll('#placeList details[data-info-id][open]')].map(el=>el.dataset.infoId));
 function renderNode(p,level,visited){
