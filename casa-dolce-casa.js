@@ -88,7 +88,7 @@ function renderNode(p,level,visited){
  const title='<span style="display:flex;align-items:center;gap:12px"><span style="width:58px;height:58px;border-radius:14px;background:#fff8;display:grid;place-items:center;overflow:hidden;flex-shrink:0">'+(p.photo?'<img src="'+safe(p.photo)+'" alt="" style="width:100%;height:100%;object-fit:cover">':dlmPlaceIconHtml(p.name,p.parentId))+'</span><span style="display:flex;flex-direction:column;gap:4px;min-width:0"><strong style="font-weight:750;overflow-wrap:anywhere">'+safe(p.name)+'</strong><small style="font-size:.82em;opacity:.78">'+count+' oggetti · Tocca per vedere gli oggetti</small></span></span>';
  const nested=children.map(child=>renderNode(child,level+1,visited)).join('');
 
- const info='<div class="dlm-place-inventory-list">'+(db.items.filter(i=>i.place===p.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it')).map(i=>'<button type="button" class="secondary" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin:7px 0;padding:9px" onclick="showItem(\''+i.id+'\')">'+(i.photo?'<img src="'+safe(i.photo)+'" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:10px">':'<span style="font-size:24px">'+(i.kind==='book'?'📖':'📦')+'</span>')+'<span style="flex:1;overflow-wrap:anywhere">'+safe(i.name)+'</span><span>›</span></button>').join('')||'<p class="hint">Nessun oggetto in questa posizione.</p>')+'</div>';
+ const info='<div class="dlm-place-inventory-list"><button type="button" class="secondary full" style="margin:8px 0 12px;font-weight:750" onclick="createChildPlace(\''+p.id+'\')">＋ Crea sottoposizione qui</button>'+(db.items.filter(i=>i.place===p.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it')).map(i=>'<button type="button" class="secondary" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin:7px 0;padding:9px" onclick="showItem(\''+i.id+'\')">'+(i.photo?'<img src="'+safe(i.photo)+'" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:10px">':'<span style="font-size:24px">'+(i.kind==='book'?'📖':'📦')+'</span>')+'<span style="flex:1;overflow-wrap:anywhere">'+safe(i.name)+'</span><span>›</span></button>').join('')||'<p class="hint">Nessun oggetto in questa posizione.</p>')+'</div>';
 
  return '<details data-place-id="'+p.id+'" '+(openPlaces.has(p.id)?'open':'')+' style="margin:10px 0;max-width:100%;box-sizing:border-box"><summary style="cursor:pointer;padding:14px 12px;background:#f1e7fb;border-radius:16px;color:#43246c;overflow-wrap:anywhere">'+title+'</summary><div style="padding:6px 0 6px 12px;border-left:2px solid #d9b7ed;margin-left:9px">'+nested+info+'</div></details>';
 }
@@ -120,6 +120,24 @@ $('#itemPlace').innerHTML='<option value="">Da assegnare</option>'+ordered.map((
  }
  place.name=cleaned;place.parentId=parentId;
  if(save()){renderPlaces();renderItems();toast('Posizione modificata 💜')}
+};
+window.createChildPlace=id=>{
+ const parent=db.places.find(p=>p.id===id);if(!parent)return;
+ page('places');
+ const select=document.getElementById('placeParent');
+ if(select)select.value=id;
+ const name=document.getElementById('placeName');
+ if(name){name.value='';name.placeholder='Es. Ripiano, Scatola, Contenitore';}
+ const preset=document.getElementById('dlmPlacePresetSelect');if(preset)preset.value='';
+ const picker=document.getElementById('dlmPlacePickerSelected');if(picker)picker.textContent='Scegli un ambiente con icona 3D';
+ const preview=document.getElementById('dlmPlacePresetPreview');if(preview){preview.hidden=true;preview.innerHTML='';}
+ dlmNewPlacePhoto='';
+ const photoPreview=document.getElementById('newPlacePhotoPreview');if(photoPreview){photoPreview.hidden=true;photoPreview.removeAttribute('src');}
+ const remove=document.getElementById('newPlaceRemovePhoto');if(remove)remove.hidden=true;
+ if(typeof dlmUpdatePlacePhotoContext==='function')dlmUpdatePlacePhotoContext();
+ document.getElementById('placeForm')?.scrollIntoView({behavior:'smooth',block:'start'});
+ if(name)setTimeout(()=>name.focus({preventScroll:true}),350);
+ toast('Nuova sottoposizione in '+placePath(id)+' 💜');
 };
 window.choosePlacePhoto=id=>{const picker=document.getElementById('placePhotoPicker');picker.dataset.placeId=id;picker.value='';picker.click()};
 document.getElementById('placePhotoPicker').addEventListener('change',async e=>{
@@ -273,7 +291,7 @@ $('#placeForm').addEventListener('submit',e=>{
   dlmNewPlacePhoto='';e.target.reset();dlmUpdatePlacePhotoContext();dlmPlacePresetPreview.hidden=true;dlmPlacePresetPreview.innerHTML='';
   const preview=document.getElementById('newPlacePhotoPreview');preview.hidden=true;preview.removeAttribute('src');
   document.getElementById('newPlaceRemovePhoto').hidden=true;
-  renderPlaces();renderItems();toast('Posizione e QR creati! 💜');
+  renderPlaces();renderItems();if($('#placeParent'))$('#placeParent').value=place.id;dlmUpdatePlacePhotoContext();toast('Posizione e QR creati! Ora puoi aggiungere una sottoposizione 💜');
   if(window.familyCreatePlace)window.familyCreatePlace(place);
  }
 });function fullPlacePath(id){
