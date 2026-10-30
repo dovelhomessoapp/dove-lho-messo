@@ -125,7 +125,47 @@ window.printQR=id=>{
   }
  };
 };
-window.deletePlace=async id=>{if(db.places.some(p=>p.parentId===id)){toast('Sposta prima le posizioni contenute al suo interno.');return}if(!confirm('Eliminare la posizione? Gli oggetti resteranno catalogati, senza posizione.'))return;if(window.familyDeletePlace){const ok=await window.familyDeletePlace(id);if(!ok)return}db.places=db.places.filter(p=>p.id!==id);db.items.forEach(i=>{if(i.place===id)i.place=''});save();renderPlaces();renderItems();toast('Posizione eliminata')};$('#placeForm').addEventListener('submit',e=>{e.preventDefault();const place={id:crypto.randomUUID(),name:$('#placeName').value.trim(),parentId:$('#placeParent')?.value||null};db.places.push(place);if(save()){e.target.reset();renderPlaces();toast('Posizione e QR creati!');if(window.familyCreatePlace)window.familyCreatePlace(place)}});function fullPlacePath(id){
+window.deletePlace=async id=>{if(db.places.some(p=>p.parentId===id)){toast('Sposta prima le posizioni contenute al suo interno.');return}if(!confirm('Eliminare la posizione? Gli oggetti resteranno catalogati, senza posizione.'))return;if(window.familyDeletePlace){const ok=await window.familyDeletePlace(id);if(!ok)return}db.places=db.places.filter(p=>p.id!==id);db.items.forEach(i=>{if(i.place===id)i.place=''});save();renderPlaces();renderItems();toast('Posizione eliminata')};let dlmNewPlacePhoto='';
+document.getElementById('newPlaceCameraBtn').onclick=()=>document.getElementById('newPlaceCamera').click();
+document.getElementById('newPlaceGalleryBtn').onclick=()=>document.getElementById('newPlaceGallery').click();
+for(const id of ['newPlaceCamera','newPlaceGallery']){
+ document.getElementById(id).addEventListener('change',async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  let url='';
+  try{
+   url=URL.createObjectURL(file);const image=new Image();
+   await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url});
+   const scale=Math.min(1,640/Math.max(image.width,image.height));
+   const canvas=document.createElement('canvas');
+   canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+   canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+   dlmNewPlacePhoto=canvas.toDataURL('image/jpeg',.65);
+   const preview=document.getElementById('newPlacePhotoPreview');preview.src=dlmNewPlacePhoto;preview.hidden=false;
+   document.getElementById('newPlaceRemovePhoto').hidden=false;
+  }catch{toast('Impossibile leggere la fotografia')}finally{if(url)URL.revokeObjectURL(url)}
+ });
+}
+document.getElementById('newPlaceRemovePhoto').onclick=()=>{
+ dlmNewPlacePhoto='';const preview=document.getElementById('newPlacePhotoPreview');preview.hidden=true;preview.removeAttribute('src');
+ document.getElementById('newPlaceRemovePhoto').hidden=true;
+};
+$('#placeForm').addEventListener('submit',e=>{
+ e.preventDefault();
+ const place={id:crypto.randomUUID(),name:$('#placeName').value.trim(),parentId:$('#placeParent')?.value||null};
+ if(dlmNewPlacePhoto)place.photo=dlmNewPlacePhoto;
+ db.places.push(place);
+ if(save()){
+  if(dlmNewPlacePhoto){
+   try{const photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}');photos[place.id]=dlmNewPlacePhoto;localStorage.setItem('dlm-casa-dolce-casa-location-photos-v37',JSON.stringify(photos))}
+   catch{toast('Posizione creata, ma la foto potrebbe non essere conservata sul dispositivo')}
+  }
+  dlmNewPlacePhoto='';e.target.reset();
+  const preview=document.getElementById('newPlacePhotoPreview');preview.hidden=true;preview.removeAttribute('src');
+  document.getElementById('newPlaceRemovePhoto').hidden=true;
+  renderPlaces();renderItems();toast('Posizione e QR creati! 💜');
+  if(window.familyCreatePlace)window.familyCreatePlace(place);
+ }
+});function fullPlacePath(id){
  if(!id)return 'Posizione non assegnata';
  const names=[],seen=new Set();let p=db.places.find(x=>x.id===id);
  while(p&&!seen.has(p.id)){seen.add(p.id);names.unshift(p.name);p=db.places.find(x=>x.id===p.parentId)}
