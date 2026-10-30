@@ -90,7 +90,42 @@ document.getElementById('placePhotoPicker').addEventListener('change',async e=>{
   }finally{URL.revokeObjectURL(url)}
  }catch{toast('Non riesco a leggere questa fotografia')}
 });
-window.printQR=id=>{const p=db.places.find(x=>x.id===id);if(!p)return;let w=window.open('','_blank');if(!w){toast('Consenti le finestre popup per stampare');return}w.document.write(`<html><meta charset="utf-8"><title>Etichetta</title><body style="text-align:center;font-family:Arial"><h2>${safe(p.name)}</h2>${qrSVG(qrData(id))}<p>${qrData(id)}</p><script>setTimeout(()=>print(),250)<\/script></body></html>`);w.document.close()};window.deletePlace=async id=>{if(db.places.some(p=>p.parentId===id)){toast('Sposta prima le posizioni contenute al suo interno.');return}if(!confirm('Eliminare la posizione? Gli oggetti resteranno catalogati, senza posizione.'))return;if(window.familyDeletePlace){const ok=await window.familyDeletePlace(id);if(!ok)return}db.places=db.places.filter(p=>p.id!==id);db.items.forEach(i=>{if(i.place===id)i.place=''});save();renderPlaces();renderItems();toast('Posizione eliminata')};$('#placeForm').addEventListener('submit',e=>{e.preventDefault();const place={id:crypto.randomUUID(),name:$('#placeName').value.trim(),parentId:$('#placeParent')?.value||null};db.places.push(place);if(save()){e.target.reset();renderPlaces();toast('Posizione e QR creati!');if(window.familyCreatePlace)window.familyCreatePlace(place)}});function fullPlacePath(id){
+window.printQR=id=>{
+ const p=db.places.find(x=>x.id===id);if(!p)return;
+ const w=window.open('','_blank');
+ if(!w){toast('Consenti le finestre popup per aprire il QR');return}
+ const svg=qrSVG(qrData(id));
+ const label=safe(p.name);
+ const code=qrData(id);
+ const doc='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QR - '+label+'</title><style>body{font-family:system-ui,-apple-system,Arial;text-align:center;background:#faf5ff;color:#56317b;margin:0;padding:25px 15px}.sheet{max-width:440px;margin:auto;background:white;padding:24px 16px;border-radius:22px;box-shadow:0 8px 25px #6c4a8520}.qr svg{max-width:100%;height:auto;max-height:310px}.buttons{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:20px auto}button{font:700 15px system-ui;padding:13px 16px;border-radius:15px;border:1px solid #d8bde9;background:#f0dff9;color:#60358a;cursor:pointer}button.primary{background:#8055b4;color:white}#status{min-height:20px;font-size:13px}code{overflow-wrap:anywhere}@media print{body{background:white;padding:0}.sheet{box-shadow:none}.buttons,#status{display:none}}</style></head><body><div class="sheet"><h2>📍 '+label+'</h2><div class="qr" id="qrImage">'+svg+'</div><p><code>'+code+'</code></p><div class="buttons"><button id="back" type="button">← Torna indietro</button><button id="copy" type="button">📋 Copia QR</button><button id="print" class="primary" type="button">🖨️ Stampa</button></div><p id="status" role="status"></p></div></body></html>';
+ w.document.open();w.document.write(doc);w.document.close();
+ w.document.getElementById('back').onclick=()=>{w.close();if(!w.closed){w.history.back()}};
+ w.document.getElementById('print').onclick=()=>w.print();
+ w.document.getElementById('copy').onclick=async()=>{
+  const status=w.document.getElementById('status');
+  try{
+   const source=w.document.querySelector('#qrImage svg');
+   if(!source)throw Error('QR non disponibile');
+   const markup=new XMLSerializer().serializeToString(source);
+   const blob=new Blob([markup],{type:'image/svg+xml'});
+   const url=URL.createObjectURL(blob);
+   try{
+    const img=new Image();
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+    const canvas=w.document.createElement('canvas');canvas.width=800;canvas.height=800;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,800,800);ctx.drawImage(img,0,0,800,800);
+    const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+    if(!png||!w.navigator.clipboard?.write||!w.ClipboardItem)throw Error('Copia immagine non supportata');
+    await w.navigator.clipboard.write([new w.ClipboardItem({'image/png':png})]);
+    status.textContent='💜 QR copiato come immagine!';
+   }finally{URL.revokeObjectURL(url)}
+  }catch(e){
+   try{await w.navigator.clipboard.writeText(code);status.textContent='💜 Codice QR copiato come testo (la copia dell’immagine non è supportata qui).'}
+   catch{status.textContent='Non riesco a copiare automaticamente. Puoi usare uno screenshot del QR.'}
+  }
+ };
+};
+window.deletePlace=async id=>{if(db.places.some(p=>p.parentId===id)){toast('Sposta prima le posizioni contenute al suo interno.');return}if(!confirm('Eliminare la posizione? Gli oggetti resteranno catalogati, senza posizione.'))return;if(window.familyDeletePlace){const ok=await window.familyDeletePlace(id);if(!ok)return}db.places=db.places.filter(p=>p.id!==id);db.items.forEach(i=>{if(i.place===id)i.place=''});save();renderPlaces();renderItems();toast('Posizione eliminata')};$('#placeForm').addEventListener('submit',e=>{e.preventDefault();const place={id:crypto.randomUUID(),name:$('#placeName').value.trim(),parentId:$('#placeParent')?.value||null};db.places.push(place);if(save()){e.target.reset();renderPlaces();toast('Posizione e QR creati!');if(window.familyCreatePlace)window.familyCreatePlace(place)}});function fullPlacePath(id){
  if(!id)return 'Posizione non assegnata';
  const names=[],seen=new Set();let p=db.places.find(x=>x.id===id);
  while(p&&!seen.has(p.id)){seen.add(p.id);names.unshift(p.name);p=db.places.find(x=>x.id===p.parentId)}
