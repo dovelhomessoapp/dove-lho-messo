@@ -29,6 +29,15 @@ window.openSearchedPlace=function(id){
  const target=[...document.querySelectorAll('#placeList details[data-place-id]')].find(el=>el.dataset.placeId===id);
  if(target){target.scrollIntoView({behavior:'smooth',block:'center'});toast('Posizione trovata 💜')}
 };
+const dlmPlacePresets=[["Cucina","🍳"],["Camera matrimoniale","🛏️"],["Cameretta","🧸"],["Bagno","🛁"],["Salotto","🛋️"],["Ingresso","🚪"],["Corridoio","🚶"],["Ripostiglio","🧹"],["Lavanderia","🧺"],["Garage","🚗"],["Cantina","🍷"],["Soffitta","📦"],["Studio","💻"],["Balcone","🪴"],["Giardino","🌷"]];
+function dlmPlacePresetIcon(name,parentId){
+ const raw=String(name||'').toLocaleLowerCase('it');
+ const match=dlmPlacePresets.find(([label])=>raw===label.toLocaleLowerCase('it')||raw.startsWith(label.toLocaleLowerCase('it')+' '));
+ if(match)return match[1];
+ if(parentId){const parent=db.places.find(p=>p.id===parentId);if(parent&&parent.name!==name)return dlmPlacePresetIcon(parent.name,parent.parentId)}
+ return '🏡';
+}
+function dlmPlaceIconHtml(name,parentId){return '<span class="dlm-place-preset-icon" aria-hidden="true">'+dlmPlacePresetIcon(name,parentId)+'</span>'}
 function renderPlaces(){let locationPhotos={};try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{};for(const p of db.places){if(locationPhotos[p.id])p.photo=locationPhotos[p.id]}const ordered=[];const seen=new Set();function visit(parent,depth){for(const p of db.places.filter(x=>(x.parentId||'')===parent)){if(seen.has(p.id))continue;seen.add(p.id);ordered.push({p,depth});visit(p.id,depth+1)}}visit('',0);for(const p of db.places){if(!seen.has(p.id)){seen.add(p.id);ordered.push({p,depth:0});visit(p.id,1)}}const previousItemPlace=$('#itemPlace').value;const previousParent=$('#placeParent')?.value||'';const openPlaces=new Set([...document.querySelectorAll('#placeList details[data-place-id][open]')].map(el=>el.dataset.placeId));
 const openDetails=new Set([...document.querySelectorAll('#placeList details[data-info-id][open]')].map(el=>el.dataset.infoId));
 function renderNode(p,level,visited){
@@ -36,7 +45,7 @@ function renderNode(p,level,visited){
  visited.add(p.id);
  const count=db.items.filter(i=>i.place===p.id).length;
  const children=db.places.filter(x=>x.parentId===p.id&&!visited.has(x.id));
- const title='<span style="display:flex;align-items:center;gap:12px"><span style="width:58px;height:58px;border-radius:14px;background:#fff8;display:grid;place-items:center;overflow:hidden;flex-shrink:0">'+(p.photo?'<img src="'+safe(p.photo)+'" alt="" style="width:100%;height:100%;object-fit:cover">':'<span style="font-size:27px">📍</span>')+'</span><span style="display:flex;flex-direction:column;gap:4px;min-width:0"><strong style="font-weight:750;overflow-wrap:anywhere">'+safe(p.name)+'</strong><small style="font-size:.82em;opacity:.78">'+count+' oggetti · Tocca per vedere gli oggetti</small></span></span>';
+ const title='<span style="display:flex;align-items:center;gap:12px"><span style="width:58px;height:58px;border-radius:14px;background:#fff8;display:grid;place-items:center;overflow:hidden;flex-shrink:0">'+(p.photo?'<img src="'+safe(p.photo)+'" alt="" style="width:100%;height:100%;object-fit:cover">':dlmPlaceIconHtml(p.name,p.parentId))+'</span><span style="display:flex;flex-direction:column;gap:4px;min-width:0"><strong style="font-weight:750;overflow-wrap:anywhere">'+safe(p.name)+'</strong><small style="font-size:.82em;opacity:.78">'+count+' oggetti · Tocca per vedere gli oggetti</small></span></span>';
  const nested=children.map(child=>renderNode(child,level+1,visited)).join('');
 
  const info='<div class="dlm-place-inventory-list">'+(db.items.filter(i=>i.place===p.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it')).map(i=>'<button type="button" class="secondary" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin:7px 0;padding:9px" onclick="showItem(\''+i.id+'\')">'+(i.photo?'<img src="'+safe(i.photo)+'" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:10px">':'<span style="font-size:24px">'+(i.kind==='book'?'📖':'📦')+'</span>')+'<span style="flex:1;overflow-wrap:anywhere">'+safe(i.name)+'</span><span>›</span></button>').join('')||'<p class="hint">Nessun oggetto in questa posizione.</p>')+'</div>';
@@ -48,7 +57,7 @@ let h=roots.map(p=>renderNode(p,0,visited)).join('');
 h+=db.places.filter(p=>!visited.has(p.id)).map(p=>renderNode(p,0,visited)).join('');
 $('#placeList').innerHTML=h||'<div class="empty">📍 Crea la tua prima posizione!</div>';
  const manage=document.getElementById('dlmPlaceManageList');
- if(manage)manage.innerHTML=ordered.map(({p})=>'<div class="dlm-place-manage-row"><span class="dlm-place-manage-photo">'+(p.photo?'<img src="'+safe(p.photo)+'" alt="">':'📍')+'</span><strong>'+safe(p.name)+'</strong><div class="dlm-place-manage-buttons"><button type="button" class="secondary" onclick="choosePlacePhoto(\''+p.id+'\')">📷 '+(p.photo?'Cambia foto':'Aggiungi foto')+'</button><button type="button" class="secondary" onclick="editPlace(\''+p.id+'\')">✏️ Modifica</button><button type="button" class="secondary" onclick="printQR(\''+p.id+'\')">🖨️ QR</button><button type="button" class="secondary" onclick="deletePlace(\''+p.id+'\')">Elimina</button></div></div>').join('')||'<p class="hint">Non hai ancora creato posizioni.</p>';
+ if(manage)manage.innerHTML=ordered.map(({p})=>'<div class="dlm-place-manage-row"><span class="dlm-place-manage-photo">'+(p.photo?'<img src="'+safe(p.photo)+'" alt="">':dlmPlaceIconHtml(p.name,p.parentId))+'</span><strong>'+safe(p.name)+'</strong><div class="dlm-place-manage-buttons"><button type="button" class="secondary" onclick="choosePlacePhoto(\''+p.id+'\')">📷 '+(p.photo?'Cambia foto':'Aggiungi foto')+'</button><button type="button" class="secondary" onclick="editPlace(\''+p.id+'\')">✏️ Modifica</button><button type="button" class="secondary" onclick="printQR(\''+p.id+'\')">🖨️ QR</button><button type="button" class="secondary" onclick="deletePlace(\''+p.id+'\')">Elimina</button></div></div>').join('')||'<p class="hint">Non hai ancora creato posizioni.</p>';
 
 $('#itemPlace').innerHTML='<option value="">Da assegnare</option>'+ordered.map(({p,depth})=>`<option value="${p.id}">${safe('— '.repeat(Math.min(depth,5))+p.name)}</option>`).join('');if(previousItemPlace&&db.places.some(p=>p.id===previousItemPlace))$('#itemPlace').value=previousItemPlace;const parent=$('#placeParent');if(parent){parent.innerHTML='<option value="">Nessuna — posizione principale</option>'+ordered.map(({p,depth})=>`<option value="${p.id}">${safe('— '.repeat(Math.min(depth,5))+p.name)}</option>`).join('');if(previousParent&&db.places.some(p=>p.id===previousParent))parent.value=previousParent;}}window.searchPlaces();window.editPlace=async id=>{
  const place=db.places.find(p=>p.id===id);if(!place)return;
@@ -125,7 +134,17 @@ window.printQR=id=>{
   }
  };
 };
-window.deletePlace=async id=>{if(db.places.some(p=>p.parentId===id)){toast('Sposta prima le posizioni contenute al suo interno.');return}if(!confirm('Eliminare la posizione? Gli oggetti resteranno catalogati, senza posizione.'))return;if(window.familyDeletePlace){const ok=await window.familyDeletePlace(id);if(!ok)return}db.places=db.places.filter(p=>p.id!==id);db.items.forEach(i=>{if(i.place===id)i.place=''});save();renderPlaces();renderItems();toast('Posizione eliminata')};let dlmNewPlacePhoto='';
+window.deletePlace=async id=>{if(db.places.some(p=>p.parentId===id)){toast('Sposta prima le posizioni contenute al suo interno.');return}if(!confirm('Eliminare la posizione? Gli oggetti resteranno catalogati, senza posizione.'))return;if(window.familyDeletePlace){const ok=await window.familyDeletePlace(id);if(!ok)return}db.places=db.places.filter(p=>p.id!==id);db.items.forEach(i=>{if(i.place===id)i.place=''});save();renderPlaces();renderItems();toast('Posizione eliminata')};const dlmPlacePresetSelect=document.getElementById('dlmPlacePresetSelect');
+const dlmPlacePresetPreview=document.getElementById('dlmPlacePresetPreview');
+dlmPlacePresetSelect.addEventListener('change',()=>{
+ const name=dlmPlacePresetSelect.value;
+ if(name){document.getElementById('placeName').value=name;dlmPlacePresetPreview.innerHTML=dlmPlaceIconHtml(name)+'<strong>'+safe(name)+'</strong>';dlmPlacePresetPreview.hidden=false}
+ else{dlmPlacePresetPreview.hidden=true;dlmPlacePresetPreview.innerHTML=''}
+});
+document.getElementById('placeName').addEventListener('input',()=>{
+ if(document.getElementById('placeName').value.trim()!==dlmPlacePresetSelect.value)dlmPlacePresetSelect.value='';
+});
+let dlmNewPlacePhoto='';
 document.getElementById('newPlaceCameraBtn').onclick=()=>document.getElementById('newPlaceCamera').click();
 document.getElementById('newPlaceGalleryBtn').onclick=()=>document.getElementById('newPlaceGallery').click();
 for(const id of ['newPlaceCamera','newPlaceGallery']){
@@ -159,7 +178,7 @@ $('#placeForm').addEventListener('submit',e=>{
    try{const photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}');photos[place.id]=dlmNewPlacePhoto;localStorage.setItem('dlm-casa-dolce-casa-location-photos-v37',JSON.stringify(photos))}
    catch{toast('Posizione creata, ma la foto potrebbe non essere conservata sul dispositivo')}
   }
-  dlmNewPlacePhoto='';e.target.reset();
+  dlmNewPlacePhoto='';e.target.reset();dlmPlacePresetPreview.hidden=true;dlmPlacePresetPreview.innerHTML='';
   const preview=document.getElementById('newPlacePhotoPreview');preview.hidden=true;preview.removeAttribute('src');
   document.getElementById('newPlaceRemovePhoto').hidden=true;
   renderPlaces();renderItems();toast('Posizione e QR creati! 💜');
@@ -189,7 +208,7 @@ function renderItems(){
   const image=place&&(locationPhotos[place.id]||place.photo);
   const label=place?.name||category;
   const subtitle=place?.description||place?.desc||place?.notes||(place?.parentId?'All’interno di '+fullPlacePath(place.parentId):'Esplora gli oggetti conservati qui');
-  const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">`:'<span aria-hidden="true">🏡</span>';
+  const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">` :dlmPlaceIconHtml(place?.name||category,place?.parentId);
   return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${records.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')}</div></details>`;
  }).join('');
  list.innerHTML=groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>';
