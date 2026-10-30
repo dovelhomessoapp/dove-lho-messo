@@ -353,20 +353,26 @@ function renderItems(){
  const entry=i=>`<article class="entry"><div class="thumb">${i.photo?`<img class="thumb" src="${safe(i.photo)}" alt="">`:i.kind==='book'?'📖':'📦'}</div><div class="info"><strong>${safe(i.name)}</strong><small>📍 ${safe(fullPlacePath(i.place))}</small></div><button aria-label="Apri" onclick="showItem('${i.id}')">›</button></article>`;
  const items=db.items.filter(i=>i.kind!=='book'&&matches(i));
  const groups=new Map();
- items.forEach(i=>{const category=fullPlacePath(i.place);if(!groups.has(category))groups.set(category,[]);groups.get(category).push(i)});
+ function itemRootPlace(id){
+  let place=db.places.find(p=>p.id===id);const seen=new Set();
+  while(place?.parentId&&!seen.has(place.id)){seen.add(place.id);const parent=db.places.find(p=>p.id===place.parentId);if(!parent)break;place=parent}
+  return place||null;
+ }
+ items.forEach(i=>{const root=itemRootPlace(i.place);const key=root?.id||'__unassigned__';if(!groups.has(key))groups.set(key,{root,records:[]});groups.get(key).records.push(i)});
  const list=$('#itemList');
  const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(d=>d.dataset.category));
  let locationPhotos={};
  try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
  const palettes=['lavender','rose','peach','mint','sky'];
- const groupHtml=Array.from(groups.entries()).sort((a,b)=>a[0].localeCompare(b[0],'it')).map(([category,records],index)=>{
+ const groupHtml=Array.from(groups.values()).sort((a,b)=>(a.root?.name||'Posizione non assegnata').localeCompare(b.root?.name||'Posizione non assegnata','it',{sensitivity:'base'})).map(({root,records},index)=>{
+  const category=root?.id||'__unassigned__';
   const open=q||previouslyOpen.has(category)||groups.size===1?' open':'';
-  const place=db.places.find(p=>p.id===records[0]?.place);
-  const image=place&&(locationPhotos[place.id]||place.photo);
-  const label=place?.name||category;
-  const subtitle=place?.description||place?.desc||place?.notes||(place?.parentId?'All’interno di '+fullPlacePath(place.parentId):'Esplora gli oggetti conservati qui');
-  const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">` :dlmPlaceIconHtml(place?.name||category,place?.parentId);
-  return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${records.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')}</div></details>`;
+  const image=root&&(locationPhotos[root.id]||root.photo);
+  const label=root?.name||'Posizione non assegnata';
+  const subtitle=root?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
+  const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">`:dlmPlaceIconHtml(root?.name||label,root?.parentId);
+  const sortedRecords=records.sort((a,b)=>fullPlacePath(a.place).localeCompare(fullPlacePath(b.place),'it',{sensitivity:'base'})||String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+  return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${sortedRecords.map(entry).join('')}</div></details>`;
  }).join('');
  list.innerHTML=groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>';
  const books=db.items.filter(i=>i.kind==='book');
