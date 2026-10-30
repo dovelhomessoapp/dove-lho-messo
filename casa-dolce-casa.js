@@ -261,7 +261,7 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
   const imageRefs={};
   if(includeImages)for(let i=0;i<imageData.length;i++){
    const bytes=imageData[i];if(!bytes)continue;
-   imageRefs[i]=add('<< /Type /XObject /Subtype /Image /Width 128 /Height 128 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+bytes.length+' >>\\nstream\\n'+bytes+'\\nendstream');
+   imageRefs[i]=add('<< /Type /XObject /Subtype /Image /Width 128 /Height 128 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+bytes.length+' >>\nstream\n'+bytes+'\nendstream');
   }
   const refs=[];
   for(let pageIndex=0;pageIndex<pages.length;pageIndex++){
