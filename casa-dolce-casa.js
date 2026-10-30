@@ -158,6 +158,59 @@ document.getElementById('placePhotoPicker').addEventListener('change',async e=>{
   }finally{URL.revokeObjectURL(url)}
  }catch{toast('Non riesco a leggere questa fotografia')}
 });
+
+window.downloadAllQRA4=()=>{
+ const labels=[
+  ...db.places.map(p=>({name:placePath(p.id),code:qrData(p.id),kind:'POSIZIONE'})),
+  ...db.items.map(i=>({name:i.name,code:'DLM-I-'+i.id,kind:i.kind==='book'?'LIBRO':'OGGETTO'}))
+ ];
+ if(!labels.length){toast('Non ci sono ancora QR da stampare');return}
+ try{
+  const plain=v=>String(v||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^\\x20-\\x7e]/g,'?');
+  const esc=v=>plain(v).replace(/\\\\/g,'\\\\\\\\').replace(/\\(/g,'\\\\(').replace(/\\)/g,'\\\\)');
+  const pages=[];const perPage=18;
+  for(let start=0;start<labels.length;start+=perPage){
+   let commands=['1 1 1 rg 0 0 595 842 re f','0.27 0.15 0.40 rg','BT /F1 15 Tf 24 810 Td (ETICHETTE QR - DOVE L HO MESSO) Tj ET'];
+   const batch=labels.slice(start,start+perPage);
+   batch.forEach((item,index)=>{
+    const col=index%3,row=Math.floor(index/3);
+    const x=16+col*188,y=773-row*123;
+    commands.push('0.86 0.81 0.91 RG 0.7 w '+x+' '+(y-103)+' 181 115 re S');
+    commands.push('0.27 0.15 0.40 rg BT /F1 8 Tf '+(x+8)+' '+(y-13)+' Td ('+esc(item.kind)+') Tj ET');
+    const title=plain(item.name);const max=28;
+    commands.push('BT /F1 9 Tf '+(x+8)+' '+(y-26)+' Td ('+esc(title.slice(0,max))+') Tj ET');
+    if(title.length>max)commands.push('BT /F1 8 Tf '+(x+8)+' '+(y-37)+' Td ('+esc(title.slice(max,max*2))+') Tj ET');
+    const q=new LocalQRCode(-1,LocalQRError.M);q.addData(item.code);q.make();
+    const n=q.getModuleCount(),module=66/(n+8),qx=x+58,qy=y-100;
+    commands.push('0.27 0.15 0.40 rg');
+    for(let yy=0;yy<n;yy++)for(let xx=0;xx<n;xx++)if(q.isDark(yy,xx)){
+     commands.push((qx+(xx+4)*module).toFixed(3)+' '+(qy+(n+4-yy)*module).toFixed(3)+' '+(module+.03).toFixed(3)+' '+(module+.03).toFixed(3)+' re f');
+    }
+   });
+   commands.push('0.35 0.26 0.46 rg BT /F1 8 Tf 24 19 Td (Pagina '+(pages.length+1)+' - '+labels.length+' etichette) Tj ET');
+   pages.push(commands.join('\\n')+'\\n');
+  }
+  const objects=[null],add=body=>{objects.push(body);return objects.length-1};
+  const catalog=add(''),rootPages=add(''),font=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const refs=[];
+  for(const content of pages){
+   const stream=add('<< /Length '+content.length+' >>\\nstream\\n'+content+'endstream');
+   const page=add('<< /Type /Page /Parent '+rootPages+' 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 '+font+' 0 R >> >> /Contents '+stream+' 0 R >>');
+   refs.push(page+' 0 R');
+  }
+  objects[rootPages]='<< /Type /Pages /Kids ['+refs.join(' ')+'] /Count '+refs.length+' >>';
+  objects[catalog]='<< /Type /Catalog /Pages '+rootPages+' 0 R >>';
+  let pdf='%PDF-1.4\\n',offsets=[0];
+  for(let i=1;i<objects.length;i++){offsets.push(pdf.length);pdf+=i+' 0 obj\\n'+objects[i]+'\\nendobj\\n'}
+  const xref=pdf.length;pdf+='xref\\n0 '+objects.length+'\\n0000000000 65535 f \\n';
+  for(let i=1;i<objects.length;i++)pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \\n';
+  pdf+='trailer\\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\\nstartxref\\n'+xref+'\\n%%EOF';
+  const url=URL.createObjectURL(new Blob([pdf],{type:'application/pdf'}));
+  const a=document.createElement('a');a.href=url;a.download='etichette-qr-A4.pdf';document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  toast('PDF A4 pronto: '+labels.length+' etichette 💜');
+ }catch(error){console.error('PDF QR',error);toast('Non riesco a preparare il PDF. Riprova.')}
+};
 window.printQR=id=>{
  const p=db.places.find(x=>x.id===id)||db.items.find(x=>x.id===id);if(!p)return;
  const isItem=db.items.some(x=>x.id===id);
