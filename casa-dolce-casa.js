@@ -963,6 +963,12 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
         const preview=document.getElementById('photoPreview');
         preview.src=newPhoto;preview.hidden=false;
         saveDraft();
+        // Mostra subito la copertina inserita, senza spostare il pulsante Salva.
+        const dropdown=document.getElementById('bookCoverDropdown');
+        if(dropdown)dropdown.open=false;
+        requestAnimationFrame(()=>requestAnimationFrame(()=>{
+          preview.scrollIntoView({behavior:'smooth',block:'center'});
+        }));
         toast('Copertina incollata! Premi Salva per confermare 💜');
       }finally{URL.revokeObjectURL(url)}
     }catch(error){
