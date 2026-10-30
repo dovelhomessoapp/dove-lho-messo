@@ -184,7 +184,7 @@ window.openQRSelection=()=>{
  const imageOption=document.createElement('label');
  imageOption.style.cssText='display:flex;align-items:center;gap:9px;margin:10px 0;padding:9px;border-radius:12px;background:#f6effb';
  imageOption.innerHTML='<input type="checkbox" id="dlmQRIncludeImages" checked style="width:20px;height:20px;accent-color:#8c5bb6"><span>Includi foto e icone nelle etichette</span>';
- list.parentNode.insertBefore(imageOption,overlay.querySelector('#dlmQRCount'));
+ list.parentNode.insertBefore(imageOption,list);
  const choices=()=>[...overlay.querySelectorAll('.dlm-qr-choice')];
  function refresh(){const n=choices().filter(c=>c.checked).length;overlay.querySelector('#dlmQRCount').textContent=n+' di '+all.length+' QR selezionati';overlay.querySelector('#dlmQRGenerate').disabled=n===0}
  overlay.querySelector('#dlmQRAll').onclick=()=>{choices().forEach(c=>c.checked=true);refresh()};
