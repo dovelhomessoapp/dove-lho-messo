@@ -142,13 +142,45 @@ window.printQR=id=>{
 };
 window.deletePlace=async id=>{if(db.places.some(p=>p.parentId===id)){toast('Sposta prima le posizioni contenute al suo interno.');return}if(!confirm('Eliminare la posizione? Gli oggetti resteranno catalogati, senza posizione.'))return;if(window.familyDeletePlace){const ok=await window.familyDeletePlace(id);if(!ok)return}db.places=db.places.filter(p=>p.id!==id);db.items.forEach(i=>{if(i.place===id)i.place=''});save();renderPlaces();renderItems();toast('Posizione eliminata')};const dlmPlacePresetSelect=document.getElementById('dlmPlacePresetSelect');
 const dlmPlacePresetPreview=document.getElementById('dlmPlacePresetPreview');
+const dlmPlacePickerButton=document.getElementById('dlmPlacePickerButton');
+const dlmPlacePickerPanel=document.getElementById('dlmPlacePickerPanel');
+const dlmPlacePickerGrid=document.getElementById('dlmPlacePickerGrid');
+const dlmPlacePickerSelected=document.getElementById('dlmPlacePickerSelected');
+function dlmRefreshPlacePicker(){
+ const selected=dlmPlacePresetSelect.value;
+ dlmPlacePickerSelected.innerHTML=selected?dlmPlaceIconHtml(selected)+'<span>'+safe(selected)+'</span>':'Scegli un ambiente con icona 3D';
+ dlmPlacePickerGrid.innerHTML=dlmPlacePresets.map(([label])=>'<button type="button" class="dlm-place-picker-option" data-preset="'+safe(label)+'" aria-pressed="'+(selected===label)+'">'+dlmPlaceIconHtml(label)+'<span>'+safe(label)+'</span></button>').join('');
+}
+dlmPlacePickerButton.addEventListener('click',()=>{
+ const opening=dlmPlacePickerPanel.hidden;
+ dlmPlacePickerPanel.hidden=!opening;
+ dlmPlacePickerButton.setAttribute('aria-expanded',String(opening));
+ if(opening)dlmRefreshPlacePicker();
+});
+dlmPlacePickerGrid.addEventListener('click',e=>{
+ const button=e.target.closest('button[data-preset]');if(!button)return;
+ dlmPlacePresetSelect.value=button.dataset.preset;
+ dlmPlacePresetSelect.dispatchEvent(new Event('change',{bubbles:true}));
+ dlmPlacePickerPanel.hidden=true;
+ dlmPlacePickerButton.setAttribute('aria-expanded','false');
+});
+document.getElementById('dlmPlacePickerClear').addEventListener('click',()=>{
+ dlmPlacePresetSelect.value='';
+ dlmPlacePresetSelect.dispatchEvent(new Event('change',{bubbles:true}));
+ dlmPlacePickerPanel.hidden=true;
+ dlmPlacePickerButton.setAttribute('aria-expanded','false');
+ document.getElementById('placeName').focus();
+});
+dlmRefreshPlacePicker();
+
 dlmPlacePresetSelect.addEventListener('change',()=>{
  const name=dlmPlacePresetSelect.value;
  if(name){document.getElementById('placeName').value=name;dlmPlacePresetPreview.innerHTML=dlmPlaceIconHtml(name)+'<strong>'+safe(name)+'</strong>';dlmPlacePresetPreview.hidden=false}
  else{dlmPlacePresetPreview.hidden=true;dlmPlacePresetPreview.innerHTML=''}
+ dlmRefreshPlacePicker();
 });
 document.getElementById('placeName').addEventListener('input',()=>{
- if(document.getElementById('placeName').value.trim()!==dlmPlacePresetSelect.value)dlmPlacePresetSelect.value='';
+ if(document.getElementById('placeName').value.trim()!==dlmPlacePresetSelect.value){dlmPlacePresetSelect.value='';dlmRefreshPlacePicker();}
 });
 let dlmNewPlacePhoto='';
 document.getElementById('newPlaceCameraBtn').onclick=()=>document.getElementById('newPlaceCamera').click();
