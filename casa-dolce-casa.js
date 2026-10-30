@@ -168,13 +168,12 @@ window.printQR=id=>{
  const label=safe(p.name);
  const roomIcon=!isItem?dlmPlacePresetMatch(p.name,p.parentId):null;
  const qrIcon=isItem?(p.kind==='book'?'📚':'📦'):(roomIcon?'<img src="assets/icone-posizioni/'+encodeURIComponent(roomIcon[0])+'.png" alt="" style="width:42px;height:42px;object-fit:contain;vertical-align:middle" onerror="this.replaceWith(document.createTextNode(\'🏠\'))">':'🏠');
- const doc='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QR - '+label+'</title><style>body{font-family:system-ui,-apple-system,Arial;text-align:center;background:#faf5ff;color:#56317b;margin:0;padding:25px 15px}.sheet{max-width:440px;margin:auto;background:white;padding:24px 16px;border-radius:22px;box-shadow:0 8px 25px #6c4a8520}.qr svg{max-width:100%;height:auto;max-height:310px}.buttons{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:20px auto}button{font:700 15px system-ui;padding:13px 16px;border-radius:15px;border:1px solid #d8bde9;background:#f0dff9;color:#60358a;cursor:pointer}button.primary{background:#8055b4;color:white}#status{min-height:20px;font-size:13px}code{overflow-wrap:anywhere}@media print{body{background:white;padding:0}.sheet{box-shadow:none}.buttons,#status{display:none}}</style></head><body><div class="sheet"><h2>' +qrIcon+' '+label+'</h2><div class="qr" id="qrImage">'+svg+'</div><p><code>'+code+'</code></p><div class="buttons"><button id="back" type="button">← Torna indietro</button><button id="copy" type="button">📋 Copia QR</button><button id="print" class="primary" type="button">🖨️ Stampa</button></div><p id="status" role="status"></p></div></body></html>';
+ const doc='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QR - '+label+'</title><style>body{font-family:system-ui,-apple-system,Arial;text-align:center;background:#faf5ff;color:#56317b;margin:0;padding:25px 15px}.sheet{max-width:440px;margin:auto;background:white;padding:24px 16px;border-radius:22px;box-shadow:0 8px 25px #6c4a8520}.qr svg{max-width:100%;height:auto;max-height:310px}.buttons{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:20px auto}button{font:700 15px system-ui;padding:13px 16px;border-radius:15px;border:1px solid #d8bde9;background:#f0dff9;color:#60358a;cursor:pointer}button.primary{background:#8055b4;color:white}#status{min-height:20px;font-size:13px}code{overflow-wrap:anywhere}@media print{body{background:white;padding:0}.sheet{box-shadow:none}.buttons,#status{display:none}}</style></head><body><div class="sheet"><h2>' +qrIcon+' '+label+'</h2><div class="qr" id="qrImage">'+svg+'</div><p><code>'+code+'</code></p><div class="buttons"><button id="back" type="button">← Torna indietro</button><button id="copy" type="button">📋 Copia QR</button><button id="print" class="primary" type="button">🖨️ Stampa</button><button id="saveImage" type="button">🖼️ Salva immagine</button></div><p id="status" role="status"></p><div id="savedQR"></div></div></body></html>';
  w.document.open();w.document.write(doc);w.document.close();
  w.document.getElementById('back').onclick=()=>{w.close();if(!w.closed){w.history.back()}};
- w.document.getElementById('print').onclick=()=>{
-  const status=w.document.getElementById('status');
-  try{
-   const source=w.document.querySelector('#qrImage svg');
+ const makeQRImage=()=>{
+  const source=w.document.querySelector('#qrImage svg');
+  if(!source)throw Error('QR mancante');
    if(!source)throw Error('QR mancante');
    const canvas=w.document.createElement('canvas');canvas.width=900;canvas.height=1000;
    const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,900,1000);
@@ -187,17 +186,20 @@ window.printQR=id=>{
     ctx.fillRect(100+Number(rect.getAttribute('x'))*factor,120+Number(rect.getAttribute('y'))*factor,factor+.1,factor+.1);
    });
    ctx.font='21px sans-serif';ctx.fillText(code,450,895,850);
-   const raw=atob(canvas.toDataURL('image/png').split(',')[1]);
-   const bytes=new Uint8Array(raw.length);
-   for(let j=0;j<raw.length;j++)bytes[j]=raw.charCodeAt(j);
-   const file=new File([bytes],'etichetta-qr.png',{type:'image/png'});
-   if(navigator.share&&navigator.canShare?.({files:[file]})){
-    navigator.share({files:[file],title:'Etichetta QR'}).then(()=>{status.textContent='Seleziona Stampa dal menu di condivisione.'}).catch(err=>{if(err.name!=='AbortError')status.textContent='Condivisione non riuscita: usa Salva immagine.'});
-   }else{
-    const link=w.document.createElement('a');link.href=canvas.toDataURL('image/png');link.download='etichetta-qr.png';link.click();
-    status.textContent='Immagine QR pronta: aprila e scegli Condividi → Stampa.';
-   }
-  }catch(err){console.error('QR print',err);status.textContent='Non è stato possibile preparare la stampa.'}
+  return canvas.toDataURL('image/png');
+ };
+ const showQRImage=()=>{
+  const url=makeQRImage();
+  const img=w.document.createElement('img');
+  img.src=url;img.alt='Etichetta QR da salvare';img.style.cssText='display:block;width:100%;max-width:430px;margin:18px auto;border-radius:12px';
+  const area=w.document.getElementById('savedQR');
+  area.innerHTML='';area.appendChild(img);
+  w.document.getElementById('status').textContent='Tieni premuta l’immagine qui sotto e scegli Salva in Foto. Poi aprila in Foto per stamparla.';
+ };
+ w.document.getElementById('saveImage').onclick=()=>{try{showQRImage()}catch(e){w.document.getElementById('status').textContent='Impossibile preparare l’immagine.'}};
+ w.document.getElementById('print').onclick=()=>{
+  try{w.focus();w.print();w.document.getElementById('status').textContent='Se la stampa non si apre, usa Salva immagine qui sopra.'}
+  catch(e){w.document.getElementById('status').textContent='Usa Salva immagine e stampa dall’app Foto.'}
  };
  w.document.getElementById('copy').onclick=async()=>{
   const status=w.document.getElementById('status');
