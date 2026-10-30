@@ -283,7 +283,7 @@ const dlmInlinePlaceCreator=document.getElementById('dlmInlinePlaceCreator');
 const dlmItemFormForPlaces=document.getElementById('itemForm');
 function dlmToggleInlinePlace(open){
  dlmInlinePlaceCreator.hidden=!open;
- dlmItemFormForPlaces.hidden=open;
+ dlmItemFormForPlaces.style.display=open?'none':'';
  if(open){document.getElementById('dlmItemPlacePanel').hidden=true;document.getElementById('dlmItemPlaceButton').setAttribute('aria-expanded','false');}
  (open?dlmInlinePlaceCreator:document.getElementById('dlmItemPlaceButton')).scrollIntoView({behavior:'smooth',block:'start'});
 }
