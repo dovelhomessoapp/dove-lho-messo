@@ -278,6 +278,7 @@ document.getElementById('newPlaceRemovePhoto').onclick=()=>{
  dlmNewPlacePhoto='';const preview=document.getElementById('newPlacePhotoPreview');preview.hidden=true;preview.removeAttribute('src');
  document.getElementById('newPlaceRemovePhoto').hidden=true;
 };
+document.getElementById('dlmSaveAndAddChild')?.addEventListener('click',()=>{const form=document.getElementById('placeForm');if(!form)return;form.requestSubmit();});
 $('#placeForm').addEventListener('submit',e=>{
  e.preventDefault();
  const place={id:crypto.randomUUID(),name:$('#placeName').value.trim(),parentId:$('#placeParent')?.value||null};
