@@ -504,7 +504,7 @@ async function lookupCode(){
 }
 isbnLookupBtn.addEventListener('click',lookupCode);
 
-let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;$('#scanBack').hidden=false;page('scan')};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){
+let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;$('#scanBack').hidden=false;page('scan');void startCamera()};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){
  code=String(code||'').trim();if(!code)return;stopCamera();
  if(code.startsWith('DLM-P-')){
   const p=db.places.find(x=>x.id===code.slice(6));
