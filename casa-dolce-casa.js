@@ -246,6 +246,7 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
     commands.push('BT /F1 9 Tf '+(x+8)+' '+(y-26)+' Td ('+esc(title.slice(0,max))+') Tj ET');
     if(title.length>max)commands.push('BT /F1 8 Tf '+(x+8)+' '+(y-37)+' Td ('+esc(title.slice(max,max*2))+') Tj ET');
     if(includeImages&&imageData[globalIndex])commands.push('q 44 0 0 44 '+(x+9)+' '+(y-94)+' cm /Im'+globalIndex+' Do Q');
+    else if(includeImages){commands.push('0.94 0.88 0.98 rg '+(x+9)+' '+(y-94)+' 44 44 re f');commands.push('0.33 0.19 0.51 rg BT /F1 23 Tf '+(x+23)+' '+(y-78)+' Td ('+(item.kind==='LIBRO'?'B':item.kind==='OGGETTO'?'O':'P')+') Tj ET')}
     const q=new LocalQRCode(-1,LocalQRError.M);q.addData(item.code);q.make();
     const n=q.getModuleCount(),module=70/(n+8),qx=x+91,qy=y-103;
     commands.push('0.27 0.15 0.40 rg');
