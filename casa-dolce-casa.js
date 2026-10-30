@@ -182,6 +182,26 @@ dlmPlacePresetSelect.addEventListener('change',()=>{
 document.getElementById('placeName').addEventListener('input',()=>{
  if(document.getElementById('placeName').value.trim()!==dlmPlacePresetSelect.value){dlmPlacePresetSelect.value='';dlmRefreshPlacePicker();}
 });
+function dlmUpdatePlacePhotoContext(){
+ const name=document.getElementById('placeName').value.trim();
+ const parentId=document.getElementById('placeParent').value;
+ const parent=db.places.find(p=>p.id===parentId);
+ document.getElementById('dlmNewPlacePhotoTitle').textContent='📷 Foto della nuova posizione'+(name?' «'+name+'»':'')+' (facoltativa)';
+ document.getElementById('dlmNewPlacePhotoHint').textContent='La foto qui sotto verrà salvata per '+(name?'«'+name+'»':'la nuova posizione')+', non per '+(parent?'«'+parent.name+'»':'un’altra posizione')+'.';
+ const box=document.getElementById('dlmParentPhotoActions');
+ box.hidden=!parent;
+ if(parent){
+  document.getElementById('dlmParentPhotoText').textContent='Vuoi invece aggiungere una foto a «'+parent.name+'»? Puoi farlo qui, senza cambiare la foto della nuova posizione.';
+  document.getElementById('dlmParentPhotoButton').textContent='📷 Cambia la foto di «'+parent.name+'»';
+ }
+}
+document.getElementById('placeParent').addEventListener('change',dlmUpdatePlacePhotoContext);
+document.getElementById('placeName').addEventListener('input',dlmUpdatePlacePhotoContext);
+document.getElementById('dlmParentPhotoButton').addEventListener('click',()=>{
+ const parentId=document.getElementById('placeParent').value;
+ if(parentId&&db.places.some(p=>p.id===parentId))choosePlacePhoto(parentId);
+});
+dlmUpdatePlacePhotoContext();
 let dlmNewPlacePhoto='';
 document.getElementById('newPlaceCameraBtn').onclick=()=>document.getElementById('newPlaceCamera').click();
 document.getElementById('newPlaceGalleryBtn').onclick=()=>document.getElementById('newPlaceGallery').click();
@@ -216,7 +236,7 @@ $('#placeForm').addEventListener('submit',e=>{
    try{const photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}');photos[place.id]=dlmNewPlacePhoto;localStorage.setItem('dlm-casa-dolce-casa-location-photos-v37',JSON.stringify(photos))}
    catch{toast('Posizione creata, ma la foto potrebbe non essere conservata sul dispositivo')}
   }
-  dlmNewPlacePhoto='';e.target.reset();dlmPlacePresetPreview.hidden=true;dlmPlacePresetPreview.innerHTML='';
+  dlmNewPlacePhoto='';e.target.reset();dlmUpdatePlacePhotoContext();dlmPlacePresetPreview.hidden=true;dlmPlacePresetPreview.innerHTML='';
   const preview=document.getElementById('newPlacePhotoPreview');preview.hidden=true;preview.removeAttribute('src');
   document.getElementById('newPlaceRemovePhoto').hidden=true;
   renderPlaces();renderItems();toast('Posizione e QR creati! 💜');
