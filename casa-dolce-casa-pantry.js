@@ -60,6 +60,9 @@ function redrawAreas(){
  pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);
 }
 function resetArea(){editArea=null;photoArea=null;$('pantryAreaEditor').reset();$('pantryAreaCancel').hidden=true}
+const preview=document.createElement('div');preview.id='pantryAreaIconPreview';preview.style.cssText='display:flex;gap:9px;align-items:center;padding:9px;border-radius:14px;background:#fff';$('pantryAreaIcon').closest('label').after(preview);
+function showAreaIcon(){const kind=$('pantryAreaKind').value,choice=$('pantryAreaIcon').value;preview.innerHTML='<img src="'+areaIcon[choice==='default'?kind:choice]+'" alt="Icona selezionata" style="width:54px;height:54px;object-fit:contain"><span>Anteprima icona 3D</span>'}
+$('pantryAreaKind').addEventListener('change',showAreaIcon);$('pantryAreaIcon').addEventListener('change',showAreaIcon);showAreaIcon();
 $('pantryAreaCancel').onclick=resetArea;
 $('pantryAreaRows').onclick=async e=>{
  const id=e.target.closest('[data-aedit],[data-adel]')?.dataset.aedit||e.target.closest('[data-adel]')?.dataset.adel;
@@ -77,7 +80,7 @@ $('pantryAreaEditor').onsubmit=async e=>{
  e.preventDefault();if(!access)return;
  const payload={name:$('pantryAreaName').value.trim(),kind:$('pantryAreaKind').value,icon:$('pantryAreaIcon').value,photo:photoArea,shelves:[...new Set($('pantryAreaShelves').value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean))].slice(0,30)};
  if(areas.some(a=>a.id!==editArea&&a.name.toLowerCase()===payload.name.toLowerCase())){$('pantryAreaMessage').textContent='Nome già utilizzato';return}
- try{if(editArea)await request('pantry_areas?id=eq.'+editArea+'&home_id=eq.'+access.homeId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});else await request('pantry_areas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,home_id:access.homeId})});resetArea();await refresh();$('pantryAreaMessage').textContent='💜 Ambiente condiviso salvato'}catch(err){$('pantryAreaMessage').textContent='Errore: '+err.message}
+ try{if(editArea&&lots.some(l=>l.area_id===editArea)&&areas.find(a=>a.id===editArea)?.kind!==payload.kind)throw Error('Per cambiare tipo, sposta prima gli alimenti di questo ambiente.');if(editArea)await request('pantry_areas?id=eq.'+editArea+'&home_id=eq.'+access.homeId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});else await request('pantry_areas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,home_id:access.homeId})});resetArea();await refresh();$('pantryAreaMessage').textContent='💜 Ambiente condiviso salvato'}catch(err){$('pantryAreaMessage').textContent='Errore: '+err.message}
 };
 const areaCSS=document.createElement('style');areaCSS.textContent='#pantryCustomAreas label{display:block;margin:10px 0}#pantryCustomAreas input,#pantryCustomAreas select,#pantryCustomAreas textarea{display:block;box-sizing:border-box;width:100%;margin-top:5px}#pantryCustomAreas [data-aedit],#pantryCustomAreas [data-adel]{min-width:38px;padding:8px}';document.head.append(areaCSS);
 
