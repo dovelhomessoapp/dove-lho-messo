@@ -396,28 +396,34 @@ if(sbn&&!sbn.querySelector('details')){
  if(label)label.textContent='Versione '+CURRENT_BUILD;
  if(!button)return;
  button.addEventListener('click',async function(event){
-   event.preventDefault();
-   event.stopImmediatePropagation();
-   if(!navigator.onLine){alert('Per controllare gli aggiornamenti serve Internet.');return}
-   const old=button.textContent;
-   button.disabled=true;button.textContent='↻ Cerco aggiornamenti…';
-   try{
-     const url=new URL('./casa-dolce-casa.html',location.href);
-     url.searchParams.set('check',String(Date.now()));
-     const response=await fetch(url.toString(),{cache:'no-store'});
-     if(!response.ok)throw new Error('Impossibile raggiungere la versione online');
-     const html=await response.text();
-     const match=html.match(/<meta\s+name="dlm-build"\s+content="([^"]+)"/);
-     if(!match)throw new Error('Versione online non riconosciuta');
-     const latest=match[1];
-     if(latest===CURRENT_BUILD){alert('Dove l’ho messo? è già aggiornato! 💜');return}
-     if(confirm('È disponibile un aggiornamento di Dove l’ho messo? 💜\n\nVuoi caricarlo ora? Prima salva eventuali modifiche che stai facendo.')){
-       const destination=new URL(location.href);
-       destination.searchParams.set('v',latest);
-       location.assign(destination.toString());
-     }
-   }catch(error){alert('Non riesco a verificare gli aggiornamenti. Riprova tra poco.')}
-   finally{button.disabled=false;button.textContent=old}
+  event.preventDefault();event.stopImmediatePropagation();
+  if(!navigator.onLine){alert('Per controllare gli aggiornamenti serve Internet.');return}
+  const original=button.textContent;button.disabled=true;button.textContent='↻ Verifico la versione…';
+  try{
+   const url=new URL('./casa-dolce-casa.html',location.href);
+   url.searchParams.set('check',String(Date.now()));
+   const response=await fetch(url.toString(),{cache:'no-store'});
+   if(!response.ok)throw Error('Versione online non disponibile');
+   const html=await response.text();
+   const match=html.match(/<meta\\s+name="dlm-build"\\s+content="([^"]+)"/);
+   if(!match)throw Error('Versione online non riconosciuta');
+   const latest=match[1];
+   if(latest===CURRENT_BUILD){alert('Dove l’ho messo? è già aggiornato! 💜');return}
+   const lastAttempt=sessionStorage.getItem('dlm-update-attempt');
+   if(lastAttempt===latest){
+    alert('La versione aggiornata è già stata richiesta. Se continua a comparire questa schermata, chiudi completamente l’app e riaprila. Non cancellare i dati.');
+    return;
+   }
+   if(!confirm('È disponibile un aggiornamento di Dove l’ho messo? 💜\\n\\nVuoi caricarlo ora? Prima salva eventuali modifiche.'))return;
+   sessionStorage.setItem('dlm-update-attempt',latest);
+   if('serviceWorker' in navigator){
+    try{const registration=await navigator.serviceWorker.getRegistration();if(registration)await registration.update()}catch(e){console.warn('Controllo service worker',e)}
+   }
+   const destination=new URL('./casa-dolce-casa.html',location.href);
+   destination.searchParams.set('v',latest);
+   location.replace(destination.toString());
+  }catch(error){console.warn('Controllo aggiornamento',error);alert('Non riesco a verificare gli aggiornamenti. Riprova tra poco.')}
+  finally{button.disabled=false;button.textContent=original}
  },true);
 })();
 </script><style>
