@@ -51,7 +51,7 @@ function dlmItemPlaceRefresh(){
  if(!native||!selected||!list)return;
  const id=native.value;
  const place=db.places.find(p=>p.id===id);
- selected.innerHTML=place?dlmItemPlacePicture(place)+'<span>'+safe(fullPlacePath(place.id))+'</span>':'Da assegnare';
+ selected.innerHTML=place?'<span class="dlm-selected-place-icon">'+dlmItemPlacePicture(place)+'</span><span class="dlm-selected-place-label">'+safe(fullPlacePath(place.id))+'</span>':'<span class="dlm-selected-place-label">Da assegnare</span>';
  const query=(document.getElementById('dlmItemPlaceSearch')?.value||'').trim().toLocaleLowerCase('it');
  const sorted=[...db.places].sort((a,b)=>fullPlacePath(a.id).localeCompare(fullPlacePath(b.id),'it',{sensitivity:'base'}));
  list.innerHTML='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon" aria-hidden="true">🏡</span><span class="dlm-place-option-label"><strong>Da assegnare</strong></span></span></button>'+
