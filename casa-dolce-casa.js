@@ -311,9 +311,12 @@ window.printQR=id=>{
  overlay.setAttribute('role','dialog');
  overlay.setAttribute('aria-modal','true');
  overlay.setAttribute('aria-label','Codice QR di '+p.name);
- overlay.style.cssText='position:fixed;inset:0;z-index:2147483646;background:#29173ac9;display:flex;align-items:center;justify-content:center;padding:15px;box-sizing:border-box;overscroll-behavior:contain';
+ overlay.style.cssText='position:fixed;inset:0;z-index:2147483646;background:#29173ac9;display:flex;align-items:center;justify-content:center;padding:15px;box-sizing:border-box;overscroll-behavior:none;touch-action:none';
  overlay.innerHTML='<section style="width:min(100%,440px);max-height:90dvh;overflow:auto;overscroll-behavior:contain;box-sizing:border-box;background:#fffaff;color:#59347d;border-radius:23px;padding:20px 15px;text-align:center;box-shadow:0 15px 45px #21102b55"><h2 style="font-size:21px;margin:0 0 14px">💜 '+label+'</h2><div id="dlmSingleQRImage" style="background:white;padding:12px;border-radius:14px;max-width:310px;margin:auto">'+svg+'</div><p style="font-size:12px;overflow-wrap:anywhere">'+safe(code)+'</p><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:9px"><button type="button" id="dlmSingleQRClose">← Torna all’app</button><button type="button" id="dlmSingleQRCopy">📋 Copia QR</button><button type="button" id="dlmSingleQRPDF">🖨️ PDF A4</button></div><p id="dlmSingleQRStatus" style="font-size:13px;min-height:20px" role="status"></p></section>';
  document.body.appendChild(overlay);
+ // Android Chrome can refresh the PWA when a QR preview is dragged downward.
+ // Stop vertical gestures only inside this QR preview, without changing app scrolling.
+ overlay.addEventListener('touchmove',event=>{if(event.cancelable)event.preventDefault()},{passive:false});
  const close=()=>overlay.remove();
  overlay.querySelector('#dlmSingleQRClose').onclick=close;
  overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
