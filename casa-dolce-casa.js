@@ -469,8 +469,8 @@ async function dlmHierarchyPhoto(file){
 }
 $('#placeForm').addEventListener('submit',async e=>{
  e.preventDefault();
- const environment=dlmPlacePresetSelect.value;
- if(!environment){toast('Scegli prima un ambiente con icona 3D');return}
+ const environment=dlmCustomMode?dlmCustomEnvironmentName.value.trim():dlmPlacePresetSelect.value;
+ if(!environment){toast(dlmCustomMode?'Inserisci il nome della posizione principale':'Scegli un ambiente con icona 3D oppure Nome personalizzato');if(dlmCustomMode)dlmCustomEnvironmentName.focus();return}
  const rows=[...dlmHierarchyLevels.children];
  const names=rows.map(row=>row.querySelector('.dlm-level-name').value.trim());
  if(names.some(n=>!n)){toast('Inserisci il nome di ogni livello');return}
@@ -488,7 +488,7 @@ $('#placeForm').addEventListener('submit',async e=>{
   if(!save()){db.places=db.places.filter(p=>!created.includes(p));return}
   renderPlaces();renderItems();document.getElementById('itemPlace').value=parent.id;document.getElementById('itemPlace').dispatchEvent(new Event('change',{bubbles:true}));if(typeof dlmItemPlaceRefresh==='function')dlmItemPlaceRefresh();if(typeof saveDraft==='function')saveDraft();dlmToggleInlinePlace(false);
   for(const place of created){if(window.familyCreatePlace){try{await window.familyCreatePlace(place)}catch(err){console.warn('Sincronizzazione posizione',err)}}}
-  dlmHierarchyLevels.innerHTML='';dlmAddHierarchyLevel();dlmRefreshHierarchy();toast('Percorso creato con QR per ogni livello 💜');
+  dlmHierarchyLevels.innerHTML='';dlmCustomEnvironmentName.value='';if(!dlmCustomMode)dlmAddHierarchyLevel();dlmRefreshHierarchy();toast('Posizione creata con QR 💜');
  }catch(err){toast('Non è stato possibile salvare il percorso');console.error(err)}
  finally{button.disabled=false}
 });function fullPlacePath(id){
