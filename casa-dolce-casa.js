@@ -334,7 +334,7 @@ const dlmPlacePickerGrid=document.getElementById('dlmPlacePickerGrid');
 const dlmPlacePickerSelected=document.getElementById('dlmPlacePickerSelected');
 function dlmRefreshPlacePicker(){
  const selected=dlmPlacePresetSelect.value;
- dlmPlacePickerSelected.innerHTML=selected?dlmPlaceIconHtml(selected)+'<span>'+safe(selected)+'</span>':'Scegli un ambiente con icona 3D';
+ dlmPlacePickerSelected.innerHTML=selected?dlmPlaceIconHtml(selected)+'<span>'+safe(selected)+'</span>':(dlmCustomMode?'✏️ Nome personalizzato':'Scegli un ambiente con icona 3D');
  dlmPlacePickerGrid.innerHTML=dlmPlacePresets.map(([label])=>'<button type="button" class="dlm-place-picker-option" data-preset="'+safe(label)+'" aria-pressed="'+(selected===label)+'">'+dlmPlaceIconHtml(label)+'<span>'+safe(label)+'</span></button>').join('');
 }
 dlmPlacePickerButton.addEventListener('click',()=>{
@@ -345,7 +345,7 @@ dlmPlacePickerButton.addEventListener('click',()=>{
 });
 dlmPlacePickerGrid.addEventListener('click',e=>{
  const button=e.target.closest('button[data-preset]');if(!button)return;
- dlmPlacePresetSelect.value=button.dataset.preset;
+ dlmCustomMode=false;dlmCustomEnvironment.style.display='none';dlmPlacePresetSelect.value=button.dataset.preset;
  dlmPlacePresetSelect.dispatchEvent(new Event('change',{bubbles:true}));
  dlmPlacePickerPanel.hidden=true;
  dlmPlacePickerButton.setAttribute('aria-expanded','false');
