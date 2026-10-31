@@ -367,7 +367,7 @@ dlmPlacePickerButton.addEventListener('click',()=>{
 });
 dlmPlacePickerGrid.addEventListener('click',e=>{
  const button=e.target.closest('button[data-preset]');if(!button)return;
- dlmCustomMode=false;dlmCustomEnvironment.style.display='none';dlmPlacePresetSelect.value=button.dataset.preset;
+ dlmCustomMode=false;dlmCustomEnvironment.style.display='none';dlmPlacePresetSelect.value=button.dataset.preset;if(!dlmHierarchyLevels.children.length)dlmAddHierarchyLevel();
  dlmPlacePresetSelect.dispatchEvent(new Event('change',{bubbles:true}));
  dlmPlacePickerPanel.hidden=true;
  dlmPlacePickerButton.setAttribute('aria-expanded','false');
@@ -473,7 +473,7 @@ $('#placeForm').addEventListener('submit',async e=>{
  if(!environment){toast('Scegli prima un ambiente con icona 3D');return}
  const rows=[...dlmHierarchyLevels.children];
  const names=rows.map(row=>row.querySelector('.dlm-level-name').value.trim());
- if(!names.length||names.some(n=>!n)){toast('Inserisci il nome di ogni livello');return}
+ if(names.some(n=>!n)){toast('Inserisci il nome di ogni livello');return}
  const button=e.target.querySelector('[type=submit]');button.disabled=true;
  try{
   let parent=db.places.find(p=>p.name.toLocaleLowerCase('it')===environment.toLocaleLowerCase('it')&&!p.parentId);
