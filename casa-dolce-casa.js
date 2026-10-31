@@ -913,7 +913,7 @@ let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=tru
  if(code.startsWith('DLM-I-')){const item=db.items.find(i=>i.id===code.slice(6));if(item)showItem(item.id);else $('#scanResult').innerHTML='<div class="panel">Oggetto o libro non presente in questo archivio.</div>';return}
  if(code.startsWith('DLM-P-')){
   const p=db.places.find(x=>x.id===code.slice(6));
-  if(!p){$('#scanResult').innerHTML='<div class="panel">Posizione non presente in questo archivio.</div>';return}
+  if(!p){$('#scanResult').innerHTML='<div class="panel">Posizione non presente in questo archivio.</div>';focusScanResult();return}
   const items=db.items.filter(i=>i.place===p.id);
   const children=db.places.filter(x=>x.parentId===p.id);
   let photos={};try{photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{};
@@ -922,10 +922,20 @@ let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=tru
   const objectHtml=items.length?'<details open><summary style="cursor:pointer;font-weight:700;padding:12px 0">📦 Oggetti contenuti ('+items.length+')</summary>'+items.map(i=>'<button type="button" class="secondary" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:8px 0;padding:9px 12px;min-height:66px" onclick="showItem(\''+i.id+'\')"><span style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;flex-shrink:0;background:#f3e6fa;border-radius:12px;overflow:hidden">'+(i.photo?'<img src="'+safe(i.photo)+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">':(i.kind==='book'?'📚':'📦'))+'</span><span style="flex:1;min-width:0;overflow-wrap:anywhere">'+safe(i.name)+'</span><span aria-hidden="true">›</span></button>').join('')+'</details>':'<p class="hint">Questa posizione non contiene ancora oggetti.</p>';
   const childHtml=children.length?'<h4 style="margin:18px 0 8px">🏠 Sottoposizioni</h4>'+children.map(x=>'<button type="button" class="secondary full" style="margin:6px 0;text-align:left" onclick="resolveScan(\'DLM-P-'+x.id+'\')">📍 '+safe(x.name)+' →</button>').join(''):'';
   $('#scanResult').innerHTML='<div class="panel">'+photoHtml+'<h3>📍 '+safe(p.name)+'</h3><p class="hint" style="overflow-wrap:anywhere">🏡 '+safe(placePath(p.id))+'</p><p><strong>📦 '+items.length+' oggetti</strong> · '+children.length+' sottoposizioni</p>'+objectHtml+childHtml+'<button type="button" class="secondary full" onclick="openScannedPlace(\''+p.id+'\')">📍 Apri questa posizione</button><button type="button" class="primary full" onclick="assignScannedPlace(\''+p.id+'\')">＋ Aggiungi qui un oggetto</button></div>';
+  focusScanResult();
   return;
  }
  if(scanForItem){scanForItem=false;page('add');restoreDraft(false);$('#barcode').value=code;saveDraft();toast('Codice inserito nel modulo');if(/^\d{13}$/.test(code)&&isEAN(code))lookupCode();return}
- const item=db.items.find(i=>i.barcode===code);if(item)showItem(item.id);else $('#scanResult').innerHTML='<div class="panel">Nessun oggetto associato a questo codice. Puoi aggiungerlo manualmente.</div>';
+ const item=db.items.find(i=>i.barcode===code);if(item)showItem(item.id);else {$('#scanResult').innerHTML='<div class="panel">Nessun oggetto associato a questo codice. Puoi aggiungerlo manualmente.</div>';focusScanResult();}
+}
+// Porta subito in vista il risultato dopo una scansione QR o codice a barre.
+function focusScanResult(){
+ const result=document.querySelector('#scanResult');
+ if(!result)return;
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  if(!document.querySelector('#scan.page.active'))return;
+  result.scrollIntoView({behavior:'smooth',block:'start'});
+ }));
 }
 window.openScannedPlace=id=>{page('places');openSearchedPlace(id)};
 window.assignScannedPlace=id=>{editing=null;resetForm();page('add');$('#itemPlace').value=id;saveDraft()};
