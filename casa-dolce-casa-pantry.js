@@ -1,7 +1,7 @@
 (()=>{
 const root=document.getElementById('pantry');if(!root)return;
 const base='https://ephdnunjudbwlgbxdadm.supabase.co',apikey='sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT';
-let lots=[],access=null,zone='tutte',busy=false,overviewFilter='';
+let lots=[],areas=[],access=null,zone='tutte',busy=false,overviewFilter='';
 const $=id=>document.getElementById(id),escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 root.innerHTML='<div class="panel"><h2><img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> La mia dispensa</h2><p class="hint">Inventario condiviso della famiglia · avvisi 5 giorni prima della scadenza</p><p id="pantryStatus" role="status">Accedi alla tua Casa dolce casa per vedere la dispensa.</p><div id="pantryOnline" hidden><div style="margin:14px 0"><label>🔎 Cerca un alimento<input id="pantrySearch" type="search" placeholder="Es. latte, pasta, marca o ripiano" autocomplete="off"></label></div><div id="pantryOverview" class="pantry-overview" aria-label="Riepilogo dispensa"></div><div id="pantryAlerts"></div><details id="pantryAddDetails" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px">➕ Aggiungi alimento</summary><form id="pantryForm" style="margin-top:12px"><div class="panel" style="margin:12px 0;background:#faf5ff"><strong>📷 Riconosci dal codice a barre</strong><p class="hint">Cerca automaticamente nome, marca e formato. La scadenza va inserita dalla confezione.</p><label>Codice a barre<input id="pantryBarcode" inputmode="numeric" placeholder="Es. 8001234567890"></label><div class="row"><button type="button" class="secondary" id="pantryCamera">📷 Scansiona</button><button type="button" class="secondary" id="pantryLookup">🔎 Cerca prodotto</button></div><video id="pantryVideo" playsinline muted hidden style="width:100%;max-height:280px;border-radius:14px;margin-top:8px"></video><button type="button" class="secondary full" id="pantryStop" hidden>Chiudi fotocamera</button><label style="display:block;margin-top:10px">🖼️ Scegli una foto dalla galleria (oppure scattane una)<input id="pantryBarcodePhoto" type="file" accept="image/*" style="margin-top:6px"></label><p class="hint" id="pantryProductInfo" role="status"></p></div><label>Nome alimento<input id="pantryName" required maxlength="120" placeholder="Es. Yogurt alla fragola"></label><label>Marca<input id="pantryBrand" maxlength="80" placeholder="Es. Granarolo"></label><label>Formato<input id="pantryFormat" maxlength="50" placeholder="Es. 1 litro"></label><label>Dove si trova?<select id="pantryZone"><option value="dispensa">🥫 Dispensa</option><option value="frigo">🥬 Frigo</option><option value="freezer">🧊 Freezer</option></select></label><label>Ripiano o cassetto (facoltativo)<select id="pantryShelf"></select></label><button type="button" class="secondary full" id="pantryManageShelves">⚙️ Gestisci ripiani e cassetti</button><label>Quantità<input id="pantryQty" type="number" min="1" max="99999" value="1" required></label><label>Data di scadenza (facoltativa)<input id="pantryExpiry" type="date"></label><p class="hint">Se lo stesso prodotto ha scadenze diverse, aggiungilo una volta per ciascuna scadenza.</p><button class="primary full" type="submit">💜 Salva alimento</button></form></details><details id="shoppingBox" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px"><img class="pantry-real-3d-icon" src="assets/carrello-rosa-3d-corretto.png" alt=""> La mia lista della spesa <span id="shoppingCount"></span></summary><form id="shoppingForm" style="margin:12px 0"><label>Prodotto da comprare<input id="shoppingName" maxlength="120" required placeholder="Es. Latte · Parmalat · 1 litro"></label><label>Quantità<input id="shoppingQty" type="number" min="1" max="99999" value="1" required></label><button type="submit" class="primary full">➕ Aggiungi alla lista</button></form><p id="shoppingStatus" class="hint"></p><div id="shoppingList"></div><button type="button" class="secondary full" id="shoppingRefresh">↻ Aggiorna lista</button></details><h3><img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> Alimenti in casa</h3><div id="pantryList"></div><button type="button" class="secondary full" id="pantryRefresh">↻ Aggiorna dispensa</button></div></div>';
 // Compact pantry layout: existing controls and IDs are retained.
@@ -41,12 +41,52 @@ document.head.appendChild(pantryUrgentRefinement);
 const pantryBasketStyle=document.createElement('style');pantryBasketStyle.textContent='.pantry-real-3d-icon{width:43px;height:43px;object-fit:contain;vertical-align:middle;margin-right:6px;border-radius:0}.pantry-group>summary .pantry-real-3d-icon{width:52px;height:52px;box-sizing:border-box;object-fit:contain;padding:5px;vertical-align:middle;margin-right:9px;border-radius:0;overflow:visible}.pantry-group>summary{min-height:56px;line-height:1.4}.pantry-basket-icon{display:inline-block;font-size:25px;vertical-align:-3px;margin-right:3px;filter:drop-shadow(0 2px 3px #8e6d8e33)}';document.head.appendChild(pantryBasketStyle);
 
 
+
+const areaIcon={frigo:'assets/frigorifero-nuovo.png',freezer:'assets/freezer-nuovo.png',dispensa:'assets/dispensa-nuova.png'};
+const areaType=v=>areas.find(a=>a.id===v)?.kind||v;
+const areaId=v=>areas.some(a=>a.id===v)?v:null;
+const areaChoice=l=>l.area_id||l.zone;
+const areaName=l=>areas.find(a=>a.id===l.area_id)?.name||({frigo:'Frigo',freezer:'Freezer',dispensa:'Dispensa'}[l.zone]||l.zone);
+const areaOptions=()=>[['dispensa','🥫 Dispensa'],['frigo','🥬 Frigo'],['freezer','🧊 Freezer'],...areas.map(a=>[a.id,a.name])];
+const fillAreas=(select,value)=>{select.replaceChildren();for(const [v,t] of areaOptions()){const o=document.createElement('option');o.value=v;o.textContent=t;select.append(o)}select.value=value||'dispensa'};
+const areaUI=document.createElement('details');areaUI.id='pantryCustomAreas';areaUI.style.cssText='margin:15px 0;padding:14px;background:#f7eeff;border:1px solid #e3cdf2;border-radius:19px';
+areaUI.innerHTML='<summary style="cursor:pointer;font-weight:750;color:#6d328e">🏠 ＋ Aggiungi o gestisci ambienti</summary><p class="hint">Crea un secondo freezer, un frigo o una dispensa con nome, icona 3D oppure foto. Tutti i familiari vedranno gli stessi ambienti.</p><div id="pantryAreaRows"></div><form id="pantryAreaEditor"><label>Nome ambiente<input id="pantryAreaName" required maxlength="60" placeholder="Es. Freezer garage"></label><label>Tipo<select id="pantryAreaKind"><option value="freezer">🧊 Freezer</option><option value="frigo">🥬 Frigo</option><option value="dispensa">🥫 Dispensa</option></select></label><label>Scegli l’icona<select id="pantryAreaIcon"><option value="default">Icona del tipo scelto</option><option value="freezer">🧊 Freezer 3D</option><option value="frigo">🥬 Frigo 3D</option><option value="dispensa">🥫 Dispensa 3D</option></select></label><label>Oppure carica una foto<input id="pantryAreaPhoto" type="file" accept="image/*"></label><label>Ripiani o cassetti, uno per riga<textarea id="pantryAreaShelves" rows="3" placeholder="Ripiano 1&#10;Ripiano 2"></textarea></label><p class="hint" id="pantryAreaMessage"></p><button class="primary full" type="submit">💜 Salva ambiente</button><button class="secondary full" id="pantryAreaCancel" type="button" hidden>Annulla modifica</button></form>';
+$('pantryAddDetails').before(areaUI);
+let editArea=null,photoArea=null;
+const areaPhoto=a=>a.photo||areaIcon[a.icon==='default'?a.kind:a.icon]||areaIcon[a.kind];
+function redrawAreas(){
+ $('pantryAreaRows').innerHTML=areas.map(a=>'<div style="display:flex;align-items:center;gap:8px;margin:9px 0;min-width:0"><img src="'+escape(areaPhoto(a))+'" style="width:44px;height:44px;border-radius:12px;object-fit:cover"><strong style="flex:1;min-width:0;overflow-wrap:anywhere">'+escape(a.name)+'</strong><button class="secondary" type="button" data-aedit="'+a.id+'">✏️</button><button class="secondary" type="button" data-adel="'+a.id+'">✕</button></div>').join('');
+ const selected=$('pantryZone').value;fillAreas($('pantryZone'),selected);
+ pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);
+}
+function resetArea(){editArea=null;photoArea=null;$('pantryAreaEditor').reset();$('pantryAreaCancel').hidden=true}
+$('pantryAreaCancel').onclick=resetArea;
+$('pantryAreaRows').onclick=async e=>{
+ const id=e.target.closest('[data-aedit],[data-adel]')?.dataset.aedit||e.target.closest('[data-adel]')?.dataset.adel;
+ const a=areas.find(x=>x.id===id);if(!a)return;
+ if(e.target.closest('[data-aedit]')){editArea=id;photoArea=a.photo;$('pantryAreaName').value=a.name;$('pantryAreaKind').value=a.kind;$('pantryAreaIcon').value=a.icon;$('pantryAreaShelves').value=(a.shelves||[]).join('\n');$('pantryAreaCancel').hidden=false;return}
+ if(lots.some(l=>l.area_id===id)){alert('Sposta prima gli alimenti presenti in questo ambiente.');return}
+ if(!confirm('Eliminare '+a.name+'?'))return;
+ try{await request('pantry_areas?id=eq.'+id+'&home_id=eq.'+access.homeId,{method:'DELETE'});await refresh()}catch(err){$('pantryAreaMessage').textContent=err.message}
+};
+$('pantryAreaPhoto').onchange=async e=>{
+ const file=e.target.files?.[0];if(!file)return;
+ try{const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),scale=Math.min(1,380/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();photoArea=canvas.toDataURL('image/jpeg',.6);if(photoArea.length>170000)throw Error('Foto troppo grande');$('pantryAreaMessage').textContent='📷 Foto pronta'}catch(err){photoArea=null;$('pantryAreaMessage').textContent='Foto non caricata: '+err.message}
+};
+$('pantryAreaEditor').onsubmit=async e=>{
+ e.preventDefault();if(!access)return;
+ const payload={name:$('pantryAreaName').value.trim(),kind:$('pantryAreaKind').value,icon:$('pantryAreaIcon').value,photo:photoArea,shelves:[...new Set($('pantryAreaShelves').value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean))].slice(0,30)};
+ if(areas.some(a=>a.id!==editArea&&a.name.toLowerCase()===payload.name.toLowerCase())){$('pantryAreaMessage').textContent='Nome già utilizzato';return}
+ try{if(editArea)await request('pantry_areas?id=eq.'+editArea+'&home_id=eq.'+access.homeId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});else await request('pantry_areas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,home_id:access.homeId})});resetArea();await refresh();$('pantryAreaMessage').textContent='💜 Ambiente condiviso salvato'}catch(err){$('pantryAreaMessage').textContent='Errore: '+err.message}
+};
+const areaCSS=document.createElement('style');areaCSS.textContent='#pantryCustomAreas label{display:block;margin:10px 0}#pantryCustomAreas input,#pantryCustomAreas select,#pantryCustomAreas textarea{display:block;box-sizing:border-box;width:100%;margin-top:5px}#pantryCustomAreas [data-aedit],#pantryCustomAreas [data-adel]{min-width:38px;padding:8px}';document.head.append(areaCSS);
+
 const pantryDefaultShelves={dispensa:['Ripiano 1','Ripiano 2','Ripiano 3'],frigo:['Ripiano 1','Ripiano 2','Ripiano 3','Ripiano 4','Ripiano 5','Cassetto verdure','Sportello'],freezer:['Cassetto 1','Cassetto 2','Cassetto 3']};
 const pantryShelfKey='dlm-pantry-shelves-v1';
 function pantryShelfStore(){try{return JSON.parse(localStorage.getItem(pantryShelfKey)||'{}')||{}}catch(e){return {}}}
 function pantryShelfOptions(z,selected=''){
- const saved=pantryShelfStore(),custom=Array.isArray(saved[z])?saved[z]:pantryDefaultShelves[z]||[];
- const existing=lots.filter(l=>l.zone===z&&l.shelf).map(l=>l.shelf);
+ const saved=pantryShelfStore(),custom=areas.find(a=>a.id===z)?.shelves|| (Array.isArray(saved[z])?saved[z]:pantryDefaultShelves[z]||[]);
+ const existing=lots.filter(l=>(l.area_id||l.zone)===z&&l.shelf).map(l=>l.shelf);
  return [...new Set([...custom,...existing,selected].map(x=>String(x||'').trim()).filter(Boolean))];
 }
 function pantryPopulateShelf(select,z,selected=''){
@@ -57,8 +97,8 @@ function pantryPopulateShelf(select,z,selected=''){
 $('pantryZone').addEventListener('change',()=>pantryPopulateShelf($('pantryShelf'),$('pantryZone').value));
 $('pantryManageShelves').onclick=()=>pantryManageShelves();
 function pantryManageShelves(){
- const z=$('pantryZone').value,labels={dispensa:'Dispensa',frigo:'Frigo',freezer:'Freezer'};
- let entries=(Array.isArray(pantryShelfStore()[z])?pantryShelfStore()[z]:pantryDefaultShelves[z]).slice();
+ const z=$('pantryZone').value,labels={dispensa:'Dispensa',frigo:'Frigo',freezer:'Freezer'};labels[z]=areas.find(a=>a.id===z)?.name||labels[z]||z;
+ let entries=(areas.find(a=>a.id===z)?.shelves|| (Array.isArray(pantryShelfStore()[z])?pantryShelfStore()[z]:pantryDefaultShelves[z]||[])).slice();
  const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(30,16,45,.48);display:flex;align-items:center;justify-content:center;padding:16px';
  const panel=document.createElement('div');panel.style.cssText='background:white;border-radius:22px;padding:20px;width:min(100%,420px);max-height:85vh;overflow-y:auto;box-shadow:0 14px 50px #24133244';
  const title=document.createElement('h3');title.textContent='⚙️ Ripiani e cassetti — '+labels[z];title.style.margin='0 0 8px';
@@ -67,9 +107,9 @@ function pantryManageShelves(){
  const field=document.createElement('input');field.placeholder='Es. Ripiano 6 oppure Cassetto verdure';field.maxLength=80;field.style.cssText='width:100%;box-sizing:border-box;margin:12px 0;padding:12px;border:1px solid #d8b9eb;border-radius:12px';
  const add=document.createElement('button');add.type='button';add.className='secondary full';add.textContent='＋ Aggiungi posizione';
  const done=document.createElement('button');done.type='button';done.className='primary full';done.textContent='Fine';done.style.marginTop='12px';
- function persist(){const saved=pantryShelfStore();saved[z]=entries;localStorage.setItem(pantryShelfKey,JSON.stringify(saved));pantryPopulateShelf($('pantryShelf'),z,$('pantryShelf').value)}
- function draw(){list.replaceChildren();entries.forEach((name,i)=>{const line=document.createElement('div');line.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0;padding:8px 0;border-bottom:1px solid #eee';const label=document.createElement('span');label.textContent='📍 '+name;const del=document.createElement('button');del.type='button';del.className='secondary';del.textContent='Elimina';del.style.flexShrink='0';del.onclick=()=>{entries.splice(i,1);persist();draw()};line.append(label,del);list.appendChild(line)})}
- add.onclick=()=>{const value=field.value.trim();if(!value)return;if(entries.some(x=>x.toLowerCase()===value.toLowerCase())){alert('Questa posizione esiste già.');return}entries.push(value);field.value='';persist();draw()};
+ async function persist(){if(areaId(z)){await request('pantry_areas?id=eq.'+z+'&home_id=eq.'+access.homeId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({shelves:entries})});areas.find(a=>a.id===z).shelves=entries.slice()}else{const saved=pantryShelfStore();saved[z]=entries;localStorage.setItem(pantryShelfKey,JSON.stringify(saved))}pantryPopulateShelf($('pantryShelf'),z,$('pantryShelf').value)}
+ function draw(){list.replaceChildren();entries.forEach((name,i)=>{const line=document.createElement('div');line.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0;padding:8px 0;border-bottom:1px solid #eee';const label=document.createElement('span');label.textContent='📍 '+name;const del=document.createElement('button');del.type='button';del.className='secondary';del.textContent='Elimina';del.style.flexShrink='0';del.onclick=()=>{entries.splice(i,1);persist().catch(e=>alert(e.message));draw()};line.append(label,del);list.appendChild(line)})}
+ add.onclick=()=>{const value=field.value.trim();if(!value)return;if(entries.some(x=>x.toLowerCase()===value.toLowerCase())){alert('Questa posizione esiste già.');return}entries.push(value);field.value='';persist().catch(e=>alert(e.message));draw()};
  field.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();add.click()}});
  done.onclick=()=>overlay.remove();overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
  panel.append(title,hint,list,field,add,done);overlay.appendChild(panel);document.body.appendChild(overlay);draw();
@@ -229,7 +269,7 @@ function choosePantryZone(current,currentShelf=""){
   panel.style.cssText='background:white;border-radius:22px;padding:24px;width:min(100%,420px);box-shadow:0 14px 50px #24133244';
   const heading=document.createElement('h3');heading.textContent='📍 Dove si trova?';heading.style.margin='0 0 15px';
   const select=document.createElement('select');select.style.cssText='width:100%;padding:14px;border:1px solid #d8b9eb;border-radius:12px;font-size:17px;background:#faf5ff;color:#42265c';
-  [['dispensa','🥫 Dispensa'],['frigo','🥬 Frigo'],['freezer','🧊 Freezer']].forEach(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;select.appendChild(o)});
+  areaOptions().forEach(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;select.appendChild(o)});
   select.value=current;
   const shelfLabel=document.createElement('label');shelfLabel.textContent='Ripiano o cassetto (facoltativo)';shelfLabel.style.cssText='display:block;margin-top:14px;font-weight:600';const shelfInput=document.createElement('select');shelfInput.style.cssText='display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:14px;border:1px solid #d8b9eb;border-radius:12px;font-size:17px;background:#faf5ff;color:#42265c';pantryPopulateShelf(shelfInput,current,currentShelf);select.addEventListener('change',()=>pantryPopulateShelf(shelfInput,select.value));shelfLabel.appendChild(shelfInput);const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;margin-top:18px';
   const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='Annulla';
@@ -258,18 +298,18 @@ function render(){
  ['soon','assets/cibi-in-scadenza-3d.png',expiringSoon,'Entro 5 giorni'],
  ['expired','assets/cibi-scaduti-3d.png',overdue,'Scadute']
  ].map(([key,img,count,label])=>'<button type="button" class="pantry-overview-card'+(key==='expired'&&overdue?' pantry-overview-warning':'')+'" data-overview-filter="'+key+'" aria-pressed="'+(overviewFilter===key)+'"><span><img class="pantry-stat-icon" src="'+img+'" alt=""></span><strong>'+count+'</strong><small>'+label+'</small></button>').join('');
- const urgentRows=soon.map(l=>{const days=dayCount(dueDate(l));const label=days<0?'⚠️ Scaduto da '+Math.abs(days)+' giorni':days===0?'⚠️ Scade oggi':'🔔 Mancano '+days+' giorni';const location=({frigo:'🥬 Frigo',freezer:'🧊 Freezer',dispensa:'🥫 Dispensa'}[l.zone]||l.zone)+(l.shelf?' · '+(/^\d+$/.test(l.shelf)?'Ripiano '+l.shelf:l.shelf):'');return '<li style="margin:10px 0"><strong>'+escape(l.name)+'</strong> · '+escape(label)+'<div class="hint">'+escape(location)+' · Quantità: '+Number(l.quantity)+'</div></li>'}).join('');
+ const urgentRows=soon.map(l=>{const days=dayCount(dueDate(l));const label=days<0?'⚠️ Scaduto da '+Math.abs(days)+' giorni':days===0?'⚠️ Scade oggi':'🔔 Mancano '+days+' giorni';const location=areaName(l)+(l.shelf?' · '+(/^\d+$/.test(l.shelf)?'Ripiano '+l.shelf:l.shelf):'');return '<li style="margin:10px 0"><strong>'+escape(l.name)+'</strong> · '+escape(label)+'<div class="hint">'+escape(location)+' · Quantità: '+Number(l.quantity)+'</div></li>'}).join('');
  $('pantryAlerts').innerHTML=soon.length?'<details class="pantry-urgent" style="margin:12px 0"><summary><span class="pantry-urgent-bell" aria-hidden="true">🔔</span><span class="pantry-urgent-title">Da consumare presto</span><b class="pantry-urgent-count">'+soon.length+'</b><span class="pantry-urgent-arrow" aria-hidden="true">⌄</span></summary><p class="hint">In ordine di scadenza, dai più urgenti.</p><ul style="padding-left:22px;margin-bottom:0">'+urgentRows+'</ul></details>':'<p class="hint">💚 Nessun alimento in scadenza nei prossimi 5 giorni.</p>';
- const matches=l=>!q||[l.name,l.brand,l.format,l.zone,l.shelf].some(v=>String(v||'').toLocaleLowerCase('it').includes(q));
+ const matches=l=>!q||[l.name,l.brand,l.format,l.zone,areaName(l),l.shelf].some(v=>String(v||'').toLocaleLowerCase('it').includes(q));
  const filtered=sorted.filter(l=>matches(l)&&(!overviewFilter||overviewFilter==='all'||(overviewFilter==='open'&&Boolean(l.opened_on))||(overviewFilter==='soon'&&dueDate(l)&&dayCount(dueDate(l))>=0&&dayCount(dueDate(l))<=5)||(overviewFilter==='expired'&&dueDate(l)&&dayCount(dueDate(l))<0)));
  renderMinimumStocks();
  const cards=arr=>arr.map(l=>{const days=dayCount(l.expires_on);const badge=days===null?'Senza scadenza':days<0?'⚠️ Scaduto da '+Math.abs(days)+' giorni':days===0?'⚠️ Scade oggi':days<=5?'🔔 Scade tra '+days+' giorni':'Scade il '+l.expires_on.split('-').reverse().join('/');
- const opened=l.opened_on?'<p class="hint">📦 Aperta il '+escape(l.opened_on.split('-').reverse().join('/'))+(l.opened_until?' · Consumare entro '+escape(l.opened_until.split('-').reverse().join('/'))+(dayCount(l.opened_until)<=5?' 🔔':''):' · Termine dopo apertura non indicato')+'</p>':'';return '<div class="panel" style="margin:10px 0"><strong>'+escape(l.name)+'</strong>'+(l.opened_on?' <span style="display:inline-block;margin-left:6px;padding:4px 9px;border-radius:999px;background:#f2dfff;color:#7432a6;font-weight:700;font-size:12px">📦 APERTO</span>':'')+'<p class="hint">'+({frigo:'🥬 Frigo',freezer:'🧊 Freezer',dispensa:'🥫 Dispensa'}[l.zone]||'')+(l.shelf?' · 📍 '+escape(/^\d+$/.test(l.shelf)?'Ripiano '+l.shelf:l.shelf):'')+' · '+escape(badge)+'</p>'+opened+'<div class="pantry-lot-quantity">Quantità: <strong>'+l.quantity+'</strong></div><div class="pantry-lot-actions"><button type="button" class="secondary" data-consume="'+l.id+'">− 1 consumato</button>'+(l.opened_on?'':'<button type="button" class="secondary" data-open="'+l.id+'">📦 Apri 1</button>')+'<button type="button" class="secondary" data-edit="'+l.id+'">✏️ Modifica</button><button type="button" class="secondary" data-move="'+l.id+'">📍 Sposta</button><button type="button" class="secondary pantry-lot-delete" data-delete="'+l.id+'">Elimina</button></div></div>'}).join('');
+ const opened=l.opened_on?'<p class="hint">📦 Aperta il '+escape(l.opened_on.split('-').reverse().join('/'))+(l.opened_until?' · Consumare entro '+escape(l.opened_until.split('-').reverse().join('/'))+(dayCount(l.opened_until)<=5?' 🔔':''):' · Termine dopo apertura non indicato')+'</p>':'';return '<div class="panel" style="margin:10px 0"><strong>'+escape(l.name)+'</strong>'+(l.opened_on?' <span style="display:inline-block;margin-left:6px;padding:4px 9px;border-radius:999px;background:#f2dfff;color:#7432a6;font-weight:700;font-size:12px">📦 APERTO</span>':'')+'<p class="hint">'+escape(areaName(l))+(l.shelf?' · 📍 '+escape(/^\d+$/.test(l.shelf)?'Ripiano '+l.shelf:l.shelf):'')+' · '+escape(badge)+'</p>'+opened+'<div class="pantry-lot-quantity">Quantità: <strong>'+l.quantity+'</strong></div><div class="pantry-lot-actions"><button type="button" class="secondary" data-consume="'+l.id+'">− 1 consumato</button>'+(l.opened_on?'':'<button type="button" class="secondary" data-open="'+l.id+'">📦 Apri 1</button>')+'<button type="button" class="secondary" data-edit="'+l.id+'">✏️ Modifica</button><button type="button" class="secondary" data-move="'+l.id+'">📍 Sposta</button><button type="button" class="secondary pantry-lot-delete" data-delete="'+l.id+'">Elimina</button></div></div>'}).join('');
  const priority=filtered.filter(l=>overviewFilter&&overviewFilter!=='all'?true:isPriority(l));
  const normal=overviewFilter&&overviewFilter!=='all'?[]:filtered.filter(l=>!isPriority(l));
- const sections=[['frigo','<img class="pantry-real-3d-icon" src="assets/frigorifero-nuovo.png" alt="Frigo" loading="eager" decoding="sync"> Frigo'],['freezer','<img class="pantry-real-3d-icon" src="assets/freezer-nuovo.png" alt="Freezer" loading="eager" decoding="sync"> Freezer'],['dispensa','<img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> Dispensa']];
+ const sections=[['frigo','<img class="pantry-real-3d-icon" src="assets/frigorifero-nuovo.png" alt="Frigo" loading="eager" decoding="sync"> Frigo'],['freezer','<img class="pantry-real-3d-icon" src="assets/freezer-nuovo.png" alt="Freezer" loading="eager" decoding="sync"> Freezer'],['dispensa','<img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> Dispensa'],...areas.map(a=>[a.id,'<img class="pantry-real-3d-icon" src="'+escape(areaPhoto(a))+'" alt=""> '+escape(a.name)])];
  const accordions=sections.map(([key,label])=>{
-   const group=normal.filter(l=>l.zone===key).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base',numeric:true})||String(a.brand||'').localeCompare(String(b.brand||''),'it',{sensitivity:'base'}));
+   const group=normal.filter(l=>(l.area_id||l.zone)===key).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base',numeric:true})||String(a.brand||'').localeCompare(String(b.brand||''),'it',{sensitivity:'base'}));
    return '<details class="pantry-group pantry-zone-'+key+'" '+((q&&group.length)||overviewFilter==='all'?'open':'')+' style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">'+label+' · '+group.length+' lotti</summary><div style="margin-top:10px">'+(group.length?cards(group):'<p class="hint">Nessun alimento in questa posizione.</p>')+'</div></details>';
  }).join('');
  $('pantryList').innerHTML=(overviewFilter==='all'?'<div class="pantry-filter-note">📦 Tutte le confezioni, suddivise per posizione. Scorri per vedere gli alimenti e le quantità.</div>':'')+(overviewFilter&&overviewFilter!=='all'?'<div class="pantry-filter-note">Filtro: '+({open:'Aperte',soon:'Entro 5 giorni',expired:'Scadute'}[overviewFilter]||'Tutte')+' <button type="button" id="pantryClearOverview">Mostra tutto</button></div>':'')+(q?'<p class="hint">🔎 '+filtered.length+' risultati per «'+escape(q)+'»</p>':'')+
@@ -297,15 +337,15 @@ async function editPantryLot(l){
  const expiryInput=field('Scadenza (facoltativa)',l.expires_on||'','date');
  const zoneLabel=document.createElement('label');zoneLabel.textContent='Dove si trova?';zoneLabel.style.cssText='display:block;margin:12px 0;font-weight:650';
  const zoneSelect=document.createElement('select');zoneSelect.style.cssText='display:block;width:100%;margin-top:5px;padding:11px;border:1px solid #dcc6e9;border-radius:12px';
- [['dispensa','🥫 Dispensa'],['frigo','🥬 Frigo'],['freezer','🧊 Freezer']].forEach(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;zoneSelect.appendChild(o)});zoneSelect.value=l.zone;zoneLabel.appendChild(zoneSelect);panel.appendChild(zoneLabel);
+ [['dispensa','🥫 Dispensa'],['frigo','🥬 Frigo'],['freezer','🧊 Freezer']].forEach(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;zoneSelect.appendChild(o)});zoneSelect.value=areaChoice(l);zoneLabel.appendChild(zoneSelect);panel.appendChild(zoneLabel);
  const shelfLabel=document.createElement('label');shelfLabel.textContent='Ripiano o cassetto';shelfLabel.style.cssText='display:block;margin:12px 0;font-weight:650';const shelfSelect=document.createElement('select');shelfSelect.style.cssText='display:block;width:100%;margin-top:5px;padding:11px;border:1px solid #dcc6e9;border-radius:12px';shelfLabel.appendChild(shelfSelect);panel.appendChild(shelfLabel);
- pantryPopulateShelf(shelfSelect,l.zone,l.shelf||'');zoneSelect.onchange=()=>pantryPopulateShelf(shelfSelect,zoneSelect.value);
+ pantryPopulateShelf(shelfSelect,areaChoice(l),l.shelf||'');zoneSelect.onchange=()=>pantryPopulateShelf(shelfSelect,zoneSelect.value);
  const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;margin-top:18px';
  const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='Annulla';cancel.style.flex='1';cancel.onclick=()=>overlay.remove();
  const save=document.createElement('button');save.type='submit';save.className='primary';save.textContent='💜 Salva modifiche';save.style.flex='2';actions.append(cancel,save);panel.appendChild(actions);
  const error=document.createElement('p');error.setAttribute('role','alert');error.style.color='#9c244d';panel.appendChild(error);
  panel.onsubmit=async e=>{e.preventDefault();if(busy)return;const fullName=[nameInput.value.trim(),brandInput.value.trim(),formatInput.value.trim()].filter(Boolean).join(' · ').slice(0,120);const quantity=Number(qtyInput.value);if(!fullName||!Number.isInteger(quantity)||quantity<1){error.textContent='Inserisci nome e quantità valida (almeno 1).';return}
- const payload={name:fullName,quantity,expires_on:expiryInput.value||null,zone:zoneSelect.value,shelf:shelfSelect.value||null};
+ const payload={name:fullName,quantity,expires_on:expiryInput.value||null,zone:areaType(zoneSelect.value),area_id:areaId(zoneSelect.value),shelf:shelfSelect.value||null};
  busy=true;save.disabled=true;try{await request('pantry_lots?id=eq.'+encodeURIComponent(l.id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload)});overlay.remove();await refresh();status.textContent='💜 Modifiche salvate per tutta la famiglia'}catch(err){error.textContent='Salvataggio non riuscito: '+err.message}finally{busy=false;save.disabled=false}};
  overlay.appendChild(panel);document.body.appendChild(overlay);overlay.addEventListener('click',e=>{if(e.target===overlay&&!busy)overlay.remove()});
 }
@@ -466,22 +506,22 @@ $('pantryStockList').onclick=async e=>{
 };
 async function refresh(){
  if(!access)return;
- try{status.textContent='Aggiorno la dispensa…';lots=await request('pantry_lots?select=id,name,zone,quantity,expires_on,opened_on,opened_until,shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);await refreshMinimumStocks();render();await refreshShopping()}
+ try{status.textContent='Aggiorno la dispensa…';areas=await request('pantry_areas?select=id,name,kind,icon,photo,shelves&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=name.asc');redrawAreas();lots=await request('pantry_lots?select=id,name,zone,area_id,quantity,expires_on,opened_on,opened_until,shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);await refreshMinimumStocks();render();await refreshShopping()}
  catch(e){status.textContent='Per attivare la dispensa condivisa, esegui prima pantry-setup.sql in Supabase. Dettaglio: '+e.message}
 }
 window.familyPantryConnect=(homeId,getToken)=>{access={homeId,token:getToken};online.hidden=false;refresh()};
-window.familyPantryDisconnect=()=>{access=null;lots=[];shopping=[];minimumStocks=[];online.hidden=true;status.textContent='Accedi alla tua Casa dolce casa per vedere la dispensa.'};
+window.familyPantryDisconnect=()=>{access=null;lots=[];areas=[];shopping=[];minimumStocks=[];online.hidden=true;status.textContent='Accedi alla tua Casa dolce casa per vedere la dispensa.'};
 root.querySelectorAll('[data-zone]').forEach(b=>b.addEventListener('click',()=>{zone=b.dataset.zone;render()}));
 $('pantryRefresh').onclick=refresh;
 $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;try{
- const payload={home_id:access.homeId,name:[$('pantryName').value.trim(),$('pantryBrand').value.trim(),$('pantryFormat').value.trim()].filter(Boolean).join(' · ').slice(0,120),zone:$('pantryZone').value,shelf:$('pantryShelf').value.trim()||null,quantity:Number($('pantryQty').value),expires_on:$('pantryExpiry').value||null};
+ const payload={home_id:access.homeId,name:[$('pantryName').value.trim(),$('pantryBrand').value.trim(),$('pantryFormat').value.trim()].filter(Boolean).join(' · ').slice(0,120),zone:areaType($('pantryZone').value),area_id:areaId($('pantryZone').value),shelf:$('pantryShelf').value.trim()||null,quantity:Number($('pantryQty').value),expires_on:$('pantryExpiry').value||null};
  if(!payload.name||!Number.isInteger(payload.quantity)||payload.quantity<1)throw Error('Controlla nome e quantità');
  
 const same = lots.filter(l =>
   l.name?.trim().toLowerCase() === payload.name.trim().toLowerCase() &&
   (l.brand || '').trim().toLowerCase() === (payload.brand || '').trim().toLowerCase() &&
   (l.format || '').trim().toLowerCase() === (payload.format || '').trim().toLowerCase() &&
-  l.zone === payload.zone &&
+  l.zone === payload.zone && (l.area_id||null)===(payload.area_id||null) &&
   (l.expires_on || null) === (payload.expires_on || null) &&
   !l.opened_on
 );
@@ -558,9 +598,9 @@ $('pantrySearch').addEventListener('input',render);
 $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume],button[data-delete],button[data-open],button[data-move],button[data-edit]');if(!b||busy)return;const id=b.dataset.consume||b.dataset.delete||b.dataset.open||b.dataset.move||b.dataset.edit,l=lots.find(x=>x.id===id);if(!l)return;
  if(b.dataset.edit){await editPantryLot(l);return}
  if(b.dataset.move){
- const placement=await choosePantryZone(l.zone,l.shelf);if(placement===null)return;const newZone=placement.zone;const newShelf=placement.shelf||null;
+ const placement=await choosePantryZone(areaChoice(l),l.shelf);if(placement===null)return;const newZone=areaType(placement.zone);const newArea=areaId(placement.zone);const newShelf=placement.shelf||null;
  if(!['dispensa','frigo','freezer'].includes(newZone)){status.textContent='Scegli: dispensa, frigo oppure freezer.';return}
- busy=true;try{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({zone:newZone,shelf:newShelf})});await rememberPantryPosition({name:l.name,zone:newZone,shelf:newShelf});await refresh();status.textContent='💜 Posizione aggiornata e ricordata'}catch(err){status.textContent='Spostamento non riuscito: '+err.message}finally{busy=false}return;
+ busy=true;try{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({zone:newZone,area_id:newArea,shelf:newShelf})});await rememberPantryPosition({name:l.name,zone:newZone,shelf:newShelf});await refresh();status.textContent='💜 Posizione aggiornata e ricordata'}catch(err){status.textContent='Spostamento non riuscito: '+err.message}finally{busy=false}return;
  }
  if(b.dataset.delete&&!confirm('Eliminare questo lotto di '+l.name+'?'))return;
  if(b.dataset.open){
