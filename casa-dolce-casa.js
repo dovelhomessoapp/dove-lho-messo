@@ -54,8 +54,8 @@ function dlmItemPlaceRefresh(){
  selected.innerHTML=place?dlmItemPlacePicture(place)+'<span>'+safe(fullPlacePath(place.id))+'</span>':'Da assegnare';
  const query=(document.getElementById('dlmItemPlaceSearch')?.value||'').trim().toLocaleLowerCase('it');
  const sorted=[...db.places].sort((a,b)=>fullPlacePath(a.id).localeCompare(fullPlacePath(b.id),'it',{sensitivity:'base'}));
- list.innerHTML='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'">🏡 <strong>Da assegnare</strong></button>'+
- sorted.filter(p=>!query||fullPlacePath(p.id).toLocaleLowerCase('it').includes(query)).map(p=>'<button type="button" class="dlm-item-place-option" data-place-choice="'+safe(p.id)+'" aria-pressed="'+(id===p.id)+'">'+dlmItemPlacePicture(p)+'<span><strong>'+safe(p.name)+'</strong><small>'+safe(fullPlacePath(p.id))+'</small></span></button>').join('');
+ list.innerHTML='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon" aria-hidden="true">🏡</span><span class="dlm-place-option-label"><strong>Da assegnare</strong></span></span></button>'+
+ sorted.filter(p=>!query||fullPlacePath(p.id).toLocaleLowerCase('it').includes(query)).map(p=>'<button type="button" class="dlm-item-place-option" data-place-choice="'+safe(p.id)+'" aria-pressed="'+(id===p.id)+'">'+'<span class="dlm-place-option-layout"><span class="dlm-place-option-icon">'+dlmItemPlacePicture(p)+'</span><span class="dlm-place-option-label"><strong>'+safe(p.name)+'</strong><small>'+safe(fullPlacePath(p.id))+'</small></span></span></button>').join('');
 }
 function dlmItemPlacePicture(p){
  let photos={};try{photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
