@@ -1141,7 +1141,7 @@ async function dlmCheckUpdate(showFeedback=false){
   }finally{dlmUpdateInProgress=false;if(btn){btn.disabled=false;btn.textContent='↻ Aggiorna app'}}
 }
 const dlmUpdateButton=document.getElementById('updateAppBtn');
-if(dlmUpdateButton)dlmUpdateButton.addEventListener('click',()=>dlmCheckUpdate(true));
+// Il controllo degli aggiornamenti è gestito unicamente dallo script dlm-safe-updates nell'HTML.
 const dlmVersionLabel=document.getElementById('appVersion');
 if(dlmVersionLabel)dlmVersionLabel.textContent='Versione '+DLM_VERSION;
 // Controllo manuale: evita ricaricamenti spontanei mentre si scorre.
