@@ -482,8 +482,13 @@ $('#placeForm').addEventListener('submit',async e=>{
  return names.join(' → ')||'Posizione non assegnata';
 }
 function renderItems(){
- const q=$('#itemFilter').value.trim().toLocaleLowerCase();
- const matches=i=>[i.name,i.desc,i.author,i.barcode,i.category,fullPlacePath(i.place)].some(x=>String(x||'').toLocaleLowerCase().includes(q));
+ const q=String($('#itemFilter')?.value||'').trim();
+ const normalize=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').replace(/[^a-z0-9]+/g,' ').trim();
+ const terms=normalize(q).split(/\s+/).filter(Boolean);
+ const matches=i=>{
+  const searchable=normalize([i.name,i.desc,i.author,i.barcode,i.category,fullPlacePath(i.place)].join(' '));
+  return terms.every(term=>searchable.includes(term));
+ };
  const entry=i=>`<article class="entry"><div class="thumb">${i.photo?`<img class="thumb" src="${safe(i.photo)}" alt="">`:i.kind==='book'?'📖':'📦'}</div><div class="info"><strong>${safe(i.name)}</strong><small>📍 ${safe(fullPlacePath(i.place))}</small></div><button type="button" class="dlm-inline-qr" aria-label="Stampa QR di ${safe(i.name)}" onclick="printItemQR('${i.id}')">🖨️ QR</button><button aria-label="Apri" onclick="showItem('${i.id}')">›</button></article>`;
  const items=db.items.filter(i=>i.kind!=='book'&&matches(i));
  const groups=new Map();
@@ -500,7 +505,7 @@ function renderItems(){
  const palettes=['lavender','rose','peach','mint','sky'];
  const groupHtml=Array.from(groups.values()).sort((a,b)=>(a.root?.name||'Posizione non assegnata').localeCompare(b.root?.name||'Posizione non assegnata','it',{sensitivity:'base'})).map(({root,records},index)=>{
   const category=root?.id||'__unassigned__';
-  const open=q||previouslyOpen.has(category)||groups.size===1?' open':'';
+  const open=terms.length||previouslyOpen.has(category)||groups.size===1?' open':'';
   const image=root&&(locationPhotos[root.id]||root.photo);
   const label=root?.name||'Posizione non assegnata';
   const subtitle=root?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
@@ -508,7 +513,7 @@ function renderItems(){
   const sortedRecords=records.sort((a,b)=>fullPlacePath(a.place).localeCompare(fullPlacePath(b.place),'it',{sensitivity:'base'})||String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
   return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${sortedRecords.map(entry).join('')}</div></details>`;
  }).join('');
- list.innerHTML=groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>';
+ list.innerHTML=(terms.length?'<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto trovato':'oggetti trovati')+' per la ricerca</p>':'')+(groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>');
  const books=db.items.filter(i=>i.kind==='book');
  $('#bookList').innerHTML=books.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')||'<div class="empty">Nessun libro per ora. 💜</div>';
 }
