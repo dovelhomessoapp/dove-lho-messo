@@ -299,40 +299,45 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
  }catch(error){console.error('PDF QR',error);toast('Non riesco a preparare il PDF. Riprova.')}
 };
 window.printQR=id=>{
- const p=db.places.find(x=>x.id===id)||db.items.find(x=>x.id===id);if(!p)return;
+ const p=db.places.find(x=>x.id===id)||db.items.find(x=>x.id===id);
+ if(!p)return;
  const isItem=db.items.some(x=>x.id===id);
- const w=window.open('','_blank');
- if(!w){toast('Consenti le finestre popup per aprire il QR');return}
  const code=isItem?'DLM-I-'+id:qrData(id);
  const svg=qrSVG(code);
  const label=safe(p.name);
- const roomIcon=!isItem?dlmPlacePresetMatch(p.name,p.parentId):null;
- const qrIcon=isItem?(p.kind==='book'?'📚':'📦'):(roomIcon?'<img src="assets/icone-posizioni/'+encodeURIComponent(roomIcon[0])+'.png" alt="" style="width:42px;height:42px;object-fit:contain;vertical-align:middle" onerror="this.replaceWith(document.createTextNode(\'🏠\'))">':'🏠');
- const doc='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QR - '+label+'</title><style>body{font-family:system-ui,-apple-system,Arial;text-align:center;background:#faf5ff;color:#56317b;margin:0;padding:25px 15px}.sheet{max-width:440px;margin:auto;background:white;padding:24px 16px;border-radius:22px;box-shadow:0 8px 25px #6c4a8520}.qr svg{max-width:100%;height:auto;max-height:310px}.buttons{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:20px auto}button{font:700 15px system-ui;padding:13px 16px;border-radius:15px;border:1px solid #d8bde9;background:#f0dff9;color:#60358a;cursor:pointer}button.primary{background:#8055b4;color:white}#status{min-height:20px;font-size:13px}code{overflow-wrap:anywhere}@media print{body{background:white;padding:0}.sheet{box-shadow:none}.buttons,#status{display:none}}</style></head><body><div class="sheet"><h2>' +qrIcon+' '+label+'</h2><div class="qr" id="qrImage">'+svg+'</div><p><code>'+code+'</code></p><div class="buttons"><button id="back" type="button">← Torna indietro</button><button id="copy" type="button">📋 Copia QR</button></div><p id="status" role="status"></p><p>Per stampare i QR, usa la selezione PDF A4 nella sezione Posizioni.</p><button id="goPDF" type="button">Apri selezione PDF A4</button></div></body></html>';
- w.document.open();w.document.write(doc);w.document.close();
- w.document.getElementById('back').onclick=()=>{w.close();if(!w.closed){w.history.back()}};
- w.document.getElementById('goPDF').onclick=()=>{page('places');window.openQRSelection();w.close()};
- w.document.getElementById('copy').onclick=async()=>{
-  const status=w.document.getElementById('status');
+ document.getElementById('dlmSingleQRModal')?.remove();
+ const overlay=document.createElement('div');
+ overlay.id='dlmSingleQRModal';
+ overlay.setAttribute('role','dialog');
+ overlay.setAttribute('aria-modal','true');
+ overlay.setAttribute('aria-label','Codice QR di '+p.name);
+ overlay.style.cssText='position:fixed;inset:0;z-index:2147483646;background:#29173ac9;display:flex;align-items:center;justify-content:center;padding:15px;box-sizing:border-box;overscroll-behavior:contain';
+ overlay.innerHTML='<section style="width:min(100%,440px);max-height:90dvh;overflow:auto;overscroll-behavior:contain;box-sizing:border-box;background:#fffaff;color:#59347d;border-radius:23px;padding:20px 15px;text-align:center;box-shadow:0 15px 45px #21102b55"><h2 style="font-size:21px;margin:0 0 14px">💜 '+label+'</h2><div id="dlmSingleQRImage" style="background:white;padding:12px;border-radius:14px;max-width:310px;margin:auto">'+svg+'</div><p style="font-size:12px;overflow-wrap:anywhere">'+safe(code)+'</p><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:9px"><button type="button" id="dlmSingleQRClose">← Torna all’app</button><button type="button" id="dlmSingleQRCopy">📋 Copia QR</button><button type="button" id="dlmSingleQRPDF">🖨️ PDF A4</button></div><p id="dlmSingleQRStatus" style="font-size:13px;min-height:20px" role="status"></p></section>';
+ document.body.appendChild(overlay);
+ const close=()=>overlay.remove();
+ overlay.querySelector('#dlmSingleQRClose').onclick=close;
+ overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+ overlay.querySelector('#dlmSingleQRPDF').onclick=()=>{close();page('places');window.openQRSelection()};
+ overlay.querySelector('#dlmSingleQRCopy').onclick=async()=>{
+  const status=overlay.querySelector('#dlmSingleQRStatus');
   try{
-   const source=w.document.querySelector('#qrImage svg');
+   const source=overlay.querySelector('#dlmSingleQRImage svg');
    if(!source)throw Error('QR non disponibile');
    const markup=new XMLSerializer().serializeToString(source);
-   const blob=new Blob([markup],{type:'image/svg+xml'});
-   const url=URL.createObjectURL(blob);
+   const url=URL.createObjectURL(new Blob([markup],{type:'image/svg+xml'}));
    try{
     const img=new Image();
     await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
-    const canvas=w.document.createElement('canvas');canvas.width=800;canvas.height=800;
+    const canvas=document.createElement('canvas');canvas.width=800;canvas.height=800;
     const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,800,800);ctx.drawImage(img,0,0,800,800);
     const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
-    if(!png||!w.navigator.clipboard?.write||!w.ClipboardItem)throw Error('Copia immagine non supportata');
-    await w.navigator.clipboard.write([new w.ClipboardItem({'image/png':png})]);
+    if(!png||!navigator.clipboard?.write||!window.ClipboardItem)throw Error('Copia immagine non supportata');
+    await navigator.clipboard.write([new ClipboardItem({'image/png':png})]);
     status.textContent='💜 QR copiato come immagine!';
    }finally{URL.revokeObjectURL(url)}
   }catch(e){
-   try{await w.navigator.clipboard.writeText(code);status.textContent='💜 Codice QR copiato come testo (la copia dell’immagine non è supportata qui).'}
-   catch{status.textContent='Non riesco a copiare automaticamente. Puoi usare uno screenshot del QR.'}
+   try{await navigator.clipboard.writeText(code);status.textContent='💜 Codice copiato come testo.'}
+   catch{status.textContent='Non riesco a copiare automaticamente: puoi fare uno screenshot del QR.'}
   }
  };
 };
