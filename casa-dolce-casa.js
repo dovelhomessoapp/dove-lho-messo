@@ -122,23 +122,19 @@ $('#itemPlace').innerHTML='<option value="">Da assegnare</option>'+ordered.map((
  place.name=cleaned;place.parentId=parentId;
  if(save()){renderPlaces();renderItems();toast('Posizione modificata 💜')}
 };
-window.createChildPlace=id=>{
- const parent=db.places.find(p=>p.id===id);if(!parent)return;
- page('places');
- const select=document.getElementById('placeParent');
- if(select)select.value=id;
- const name=document.getElementById('placeName');
- if(name){name.value='';name.placeholder='Es. Ripiano, Scatola, Contenitore';}
- const preset=document.getElementById('dlmPlacePresetSelect');if(preset)preset.value='';
- const picker=document.getElementById('dlmPlacePickerSelected');if(picker)picker.textContent='Scegli un ambiente con icona 3D';
- const preview=document.getElementById('dlmPlacePresetPreview');if(preview){preview.hidden=true;preview.innerHTML='';}
- dlmNewPlacePhoto='';
- const photoPreview=document.getElementById('newPlacePhotoPreview');if(photoPreview){photoPreview.hidden=true;photoPreview.removeAttribute('src');}
- const remove=document.getElementById('newPlaceRemovePhoto');if(remove)remove.hidden=true;
- if(typeof dlmUpdatePlacePhotoContext==='function')dlmUpdatePlacePhotoContext();
- document.getElementById('placeForm')?.scrollIntoView({behavior:'smooth',block:'start'});
- if(name)setTimeout(()=>name.focus({preventScroll:true}),350);
- toast('Nuova sottoposizione in '+placePath(id)+' 💜');
+window.createChildPlace=async id=>{
+ const parent=db.places.find(p=>p.id===id);if(!parent){toast('Posizione non trovata');return}
+ const answer=prompt('Nome della sottoposizione in '+placePath(id)+' (es. Scaffale 1, Ripiano 2):','');
+ if(answer===null)return;
+ const name=answer.trim();if(!name){toast('Inserisci il nome della sottoposizione');return}
+ if(name.length>80){toast('Nome troppo lungo');return}
+ if(db.places.some(p=>p.parentId===id&&p.name.toLocaleLowerCase('it')===name.toLocaleLowerCase('it'))){toast('Esiste già una sottoposizione con questo nome');return}
+ const child={id:crypto.randomUUID(),name,parentId:id};
+ db.places.push(child);
+ if(!save()){db.places=db.places.filter(p=>p.id!==child.id);toast('Salvataggio non riuscito');return}
+ renderPlaces();renderItems();
+ if(window.familyCreatePlace){try{await window.familyCreatePlace(child)}catch(err){console.warn('Sincronizzazione sottoposizione',err);toast('Verifica la sincronizzazione della sottoposizione')}}
+ renderPlaces();toast('Sottoposizione '+name+' creata in '+parent.name+' 💜');
 };
 window.choosePlacePhoto=id=>{const picker=document.getElementById('placePhotoPicker');picker.dataset.placeId=id;picker.value='';picker.click()};
 document.getElementById('placePhotoPicker').addEventListener('change',async e=>{
@@ -1451,23 +1447,4 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
       toast('Impossibile incollare: autorizza gli appunti o usa Galleria.');
     }finally{button.disabled=false}
   });
-})(); window.createChildPlace=async id=>{
-  const parent=db.places.find(p=>p.id===id);
-  if(!parent){toast('Posizione principale non trovata');return}
-  const entered=prompt('Nome della nuova sottoposizione in '+placePath(id)+'\n\nEs. Scaffale 1, Ripiano 2, Scatola', '');
-  if(entered===null)return;
-  const name=entered.trim();
-  if(!name){toast('Scrivi il nome della sottoposizione');return}
-  if(name.length>80){toast('Il nome può contenere massimo 80 caratteri');return}
-  if(db.places.some(p=>p.parentId===id&&p.name.toLocaleLowerCase('it')===name.toLocaleLowerCase('it'))){toast('Esiste già una sottoposizione con questo nome');return}
-  const child={id:crypto.randomUUID(),name,parentId:id};
-  db.places.push(child);
-  if(!save()){db.places=db.places.filter(p=>p.id!==child.id);toast('Non è stato possibile salvare la sottoposizione');return}
-  renderPlaces();renderItems();
-  if(window.familyCreatePlace){
-   try{await window.familyCreatePlace(child)}catch(err){console.warn('Sincronizzazione sottoposizione',err);toast('Sottoposizione salvata: verifica la sincronizzazione')}
-  }
-  renderPlaces();
-  toast('Sottoposizione '+name+' creata in '+parent.name+' 💜');
- };
-
+})();
