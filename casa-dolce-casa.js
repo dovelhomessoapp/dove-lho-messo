@@ -332,6 +332,28 @@ const dlmPlacePickerButton=document.getElementById('dlmPlacePickerButton');
 const dlmPlacePickerPanel=document.getElementById('dlmPlacePickerPanel');
 const dlmPlacePickerGrid=document.getElementById('dlmPlacePickerGrid');
 const dlmPlacePickerSelected=document.getElementById('dlmPlacePickerSelected');
+const dlmCustomEnvironment=document.createElement('label');
+dlmCustomEnvironment.id='dlmCustomEnvironment';
+dlmCustomEnvironment.style.cssText='display:none;margin:14px 0;color:#633b91;font-weight:750';
+dlmCustomEnvironment.innerHTML='🏡 Nome della posizione principale<input id="dlmCustomEnvironmentName" maxlength="80" placeholder="Es. Magazzino CandyLand, Laboratorio, Ufficio" style="margin-top:8px;width:100%">';
+dlmPlacePickerPanel.after(dlmCustomEnvironment);
+const dlmCustomEnvironmentName=dlmCustomEnvironment.querySelector('input');
+let dlmCustomMode=false;
+dlmCustomEnvironmentName.addEventListener('input',()=>dlmRefreshHierarchy());
+function dlmSetCustomMode(enabled){
+ dlmCustomMode=enabled;
+ dlmCustomEnvironment.style.display=enabled?'block':'none';
+ if(enabled){
+  dlmPlacePresetSelect.value='';
+  dlmPlacePickerPanel.hidden=true;
+  dlmPlacePickerButton.setAttribute('aria-expanded','false');
+  dlmHierarchyLevels.innerHTML='';
+  dlmRefreshHierarchy();
+  dlmCustomEnvironmentName.focus();
+ }else dlmRefreshHierarchy();
+ dlmRefreshPlacePicker();
+}
+
 function dlmRefreshPlacePicker(){
  const selected=dlmPlacePresetSelect.value;
  dlmPlacePickerSelected.innerHTML=selected?dlmPlaceIconHtml(selected)+'<span>'+safe(selected)+'</span>':(dlmCustomMode?'✏️ Nome personalizzato':'Scegli un ambiente con icona 3D');
@@ -350,13 +372,7 @@ dlmPlacePickerGrid.addEventListener('click',e=>{
  dlmPlacePickerPanel.hidden=true;
  dlmPlacePickerButton.setAttribute('aria-expanded','false');
 });
-document.getElementById('dlmPlacePickerClear').addEventListener('click',()=>{
- dlmPlacePresetSelect.value='';
- dlmPlacePresetSelect.dispatchEvent(new Event('change',{bubbles:true}));
- dlmPlacePickerPanel.hidden=true;
- dlmPlacePickerButton.setAttribute('aria-expanded','false');
- document.getElementById('placeName').focus();
-});
+document.getElementById('dlmPlacePickerClear').addEventListener('click',()=>dlmSetCustomMode(true));
 dlmRefreshPlacePicker();
 
 dlmPlacePresetSelect.addEventListener('change',()=>{
