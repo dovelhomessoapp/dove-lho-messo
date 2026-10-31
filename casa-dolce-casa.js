@@ -277,10 +277,25 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
   for(let i=1;i<objects.length;i++)pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
   pdf+='trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';
   const pdfBytes=new Uint8Array(pdf.length);for(let j=0;j<pdf.length;j++)pdfBytes[j]=pdf.charCodeAt(j)&255;
-  const url=URL.createObjectURL(new Blob([pdfBytes],{type:'application/pdf'}));
-  const a=document.createElement('a');a.href=url;a.download='etichette-qr-A4.pdf';document.body.appendChild(a);a.click();a.remove();
+  const file=new File([pdfBytes],'etichette-qr-A4.pdf',{type:'application/pdf'});
+  const isAndroid=/Android/i.test(navigator.userAgent);
+  // On Android use the native file share/save sheet instead of opening a PDF
+  // inside the installed PWA, where pull-to-refresh can leave a blank viewer.
+  if(isAndroid&&navigator.share&&navigator.canShare?.({files:[file]})){
+   try{
+    await navigator.share({files:[file],title:'Etichette QR A4'});
+    toast('PDF pronto: '+labels.length+' etichette 💜');
+    return;
+   }catch(error){
+    if(error?.name==='AbortError'){toast('Condivisione annullata: nessun dato modificato');return}
+    console.warn('Condivisione PDF non disponibile, uso download',error);
+   }
+  }
+  const url=URL.createObjectURL(file);
+  const a=document.createElement('a');a.href=url;a.download=file.name;a.setAttribute('download',file.name);
+  document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),60000);
-  toast('PDF A4 pronto: '+labels.length+' etichette 💜');
+  toast('PDF A4 scaricato: '+labels.length+' etichette 💜');
  }catch(error){console.error('PDF QR',error);toast('Non riesco a preparare il PDF. Riprova.')}
 };
 window.printQR=id=>{
