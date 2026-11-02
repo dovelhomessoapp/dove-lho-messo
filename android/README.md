@@ -4,7 +4,7 @@ App esistente: https://dovelhomessoapp.github.io/dove-lho-messo/casa-dolce-casa.
 Baseline verificata: e510d7782d98d8bc5bdc75db67ec3d0f5ccb7c46.
 
 - Trusted Web Activity generata con Bubblewrap 1.27.0; browser helper 2.7.4.
-- Package: `it.dovelhomesso.app`; versionName `1.0.0`; versionCode `1`.
+- Package: `it.dovelhomesso.casadolcecasa`; versionName `1.0.0`; versionCode `2`.
 - Android minimo: 7 (API 24). Target e compile SDK: 36.
 - Notifiche web delegate alla TWA; nessun nuovo backend o database.
 - Nuovi acquisti Stripe disabilitati solo nel contesto Play; abbonamenti già attivi letti tramite lo stesso controllo esistente. Il sito continua a usare Stripe.

@@ -1,7 +1,7 @@
 /* Android distribution context. This is presentation routing, never an entitlement. */
 (() => {
   'use strict';
-  const packageId = 'it.dovelhomesso.app';
+  const packageId = 'it.dovelhomesso.casadolcecasa';
   let fromAndroid = false;
   try {
     const referrer = new URL(document.referrer);

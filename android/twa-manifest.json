@@ -1,5 +1,5 @@
 {
-  "packageId": "it.dovelhomesso.app",
+  "packageId": "it.dovelhomesso.casadolcecasa",
   "host": "dovelhomessoapp.github.io",
   "name": "Dove l’ho messo?",
   "launcherName": "Dove l’ho messo?",
@@ -18,7 +18,7 @@
     "alias": "upload"
   },
   "appVersion": "1.0.0",
-  "appVersionCode": 1,
+  "appVersionCode": 2,
   "generatorApp": "bubblewrap-cli",
   "fallbackType": "customtabs",
   "enableSiteSettingsShortcut": true,

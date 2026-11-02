@@ -5,7 +5,7 @@
     ],
     "target": {
       "namespace": "android_app",
-      "package_name": "it.dovelhomesso.app",
+      "package_name": "it.dovelhomesso.casadolcecasa",
       "sha256_cert_fingerprints": [
         "FF:67:2C:9F:EF:C1:AC:F7:28:55:C3:C9:D1:D7:05:3C:FB:16:58:60:FF:E0:37:54:ED:EF:59:3D:54:AC:55:4A"
       ]

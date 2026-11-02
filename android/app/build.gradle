@@ -21,7 +21,7 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'it.dovelhomesso.app',
+    applicationId: 'it.dovelhomesso.casadolcecasa',
     hostName: 'dovelhomessoapp.github.io', // The domain being opened in the TWA.
     launchUrl: '/dove-lho-messo/casa-dolce-casa.html?distribution=google-play', // The start path for the TWA. Must be relative to the domain.
     name: 'Dove l’ho messo?', // The application name.
@@ -52,7 +52,7 @@ def twaManifest = [
 
 android {
     compileSdkVersion 36
-    namespace "it.dovelhomesso.app"
+    namespace "it.dovelhomesso.casadolcecasa"
     signingConfigs {
         release {
             if (System.getenv('DLM_KEYSTORE_PATH')) {
@@ -69,10 +69,10 @@ android {
         }
     }
     defaultConfig {
-        applicationId "it.dovelhomesso.app"
+        applicationId "it.dovelhomesso.casadolcecasa"
         minSdkVersion 24
         targetSdkVersion 36
-        versionCode 1
+        versionCode 2
         versionName "1.0.0"
 
         // The name for the application
