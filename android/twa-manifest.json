@@ -1,0 +1,34 @@
+{
+  "packageId": "it.dovelhomesso.app",
+  "host": "dovelhomessoapp.github.io",
+  "name": "Dove l’ho messo?",
+  "launcherName": "Dove l’ho messo?",
+  "display": "standalone",
+  "themeColor": "#eee0fa",
+  "themeColorDark": "#eee0fa",
+  "navigationColor": "#fcf7ff",
+  "navigationColorDark": "#fcf7ff",
+  "backgroundColor": "#fcf7ff",
+  "enableNotifications": true,
+  "startUrl": "/dove-lho-messo/casa-dolce-casa.html?distribution=google-play",
+  "iconUrl": "https://dovelhomessoapp.github.io/dove-lho-messo/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "../../private-signing/upload-key.p12",
+    "alias": "upload"
+  },
+  "appVersion": "1.0.0",
+  "appVersionCode": 1,
+  "generatorApp": "bubblewrap-cli",
+  "fallbackType": "customtabs",
+  "enableSiteSettingsShortcut": true,
+  "minSdkVersion": 24,
+  "orientation": "default",
+  "shortcuts": [],
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "fingerprints": [],
+  "additionalTrustedOrigins": []
+}
