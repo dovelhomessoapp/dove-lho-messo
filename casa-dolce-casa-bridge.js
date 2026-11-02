@@ -906,9 +906,10 @@ window.familyCreatePlace=async place=>{
  }catch(err){notice('Posizione soltanto in locale: '+err.message)}
 };
 window.familyDeleteItem=async id=>{
- if(!token||!house){notice('Accedi a Casa dolce casa prima di eliminare.');return false}
+ const fail=message=>{notice(message);window.alert(message);return false};
+ if(!token||!house){return fail('Non posso eliminare: l’accesso alla casa non è ancora pronto. Apri «Casa dolce casa», attendi il caricamento o accedi, poi riprova.')}
  if(!cloudIds.has(id)){notice('Oggetto non ancora sincronizzato: eliminazione online non necessaria.');return true}
- if(!navigator.onLine){notice('Offline: eliminazione annullata.');return false}
+ if(!navigator.onLine){return fail('Non posso eliminare mentre sei offline. Controlla la connessione e riprova: l’oggetto è stato conservato.')}
  deletingIds.add(id);
  try{
   const response=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{
@@ -922,7 +923,7 @@ window.familyDeleteItem=async id=>{
   pendingEdits.delete(id);saveEdits();
   notice('Eliminazione confermata anche online.');
   return true;
- }catch(e){notice('Eliminazione non eseguita: '+e.message);return false}
+ }catch(e){return fail('Eliminazione non eseguita: '+e.message)}
  finally{setTimeout(()=>deletingIds.delete(id),1500)}
 };
 el('familyReload').onclick=()=>syncEdits().then(load).then(loadPremiumStatus).then(uploadNew).then(loadPremiumStatus).catch(err=>notice(err.message));
