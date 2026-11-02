@@ -195,7 +195,8 @@ function ocrSuggestion(raw){
  else if(/colla|glue/i.test(text))type='Colla';
  else if(/quadern|notebook/i.test(text))type='Quaderno';
  const number=(qty.match(/\d+/)||[])[0]||(hasMarker&&(text.match(/\b(?:12|24|36|48|6|8|10)\b/)||[])[0])||'';
- const safeBrand=/^(?:faber|aber)[\s-]*castel/i.test(brand)?'Faber-Castell':brand;\n const name=[type,safeBrand,number?'confezione da '+number:''].filter(Boolean).join(' ').trim();
+ const safeBrand=/^(?:faber|aber)[\s-]*castel/i.test(brand)?'Faber-Castell':brand;
+ const name=[type,safeBrand,number?'confezione da '+number:''].filter(Boolean).join(' ').trim();
  return {name,category:type?'Cancelleria e materiale scolastico':'',description:lines.slice(0,8).join(' · '),raw:lines.join('\n')};
 }
 /* Try the original orientation and quarter-turns: iPhone photos can carry orientation metadata. */
@@ -224,7 +225,8 @@ async function ocrOriented(worker,img){
    const words=(result.data.words||[]).filter(x=>x.confidence>=45&&/[a-zA-ZÀ-ÿ]{2,}/.test(x.text));
    const confidence=words.length?words.reduce((sum,x)=>sum+x.confidence,0)/words.length:0;
    const meaningful=raw.match(/[a-zA-ZÀ-ÿ]{3,}/g)||[];
-   const productHints=(/(?:faber|aber)[\s-]*castel|stabilo|staedtler|giotto/i.test(raw)?20:0)+(/felt|filzstift|pennarell|markers/i.test(raw)?18:0)+(/\b(?:12|24|36|48)\b/.test(raw)?12:0);\n   const score=confidence*Math.min(meaningful.length,12)/12+productHints;
+   const productHints=(/(?:faber|aber)[\s-]*castel|stabilo|staedtler|giotto/i.test(raw)?20:0)+(/felt|filzstift|pennarell|markers/i.test(raw)?18:0)+(/\b(?:12|24|36|48)\b/.test(raw)?12:0);
+   const score=confidence*Math.min(meaningful.length,12)/12+productHints;
    runs.push({raw,score,confidence,words:meaningful.length,degrees,crop});
   }
  }

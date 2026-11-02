@@ -216,6 +216,7 @@ window.casaDolceCasaRecognize=async function(imageBase64){
 };
 
 window.startStripeCheckout=async function(plan='monthly'){
+ if(window.dlmStoreDistribution==='google-play')throw Error('I nuovi acquisti non sono disponibili in questa versione Android.');
  if(!token||!refreshToken)throw Error('Accedi prima a Casa dolce casa con il tuo account.');
  const response=await familyFetch(base+'/functions/v1/stripe-create-checkout',{
   method:'POST',
@@ -229,7 +230,13 @@ window.startStripeCheckout=async function(plan='monthly'){
 };
 
 const premiumPage=document.getElementById('premium');
-if(premiumPage){
+if(premiumPage && window.dlmStoreDistribution==='google-play'){
+ const panels=premiumPage.querySelectorAll('.panel');
+ if(panels[1])panels[1].innerHTML='<h3>💜 Premium Famiglia</h3><p>Gli abbonamenti già attivi sono riconosciuti accedendo con lo stesso account.</p><p>I nuovi acquisti non sono disponibili in questa versione Android.</p>';
+ premiumPage.querySelectorAll(':scope > .hint').forEach((hint,index)=>{hint.textContent=index===0?'Un piano per tutta la famiglia.':''});
+ const status=document.createElement('p');status.id='stripeCheckoutStatus';status.className='hint';status.setAttribute('role','status');premiumPage.append(status);
+}
+if(premiumPage && window.dlmStoreDistribution!=='google-play'){
  const premiumHints=[...premiumPage.querySelectorAll('.hint')];
  const oldHint=premiumHints.find(el=>/Anteprima:|nessun abbonamento|non è possibile acquistare/i.test(el.textContent||'')) || premiumHints[premiumHints.length-1];
  if(oldHint)oldHint.textContent='Prova Premium Famiglia per 30 giorni. L’addebito inizierà solo al termine della prova, salvo disdetta.';
