@@ -736,4 +736,29 @@ document.getElementById('bookCoverGalleryBtn')?.addEventListener('click',()=>doc
 .dlm-place-manage-buttons{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .dlm-place-manage-buttons button{min-width:0;padding:10px 5px;font-size:.85rem}
 #placeList .dlm-place-inventory-list{padding:5px 2px 8px}
-</style><style>.dlm-place-preset-icon{display:inline-grid;place-items:center;width:100%;height:100%;min-height:38px;font-size:31px;filter:drop-shadow(0 4px 3px #76539948)}.dlm-place-preset-preview{display:flex;align-items:center;gap:12px;margin:8px 0 15px;padding:12px;border-radius:16px;background:linear-gradient(135deg,#f0e2fc,#fff2f8);color:#643b90}.dlm-place-preset-preview .dlm-place-preset-icon{width:52px;height:52px;background:#fff9;border-radius:14px}</style></body></html>
+</style><style>.dlm-place-preset-icon{display:inline-grid;place-items:center;width:100%;height:100%;min-height:38px;font-size:31px;filter:drop-shadow(0 4px 3px #76539948)}.dlm-place-preset-preview{display:flex;align-items:center;gap:12px;margin:8px 0 15px;padding:12px;border-radius:16px;background:linear-gradient(135deg,#f0e2fc,#fff2f8);color:#643b90}.dlm-place-preset-preview .dlm-place-preset-icon{width:52px;height:52px;background:#fff9;border-radius:14px}</style>
+<style id="dlm-iphone-layout">
+/* Keep content clear of the notch and the measured bottom navigation. */
+:root{--dlm-nav-height:95px;--dlm-safe-top:env(safe-area-inset-top,0px);--dlm-safe-bottom:env(safe-area-inset-bottom,0px);--dlm-safe-left:env(safe-area-inset-left,0px);--dlm-safe-right:env(safe-area-inset-right,0px)}
+html{scroll-padding-bottom:calc(var(--dlm-nav-height) + 20px)}
+.app{padding-top:max(18px,var(--dlm-safe-top));padding-left:max(18px,var(--dlm-safe-left));padding-right:max(18px,var(--dlm-safe-right));padding-bottom:calc(var(--dlm-nav-height) + 24px)}
+#toast{bottom:calc(var(--dlm-nav-height) + 12px);z-index:1100}
+#dlmHelpBtn{bottom:calc(var(--dlm-nav-height) + 16px);right:max(14px,calc((100vw - 560px)/2 + 14px),var(--dlm-safe-right))}
+#dlmGuideOverlay{padding-top:max(18px,var(--dlm-safe-top));padding-bottom:max(18px,var(--dlm-safe-bottom));padding-left:max(18px,var(--dlm-safe-left));padding-right:max(18px,var(--dlm-safe-right))}
+#dlmGuideDialog{max-height:100%;overflow-y:auto;overscroll-behavior:contain}
+@supports (-webkit-touch-callout:none){
+  /* A readable input size avoids Safari zooming the page when editing. */
+  .app input,.app select,.app textarea{font-size:16px!important}
+}
+</style>
+<script id="dlm-navigation-clearance">
+(()=>{
+ const nav=document.querySelector('body>nav');
+ if(!nav)return;
+ const update=()=>document.documentElement.style.setProperty('--dlm-nav-height',Math.ceil(nav.getBoundingClientRect().height)+'px');
+ update();
+ if('ResizeObserver' in window)new ResizeObserver(update).observe(nav);
+ else window.addEventListener('resize',update,{passive:true});
+})();
+</script>
+</body></html>
