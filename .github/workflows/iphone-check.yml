@@ -1,0 +1,32 @@
+name: iPhone WebKit checks
+on:
+  push:
+    branches: [iphone-layout-preparation]
+    paths:
+      - 'casa-dolce-casa*'
+      - 'checks/iphone*'
+      - '.github/workflows/iphone-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  webkit:
+    # Standard runner; no Apple credentials, signing, uploads or paid larger runner.
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check local app code
+        run: |
+          node --check casa-dolce-casa.js
+          node checks/distribution.cjs
+          node checks/iphone.cjs
+      - name: Install isolated WebKit test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/dlm-webkit" --no-audit --no-fund playwright@1.62.1
+          node "$RUNNER_TEMP/dlm-webkit/node_modules/playwright/cli.js" install webkit
+      - name: Check iPhone layouts with WebKit
+        run: DLM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/dlm-webkit/node_modules/playwright" node checks/iphone-layout.cjs

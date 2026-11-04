@@ -1471,3 +1471,7 @@ document.getElementById('coverChoices')?.addEventListener('click',async e=>{
     }finally{button.disabled=false}
   });
 })();
+
+// Release the camera when iPhone locks, the app is backgrounded or the page leaves.
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera()});
+window.addEventListener('pagehide',()=>stopCamera());
