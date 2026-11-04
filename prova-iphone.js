@@ -1,0 +1,1477 @@
+const KEY='dlm-casa-dolce-casa-v1';const DRAFT_KEY='dlm-casa-dolce-casa-draft-v1';const FREE_ITEM_LIMIT=30;let db={places:[],items:[]},photoData='',stream=null,scanTimer=null,editing=null;try{db=JSON.parse(localStorage.getItem(KEY))||db}catch{};const $=s=>document.querySelector(s);const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(db));return true}catch(e){toast('Memoria piena: usa foto più leggere');return false}};const uid=()=>Math.random().toString(36).slice(2,10).toUpperCase();const placeName=id=>db.places.find(x=>x.id===id)?.name||'Posizione non assegnata';
+const premiumActive=()=>document.documentElement.dataset.premium==='true'||localStorage.getItem('dlm-premium-enabled-v1')==='true';
+const freeLimitReached=()=>!premiumActive()&&db.items.length>=FREE_ITEM_LIMIT;
+function showFreeLimitModal(){
+ let overlay=document.getElementById('dlmFreeLimitModal');
+ if(!overlay){
+  overlay=document.createElement('div');
+  overlay.id='dlmFreeLimitModal';
+  overlay.style.cssText='position:fixed;inset:0;z-index:2147483646;background:rgba(46,24,69,.45);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box';
+  overlay.innerHTML='<div role="dialog" aria-modal="true" aria-labelledby="dlmFreeLimitTitle" style="width:min(100%,420px);padding:28px 24px 22px;border-radius:24px;background:#fff;text-align:center;box-shadow:0 18px 50px rgba(95,55,150,.22);border:1px solid rgba(170,130,230,.18);font-family:inherit;color:#5b5470"><div style="font-size:36px;line-height:1;margin-bottom:10px">💜</div><h3 id="dlmFreeLimitTitle" style="margin:0 0 12px;font-size:1.22rem;font-weight:800;color:#5f3aa5">Limite del piano gratuito raggiunto</h3><p style="margin:0;font-size:1rem;line-height:1.55">Hai raggiunto il limite gratuito di <strong>30 elementi</strong>.<br>Per aggiungerne altri, attiva il piano <strong>Premium</strong>.</p><div style="margin-top:22px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button type="button" class="primary" id="dlmGoPremium">Scopri Premium</button><button type="button" class="secondary" id="dlmCloseLimit">Ho capito</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#dlmCloseLimit').onclick=()=>overlay.remove();
+  overlay.querySelector('#dlmGoPremium').onclick=()=>{overlay.remove();page('premium')};
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
+ }
+}
+window.dlmRefreshLimits=()=>renderStats();function placePath(id){const parts=[],seen=new Set();while(id&&!seen.has(id)){seen.add(id);const p=db.places.find(x=>x.id===id);if(!p)break;parts.unshift(p.name);id=p.parentId||''}return parts.join(' → ')||'Posizione non assegnata'}function toast(t){let el=$('#toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3200)}function page(p){if(document.querySelector('#add.page.active')&&p!=='add')saveDraft();stopCamera();document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id===p));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('selected',b.dataset.page===p));if(p==='scan'&&!('BarcodeDetector' in window))loadZXing();if(p==='places')renderPlaces();if(p==='items'||p==='books')renderItems();if(p==='home')renderStats();scrollTo(0,0)}document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.page==='add'){if(freeLimitReached()){showFreeLimitModal();return}editing=null;resetForm();if(b.dataset.book){$('#kind').value='book';updateKind()}else {localStorage.removeItem(DRAFT_KEY);updateKind()}}if(b.dataset.page==='scan'&&scanForItem)scanForItem=false;page(b.dataset.page)}));function renderStats(){$('#stats').innerHTML=`<div><strong>${db.items.length}</strong><span>Oggetti e libri</span></div><div><strong>${db.places.length}</strong><span>Posizioni</span></div><div><strong>${db.items.filter(x=>x.kind==='book').length}</strong><span>Libri</span></div>`}function qrData(id){return 'DLM-P-'+id}function qrSVG(code){try{let q=new LocalQRCode(-1,LocalQRError.M);q.addData(code);q.make();let n=q.getModuleCount(),rect=[];for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(q.isDark(y,x))rect.push(`<rect x="${x+4}" y="${y+4}" width="1" height="1"/>`);return `<svg class="qr" role="img" aria-label="Codice QR" viewBox="0 0 ${n+8} ${n+8}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="white"/><g fill="#43246c">${rect.join('')}</g></svg>`}catch(e){return '<p>QR non disponibile</p>'}}window.searchPlaces=function(){
+ const field=document.getElementById('placeSearch'),results=document.getElementById('placeSearchResults');
+ if(!field||!results)return;
+ const term=field.value.trim().toLocaleLowerCase('it');
+ if(!term){results.innerHTML='';return}
+ const matches=db.places.filter(p=>placePath(p.id).toLocaleLowerCase('it').includes(term)).slice(0,30);
+ results.innerHTML=matches.length?matches.map(p=>'<button type="button" class="secondary" style="display:block;width:100%;text-align:left;margin:6px 0;padding:12px;overflow-wrap:anywhere" onclick="openSearchedPlace(\''+p.id+'\')">📍 '+safe(placePath(p.id))+'</button>').join(''):'<p class="hint">Nessuna posizione trovata.</p>';
+};
+window.openSearchedPlace=function(id){
+ const path=[],seen=new Set();let current=db.places.find(p=>p.id===id);
+ while(current&&!seen.has(current.id)){seen.add(current.id);path.unshift(current.id);current=db.places.find(p=>p.id===current.parentId)}
+ for(const pid of path){const node=[...document.querySelectorAll('#placeList details[data-place-id]')].find(el=>el.dataset.placeId===pid);if(node)node.open=true}
+ const target=[...document.querySelectorAll('#placeList details[data-place-id]')].find(el=>el.dataset.placeId===id);
+ if(target){target.scrollIntoView({behavior:'smooth',block:'center'});toast('Posizione trovata 💜')}
+};
+const dlmPlacePresets=[["Cucina","🍳"],["Camera matrimoniale","🛏️"],["Cameretta","🧸"],["Bagno","🛁"],["Salotto","🛋️"],["Ingresso","🚪"],["Corridoio","🚶"],["Ripostiglio","🧹"],["Lavanderia","🧺"],["Garage","🚗"],["Cantina","🍷"],["Soffitta","📦"],["Studio","💻"],["Balcone","🪴"],["Giardino","🌷"]];
+function dlmPlacePresetMatch(name,parentId){
+ const raw=String(name||'').trim().toLocaleLowerCase('it');
+ const match=dlmPlacePresets.find(([label])=>raw===label.toLocaleLowerCase('it')||raw.startsWith(label.toLocaleLowerCase('it')+' '));
+ if(match)return match;
+ if(parentId){const parent=db.places.find(p=>p.id===parentId);if(parent&&parent.name!==name)return dlmPlacePresetMatch(parent.name,parent.parentId)}
+ return null;
+}
+function dlmPlacePresetIcon(name,parentId){return dlmPlacePresetMatch(name,parentId)?.[1]||'🏡'}
+function dlmPlaceIconHtml(name,parentId){
+ const preset=dlmPlacePresetMatch(name,parentId);
+ if(!preset)return '<span class="dlm-place-preset-icon" aria-hidden="true">🏡</span>';
+ const src='assets/icone-posizioni/'+encodeURIComponent(preset[0])+'.png';
+ return '<img class="dlm-place-preset-image" src="'+src+'" alt="" loading="lazy" onerror="this.onerror=null;this.replaceWith(document.createTextNode('+JSON.stringify('🏡')+'))">';
+}
+function dlmItemPlaceRefresh(){
+ const native=document.getElementById('itemPlace');
+ const selected=document.getElementById('dlmItemPlaceSelected');
+ const list=document.getElementById('dlmItemPlaceOptions');
+ if(!native||!selected||!list)return;
+ const id=native.value;
+ const place=db.places.find(p=>p.id===id);
+ selected.innerHTML=place?'<span class="dlm-selected-place-icon">'+dlmItemPlacePicture(place)+'</span><span class="dlm-selected-place-label">'+safe(fullPlacePath(place.id))+'</span>':'<span class="dlm-selected-place-label">Da assegnare</span>';
+ const query=(document.getElementById('dlmItemPlaceSearch')?.value||'').trim().toLocaleLowerCase('it');
+ const sorted=[...db.places].sort((a,b)=>fullPlacePath(a.id).localeCompare(fullPlacePath(b.id),'it',{sensitivity:'base'}));
+ list.innerHTML='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon" aria-hidden="true">🏡</span><span class="dlm-place-option-label"><strong>Da assegnare</strong></span></span></button>'+
+ sorted.filter(p=>!query||fullPlacePath(p.id).toLocaleLowerCase('it').includes(query)).map(p=>'<button type="button" class="dlm-item-place-option" data-place-choice="'+safe(p.id)+'" aria-pressed="'+(id===p.id)+'">'+'<span class="dlm-place-option-layout"><span class="dlm-place-option-icon">'+dlmItemPlacePicture(p)+'</span><span class="dlm-place-option-label"><strong>'+safe(p.name)+'</strong><small>'+safe(fullPlacePath(p.id))+'</small></span></span></button>').join('');
+}
+function dlmItemPlacePicture(p){
+ let photos={};try{photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
+ const src=photos[p.id]||p.photo;
+ return src?'<img class="dlm-place-picker-thumb" src="'+safe(src)+'" alt="">':dlmPlaceIconHtml(p.name,p.parentId);
+}
+function dlmItemPlaceInit(){
+ const button=document.getElementById('dlmItemPlaceButton');
+ const panel=document.getElementById('dlmItemPlacePanel');
+ if(!button||!panel)return;
+ button.addEventListener('click',()=>{const opening=panel.hidden;panel.hidden=!opening;button.setAttribute('aria-expanded',String(opening));if(opening)dlmItemPlaceRefresh()});
+ document.getElementById('dlmItemPlaceSearch').addEventListener('input',dlmItemPlaceRefresh);
+ document.getElementById('dlmItemPlaceOptions').addEventListener('click',e=>{
+  const choice=e.target.closest('button[data-place-choice]');if(!choice)return;
+  document.getElementById('itemPlace').value=choice.dataset.placeChoice;
+  document.getElementById('itemPlace').dispatchEvent(new Event('change',{bubbles:true}));
+  panel.hidden=true;button.setAttribute('aria-expanded','false');dlmItemPlaceRefresh();
+  if(typeof saveDraft==='function')saveDraft();
+ });
+ document.getElementById('itemPlace').addEventListener('change',dlmItemPlaceRefresh);
+ dlmItemPlaceRefresh();
+}
+function renderPlaces(){let locationPhotos={};try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{};for(const p of db.places){if(locationPhotos[p.id])p.photo=locationPhotos[p.id]}const ordered=[];const seen=new Set();function visit(parent,depth){for(const p of db.places.filter(x=>(x.parentId||'')===parent).sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''),'it',{sensitivity:'base'}))){if(seen.has(p.id))continue;seen.add(p.id);ordered.push({p,depth});visit(p.id,depth+1)}}visit('',0);for(const p of db.places){if(!seen.has(p.id)){seen.add(p.id);ordered.push({p,depth:0});visit(p.id,1)}}const previousItemPlace=$('#itemPlace').value;const previousParent=$('#placeParent')?.value||'';const openPlaces=new Set([...document.querySelectorAll('#placeList details[data-place-id][open]')].map(el=>el.dataset.placeId));
+const openDetails=new Set([...document.querySelectorAll('#placeList details[data-info-id][open]')].map(el=>el.dataset.infoId));
+function renderNode(p,level,visited,colorIndex=0){
+ if(visited.has(p.id))return '';
+ visited.add(p.id);
+ const count=db.items.filter(i=>i.place===p.id).length;
+ const children=db.places.filter(x=>x.parentId===p.id&&!visited.has(x.id)).sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''),'it',{sensitivity:'base'}));
+ const qrButton='<button type="button" class="dlm-inline-qr" title="Stampa QR di questa posizione" aria-label="Stampa QR di '+safe(p.name)+'" onclick="event.preventDefault();event.stopPropagation();printQR(\''+p.id+'\')">🖨️ QR</button>';
+ const title='<span style="display:flex;align-items:center;gap:12px"><span style="width:58px;height:58px;border-radius:14px;background:#fff8;display:grid;place-items:center;overflow:hidden;flex-shrink:0">'+(p.photo?'<img src="'+safe(p.photo)+'" alt="" style="width:100%;height:100%;object-fit:cover">':dlmPlaceIconHtml(p.name,p.parentId))+'</span><span style="display:flex;flex-direction:column;gap:4px;min-width:0"><strong style="font-weight:750;overflow-wrap:anywhere">'+safe(p.name)+'</strong><small style="font-size:.82em;opacity:.78">'+count+' oggetti · Tocca per vedere gli oggetti</small></span></span>'+qrButton;
+ const nested=children.map(child=>renderNode(child,level+1,visited,colorIndex)).join('');
+
+ const info='<div class="dlm-place-inventory-list"><button type="button" class="secondary full" style="margin:8px 0 12px;font-weight:750" onclick="createChildPlace(\''+p.id+'\')">＋ Crea sottoposizione qui</button>'+(db.items.filter(i=>i.place===p.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it')).map(i=>'<button type="button" class="secondary" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin:7px 0;padding:9px" onclick="showItem(\''+i.id+'\')">'+(i.photo?'<img src="'+safe(i.photo)+'" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:10px">':'<span style="font-size:24px">'+(i.kind==='book'?'📖':'📦')+'</span>')+'<span style="flex:1;overflow-wrap:anywhere">'+safe(i.name)+'</span><span>›</span></button>').join('')||'<p class="hint">Nessun oggetto in questa posizione.</p>')+'</div>';
+
+ return '<details class="dlm-place-color dlm-place-color-'+(colorIndex%5)+'" data-place-id="'+p.id+'" '+(openPlaces.has(p.id)?'open':'')+' style="margin:10px 0;max-width:100%;box-sizing:border-box"><summary style="cursor:pointer;padding:14px 12px;border-radius:16px;color:#43246c;overflow-wrap:anywhere">'+title+'</summary><div style="padding:6px 0 6px 12px;border-left:2px solid #d9b7ed;margin-left:9px">'+nested+info+'</div></details>';
+}
+const visited=new Set();const roots=db.places.filter(p=>!p.parentId||!db.places.some(x=>x.id===p.parentId)).sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''),'it',{sensitivity:'base'}));
+let h=roots.map((p,index)=>renderNode(p,0,visited,index)).join('');
+h+=db.places.filter(p=>!visited.has(p.id)).sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''),'it',{sensitivity:'base'})).map((p,index)=>renderNode(p,0,visited,index+roots.length)).join('');
+$('#placeList').innerHTML=h||'<div class="empty">📍 Crea la tua prima posizione!</div>';
+ const manage=document.getElementById('dlmPlaceManageList');
+ if(manage)manage.innerHTML=ordered.map(({p})=>'<div class="dlm-place-manage-row"><span class="dlm-place-manage-photo">'+(p.photo?'<img src="'+safe(p.photo)+'" alt="">':dlmPlaceIconHtml(p.name,p.parentId))+'</span><strong>'+safe(p.name)+'</strong><div class="dlm-place-manage-buttons"><button type="button" class="secondary" onclick="choosePlacePhoto(\''+p.id+'\')">📷 '+(p.photo?'Cambia foto':'Aggiungi foto')+'</button><button type="button" class="secondary" onclick="editPlace(\''+p.id+'\')">✏️ Modifica</button><button type="button" class="secondary" onclick="printQR(\''+p.id+'\')">🖨️ QR</button><button type="button" class="secondary" onclick="deletePlace(\''+p.id+'\')">Elimina</button></div></div>').join('')||'<p class="hint">Non hai ancora creato posizioni.</p>';
+
+$('#itemPlace').innerHTML='<option value="">Da assegnare</option>'+ordered.map(({p,depth})=>`<option value="${p.id}">${safe('— '.repeat(Math.min(depth,5))+p.name)}</option>`).join('');if(previousItemPlace&&db.places.some(p=>p.id===previousItemPlace))$('#itemPlace').value=previousItemPlace;dlmItemPlaceRefresh();const parent=$('#placeParent');if(parent){parent.innerHTML='<option value="">Nessuna — posizione principale</option>'+ordered.map(({p,depth})=>`<option value="${p.id}">${safe('— '.repeat(Math.min(depth,5))+p.name)}</option>`).join('');if(previousParent&&db.places.some(p=>p.id===previousParent))parent.value=previousParent;}}window.searchPlaces();window.editPlace=async id=>{
+ const place=db.places.find(p=>p.id===id);if(!place)return;
+ const name=prompt('Nuovo nome della posizione:',place.name);
+ if(name===null)return;
+ const cleaned=name.trim();if(!cleaned){toast('Inserisci un nome valido.');return}
+ const excluded=new Set([id]);
+ let changed=true;while(changed){changed=false;for(const p of db.places){if(!excluded.has(p.id)&&excluded.has(p.parentId)){excluded.add(p.id);changed=true}}}
+ const options=db.places.filter(p=>!excluded.has(p.id));
+ const current=options.findIndex(p=>p.id===place.parentId);
+ const lines=['0 — Nessuna (posizione principale)',...options.map((p,i)=>(i+1)+' — '+placePath(p.id))];
+ const selected=prompt('Dove si trova? Scegli il numero:\n'+lines.join('\n'),String(current+1));
+ if(selected===null)return;
+ const number=Number(selected.trim());
+ if(!Number.isInteger(number)||number<0||number>options.length){toast('Numero non valido: modifica annullata.');return}
+ const parentId=number===0?null:options[number-1].id;
+ if(window.familyEditPlace){
+  const ok=await window.familyEditPlace({id:place.id,name:cleaned,parentId});
+  if(!ok){toast('Modifica non salvata online. Riprova.');return}
+ }
+ place.name=cleaned;place.parentId=parentId;
+ if(save()){renderPlaces();renderItems();toast('Posizione modificata 💜')}
+};
+window.createChildPlace=async id=>{
+ const parent=db.places.find(p=>p.id===id);if(!parent){toast('Posizione non trovata');return}
+ const answer=prompt('Nome della sottoposizione in '+placePath(id)+' (es. Scaffale 1, Ripiano 2):','');
+ if(answer===null)return;
+ const name=answer.trim();if(!name){toast('Inserisci il nome della sottoposizione');return}
+ if(name.length>80){toast('Nome troppo lungo');return}
+ if(db.places.some(p=>p.parentId===id&&p.name.toLocaleLowerCase('it')===name.toLocaleLowerCase('it'))){toast('Esiste già una sottoposizione con questo nome');return}
+ const child={id:crypto.randomUUID(),name,parentId:id};
+ db.places.push(child);
+ if(!save()){db.places=db.places.filter(p=>p.id!==child.id);toast('Salvataggio non riuscito');return}
+ renderPlaces();renderItems();
+ if(window.familyCreatePlace){try{await window.familyCreatePlace(child)}catch(err){console.warn('Sincronizzazione sottoposizione',err);toast('Verifica la sincronizzazione della sottoposizione')}}
+ renderPlaces();toast('Sottoposizione '+name+' creata in '+parent.name+' 💜');
+};
+window.choosePlacePhoto=id=>{const picker=document.getElementById('placePhotoPicker');picker.dataset.placeId=id;picker.value='';picker.click()};
+document.getElementById('placePhotoPicker').addEventListener('change',async e=>{
+ const file=e.target.files?.[0],id=e.target.dataset.placeId,p=db.places.find(x=>x.id===id);
+ if(!file||!p)return;
+ try{
+  const image=new Image(),url=URL.createObjectURL(file);
+  try{
+   await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url});
+   const scale=Math.min(1,640/Math.max(image.width,image.height)),canvas=document.createElement('canvas');
+   canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+   canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+   const previous=p.photo;p.photo=canvas.toDataURL('image/jpeg',0.65);
+   try{const photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}');photos[p.id]=p.photo;localStorage.setItem('dlm-casa-dolce-casa-location-photos-v37',JSON.stringify(photos))}catch(err){p.photo=previous;toast('Spazio insufficiente per salvare la foto');return}
+   save()
+   renderPlaces();toast('Foto della posizione salvata sul telefono 💜');
+  }finally{URL.revokeObjectURL(url)}
+ }catch{toast('Non riesco a leggere questa fotografia')}
+});
+
+window.openQRSelection=()=>{
+ const all=[
+  ...db.places.map(p=>({id:'P:'+p.id,name:placePath(p.id),kind:'Posizioni'})),
+  ...db.items.map(i=>({id:'I:'+i.id,name:i.name,kind:i.kind==='book'?'Libri':'Oggetti'}))
+ ];
+ if(!all.length){toast('Non ci sono ancora QR da stampare');return}
+ document.getElementById('dlmQRSelectionOverlay')?.remove();
+ const overlay=document.createElement('div');overlay.id='dlmQRSelectionOverlay';
+ overlay.style.cssText='position:fixed;inset:0;z-index:2147483645;background:rgba(42,22,62,.54);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+ overlay.innerHTML='<section role="dialog" aria-modal="true" aria-label="Seleziona QR da stampare" style="background:#fffafa;color:#51336c;border-radius:23px;width:min(100%,540px);max-height:90dvh;display:flex;flex-direction:column;padding:19px;box-sizing:border-box;box-shadow:0 12px 35px #3b225344"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h2 style="margin:0;font-size:1.24rem">🖨️ Seleziona i QR</h2><button type="button" id="dlmQRClose" class="secondary" style="width:auto;padding:8px 13px">✕</button></div><p class="hint" style="margin:8px 0">Spunta soltanto le etichette che vuoi stampare.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin:5px 0 12px"><button type="button" class="secondary" id="dlmQRAll" style="width:auto">Seleziona tutti</button><button type="button" class="secondary" id="dlmQRNone" style="width:auto">Deseleziona tutti</button></div><div id="dlmQRChoices" style="overflow:auto;flex:1;min-height:0;padding:3px"></div><p id="dlmQRCount" style="margin:12px 0;font-weight:750">0 selezionati</p><button type="button" id="dlmQRGenerate" class="primary full">📄 Crea PDF A4</button></section>';
+ document.body.appendChild(overlay);
+ const list=overlay.querySelector('#dlmQRChoices');
+ for(const group of ['Posizioni','Oggetti','Libri']){
+  const members=all.filter(x=>x.kind===group);if(!members.length)continue;
+  const heading=document.createElement('h3');heading.textContent=group;heading.style.cssText='font-size:1rem;margin:14px 0 8px';list.appendChild(heading);
+  for(const item of members){
+   const label=document.createElement('label');label.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 8px;margin:4px 0;border-radius:12px;background:#f6effb;cursor:pointer;line-height:1.35';
+   const check=document.createElement('input');check.type='checkbox';check.className='dlm-qr-choice';check.value=item.id;check.style.cssText='width:21px;height:21px;flex-shrink:0;accent-color:#8c5bb6';check.addEventListener('change',refresh);
+   const name=document.createElement('span');name.textContent=item.name;name.style.overflowWrap='anywhere';
+   label.append(check,name);list.appendChild(label);
+  }
+ }
+ const imageOption=document.createElement('label');
+ imageOption.style.cssText='display:flex;align-items:center;gap:9px;margin:10px 0;padding:9px;border-radius:12px;background:#f6effb';
+ imageOption.innerHTML='<input type="checkbox" id="dlmQRIncludeImages" checked style="width:20px;height:20px;accent-color:#8c5bb6"><span>Includi foto e icone nelle etichette</span>';
+ list.parentNode.insertBefore(imageOption,list);
+ const choices=()=>[...overlay.querySelectorAll('.dlm-qr-choice')];
+ function refresh(){const n=choices().filter(c=>c.checked).length;overlay.querySelector('#dlmQRCount').textContent=n+' di '+all.length+' QR selezionati';overlay.querySelector('#dlmQRGenerate').disabled=n===0}
+ overlay.querySelector('#dlmQRAll').onclick=()=>{choices().forEach(c=>c.checked=true);refresh()};
+ overlay.querySelector('#dlmQRNone').onclick=()=>{choices().forEach(c=>c.checked=false);refresh()};
+ overlay.querySelector('#dlmQRClose').onclick=()=>overlay.remove();
+ overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
+ overlay.querySelector('#dlmQRGenerate').onclick=()=>{
+  const ids=new Set(choices().filter(c=>c.checked).map(c=>c.value));
+  const includeImages=overlay.querySelector('#dlmQRIncludeImages').checked;
+  overlay.remove();window.downloadAllQRA4(ids,includeImages);
+ };
+ refresh();
+};
+window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
+ const labels=[
+  ...db.places.filter(p=>!selectedIds||selectedIds.has('P:'+p.id)).map(p=>({name:placePath(p.id),code:qrData(p.id),kind:'POSIZIONE'})),
+  ...db.items.filter(i=>!selectedIds||selectedIds.has('I:'+i.id)).map(i=>({name:i.name,code:'DLM-I-'+i.id,kind:i.kind==='book'?'LIBRO':'OGGETTO'}))
+ ];
+ if(!labels.length){toast('Non ci sono ancora QR da stampare');return}
+ try{
+  const plain=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7e]/g,'?');
+  const esc=v=>plain(v).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
+  const imageSources=labels.map(item=>{
+   const id=item.code.slice(6);
+   const p=db.places.find(x=>x.id===id);
+   const i=db.items.find(x=>x.id===id);
+   if(i)return i.photo||i.cover||'';
+   if(!p)return '';
+   let photos={};try{photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
+   const photo=photos[p.id]||p.photo;
+   if(photo)return photo;
+   const preset=dlmPlacePresetMatch(p.name,p.parentId);
+   return preset?'assets/icone-posizioni/'+encodeURIComponent(preset[0])+'.png':'';
+  });
+  const imageData=await Promise.all(imageSources.map(async src=>{
+   if(!includeImages||!src)return null;
+   try{
+    const img=new Image();img.crossOrigin='anonymous';
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=src});
+    const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,128,128);
+    const scale=Math.min(128/img.width,128/img.height);
+    ctx.drawImage(img,(128-img.width*scale)/2,(128-img.height*scale)/2,img.width*scale,img.height*scale);
+    const bytes=atob(canvas.toDataURL('image/jpeg',.78).split(',')[1]);
+    return bytes;
+   }catch{return null}
+  }));
+  const pages=[];const perPage=18;
+  for(let start=0;start<labels.length;start+=perPage){
+   let commands=['1 1 1 rg 0 0 595 842 re f','0.27 0.15 0.40 rg','BT /F1 15 Tf 24 810 Td (ETICHETTE QR - DOVE L HO MESSO) Tj ET'];
+   const batch=labels.slice(start,start+perPage);
+   batch.forEach((item,index)=>{
+    const globalIndex=start+index;
+    const col=index%3,row=Math.floor(index/3);
+    const x=16+col*188,y=773-row*123;
+    commands.push('0.86 0.81 0.91 RG 0.7 w '+x+' '+(y-103)+' 181 115 re S');
+    commands.push('0.27 0.15 0.40 rg BT /F1 8 Tf '+(x+8)+' '+(y-13)+' Td ('+esc(item.kind)+') Tj ET');
+    const title=plain(item.name);const max=28;
+    commands.push('BT /F1 9 Tf '+(x+8)+' '+(y-26)+' Td ('+esc(title.slice(0,max))+') Tj ET');
+    if(title.length>max)commands.push('BT /F1 8 Tf '+(x+8)+' '+(y-37)+' Td ('+esc(title.slice(max,max*2))+') Tj ET');
+    if(includeImages&&imageData[globalIndex])commands.push('q 44 0 0 44 '+(x+9)+' '+(y-94)+' cm /Im'+globalIndex+' Do Q');
+    else if(includeImages){commands.push('0.94 0.88 0.98 rg '+(x+9)+' '+(y-94)+' 44 44 re f');commands.push('0.33 0.19 0.51 rg BT /F1 23 Tf '+(x+23)+' '+(y-78)+' Td ('+(item.kind==='LIBRO'?'B':item.kind==='OGGETTO'?'O':'P')+') Tj ET')}
+    const q=new LocalQRCode(-1,LocalQRError.M);q.addData(item.code);q.make();
+    const n=q.getModuleCount(),module=70/(n+8),qx=x+91,qy=y-103;
+    commands.push('0.27 0.15 0.40 rg');
+    for(let yy=0;yy<n;yy++)for(let xx=0;xx<n;xx++)if(q.isDark(yy,xx)){
+     commands.push((qx+(xx+4)*module).toFixed(3)+' '+(qy+(n+4-yy)*module).toFixed(3)+' '+(module+.03).toFixed(3)+' '+(module+.03).toFixed(3)+' re f');
+    }
+   });
+   commands.push('0.35 0.26 0.46 rg BT /F1 8 Tf 24 19 Td (Pagina '+(pages.length+1)+' - '+labels.length+' etichette) Tj ET');
+   pages.push(commands.join('\n')+'\n');
+  }
+  const objects=[null],add=body=>{objects.push(body);return objects.length-1};
+  const catalog=add(''),rootPages=add(''),font=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const imageRefs={};
+  if(includeImages)for(let i=0;i<imageData.length;i++){
+   const bytes=imageData[i];if(!bytes)continue;
+   imageRefs[i]=add('<< /Type /XObject /Subtype /Image /Width 128 /Height 128 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+bytes.length+' >>\nstream\n'+bytes+'\nendstream');
+  }
+  const refs=[];
+  for(let pageIndex=0;pageIndex<pages.length;pageIndex++){
+   const content=pages[pageIndex];
+   const xObjects=Object.keys(imageRefs).filter(i=>Math.floor(Number(i)/perPage)===pageIndex).map(i=>'/Im'+i+' '+imageRefs[i]+' 0 R').join(' ');
+
+   const stream=add('<< /Length '+content.length+' >>\nstream\n'+content+'endstream');
+   const page=add('<< /Type /Page /Parent '+rootPages+' 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 '+font+' 0 R >> /XObject << '+xObjects+' >> >> /Contents '+stream+' 0 R >>');
+   refs.push(page+' 0 R');
+  }
+  objects[rootPages]='<< /Type /Pages /Kids ['+refs.join(' ')+'] /Count '+refs.length+' >>';
+  objects[catalog]='<< /Type /Catalog /Pages '+rootPages+' 0 R >>';
+  let pdf='%PDF-1.4\n',offsets=[0];
+  for(let i=1;i<objects.length;i++){offsets.push(pdf.length);pdf+=i+' 0 obj\n'+objects[i]+'\nendobj\n'}
+  const xref=pdf.length;pdf+='xref\n0 '+objects.length+'\n0000000000 65535 f \n';
+  for(let i=1;i<objects.length;i++)pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
+  pdf+='trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';
+  const pdfBytes=new Uint8Array(pdf.length);for(let j=0;j<pdf.length;j++)pdfBytes[j]=pdf.charCodeAt(j)&255;
+  const file=new File([pdfBytes],'etichette-qr-A4.pdf',{type:'application/pdf'});
+  const isAndroid=/Android/i.test(navigator.userAgent);
+  // On Android use the native file share/save sheet instead of opening a PDF
+  // inside the installed PWA, where pull-to-refresh can leave a blank viewer.
+  if(isAndroid&&navigator.share&&navigator.canShare?.({files:[file]})){
+   try{
+    await navigator.share({files:[file],title:'Etichette QR A4'});
+    toast('PDF pronto: '+labels.length+' etichette 💜');
+    return;
+   }catch(error){
+    if(error?.name==='AbortError'){toast('Condivisione annullata: nessun dato modificato');return}
+    console.warn('Condivisione PDF non disponibile, uso download',error);
+   }
+  }
+  const url=URL.createObjectURL(file);
+  const a=document.createElement('a');a.href=url;a.download=file.name;a.setAttribute('download',file.name);
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  toast('PDF A4 scaricato: '+labels.length+' etichette 💜');
+ }catch(error){console.error('PDF QR',error);toast('Non riesco a preparare il PDF. Riprova.')}
+};
+window.printQR=id=>{
+ const p=db.places.find(x=>x.id===id)||db.items.find(x=>x.id===id);
+ if(!p)return;
+ const isItem=db.items.some(x=>x.id===id);
+ const code=isItem?'DLM-I-'+id:qrData(id);
+ const svg=qrSVG(code);
+ const label=safe(p.name);
+ document.getElementById('dlmSingleQRModal')?.remove();
+ const overlay=document.createElement('div');
+ overlay.id='dlmSingleQRModal';
+ overlay.setAttribute('role','dialog');
+ overlay.setAttribute('aria-modal','true');
+ overlay.setAttribute('aria-label','Codice QR di '+p.name);
+ overlay.style.cssText='position:fixed;inset:0;z-index:2147483646;background:#29173ac9;display:flex;align-items:center;justify-content:center;padding:15px;box-sizing:border-box;overscroll-behavior:none;touch-action:none';
+ overlay.innerHTML='<section style="width:min(100%,440px);max-height:90dvh;overflow:auto;overscroll-behavior:contain;box-sizing:border-box;background:#fffaff;color:#59347d;border-radius:23px;padding:20px 15px;text-align:center;box-shadow:0 15px 45px #21102b55"><h2 style="font-size:21px;margin:0 0 14px">💜 '+label+'</h2><div id="dlmSingleQRImage" style="background:white;padding:12px;border-radius:14px;max-width:310px;margin:auto">'+svg+'</div><p style="font-size:12px;overflow-wrap:anywhere">'+safe(code)+'</p><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:9px"><button type="button" id="dlmSingleQRClose">← Torna all’app</button><button type="button" id="dlmSingleQRCopy">📋 Copia QR</button><button type="button" id="dlmSingleQRPDF">🖨️ PDF A4</button></div><p id="dlmSingleQRStatus" style="font-size:13px;min-height:20px" role="status"></p></section>';
+ document.body.appendChild(overlay);
+ // Android Chrome can refresh the PWA when a QR preview is dragged downward.
+ // Stop vertical gestures only inside this QR preview, without changing app scrolling.
+ overlay.addEventListener('touchmove',event=>{if(event.cancelable)event.preventDefault()},{passive:false});
+ const close=()=>overlay.remove();
+ overlay.querySelector('#dlmSingleQRClose').onclick=close;
+ overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+ overlay.querySelector('#dlmSingleQRPDF').onclick=()=>{close();page('places');window.openQRSelection()};
+ overlay.querySelector('#dlmSingleQRCopy').onclick=async()=>{
+  const status=overlay.querySelector('#dlmSingleQRStatus');
+  try{
+   const source=overlay.querySelector('#dlmSingleQRImage svg');
+   if(!source)throw Error('QR non disponibile');
+   const markup=new XMLSerializer().serializeToString(source);
+   const url=URL.createObjectURL(new Blob([markup],{type:'image/svg+xml'}));
+   try{
+    const img=new Image();
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+    const canvas=document.createElement('canvas');canvas.width=800;canvas.height=800;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,800,800);ctx.drawImage(img,0,0,800,800);
+    const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+    if(!png||!navigator.clipboard?.write||!window.ClipboardItem)throw Error('Copia immagine non supportata');
+    await navigator.clipboard.write([new ClipboardItem({'image/png':png})]);
+    status.textContent='💜 QR copiato come immagine!';
+   }finally{URL.revokeObjectURL(url)}
+  }catch(e){
+   try{await navigator.clipboard.writeText(code);status.textContent='💜 Codice copiato come testo.'}
+   catch{status.textContent='Non riesco a copiare automaticamente: puoi fare uno screenshot del QR.'}
+  }
+ };
+};
+window.printItemQR=id=>{if(db.items.some(i=>i.id===id))window.printQR(id)};
+window.deletePlace=async id=>{if(db.places.some(p=>p.parentId===id)){toast('Sposta prima le posizioni contenute al suo interno.');return}if(!confirm('Eliminare la posizione? Gli oggetti resteranno catalogati, senza posizione.'))return;if(window.familyDeletePlace){const ok=await window.familyDeletePlace(id);if(!ok)return}db.places=db.places.filter(p=>p.id!==id);db.items.forEach(i=>{if(i.place===id)i.place=''});save();renderPlaces();renderItems();toast('Posizione eliminata')};const dlmPlacePresetSelect=document.getElementById('dlmPlacePresetSelect');
+const dlmPlacePresetPreview=document.getElementById('dlmPlacePresetPreview');
+const dlmPlacePickerButton=document.getElementById('dlmPlacePickerButton');
+const dlmPlacePickerPanel=document.getElementById('dlmPlacePickerPanel');
+const dlmPlacePickerGrid=document.getElementById('dlmPlacePickerGrid');
+const dlmPlacePickerSelected=document.getElementById('dlmPlacePickerSelected');
+const dlmCustomEnvironment=document.createElement('label');
+dlmCustomEnvironment.id='dlmCustomEnvironment';
+dlmCustomEnvironment.style.cssText='display:none;margin:14px 0;color:#633b91;font-weight:750';
+dlmCustomEnvironment.innerHTML='🏡 Nome della posizione principale<input id="dlmCustomEnvironmentName" maxlength="80" placeholder="Es. Magazzino CandyLand, Laboratorio, Ufficio" style="margin-top:8px;width:100%">';
+dlmPlacePickerPanel.after(dlmCustomEnvironment);
+const dlmCustomEnvironmentName=dlmCustomEnvironment.querySelector('input');
+let dlmCustomMode=false;
+dlmCustomEnvironmentName.addEventListener('input',()=>dlmRefreshHierarchy());
+function dlmSetCustomMode(enabled){
+ dlmCustomMode=enabled;
+ dlmCustomEnvironment.style.display=enabled?'block':'none';
+ if(enabled){
+  dlmPlacePresetSelect.value='';
+  dlmPlacePickerPanel.hidden=true;
+  dlmPlacePickerButton.setAttribute('aria-expanded','false');
+  dlmHierarchyLevels.innerHTML='';
+  dlmRefreshHierarchy();
+  dlmCustomEnvironmentName.focus();
+ }else dlmRefreshHierarchy();
+ dlmRefreshPlacePicker();
+}
+
+function dlmRefreshPlacePicker(){
+ const selected=dlmPlacePresetSelect.value;
+ dlmPlacePickerSelected.innerHTML=selected?dlmPlaceIconHtml(selected)+'<span>'+safe(selected)+'</span>':(dlmCustomMode?'✏️ Nome personalizzato':'Scegli un ambiente con icona 3D');
+ dlmPlacePickerGrid.innerHTML=dlmPlacePresets.map(([label])=>'<button type="button" class="dlm-place-picker-option" data-preset="'+safe(label)+'" aria-pressed="'+(selected===label)+'">'+dlmPlaceIconHtml(label)+'<span>'+safe(label)+'</span></button>').join('');
+}
+dlmPlacePickerButton.addEventListener('click',()=>{
+ const opening=dlmPlacePickerPanel.hidden;
+ dlmPlacePickerPanel.hidden=!opening;
+ dlmPlacePickerButton.setAttribute('aria-expanded',String(opening));
+ if(opening)dlmRefreshPlacePicker();
+});
+dlmPlacePickerGrid.addEventListener('click',e=>{
+ const button=e.target.closest('button[data-preset]');if(!button)return;
+ dlmCustomMode=false;dlmCustomEnvironment.style.display='none';dlmPlacePresetSelect.value=button.dataset.preset;if(!dlmHierarchyLevels.children.length)dlmAddHierarchyLevel();
+ dlmPlacePresetSelect.dispatchEvent(new Event('change',{bubbles:true}));
+ dlmPlacePickerPanel.hidden=true;
+ dlmPlacePickerButton.setAttribute('aria-expanded','false');
+});
+document.getElementById('dlmPlacePickerClear').addEventListener('click',()=>dlmSetCustomMode(true));
+dlmRefreshPlacePicker();
+
+dlmPlacePresetSelect.addEventListener('change',()=>{
+ const name=dlmPlacePresetSelect.value;
+ if(name){document.getElementById('placeName').value=name;dlmPlacePresetPreview.innerHTML=dlmPlaceIconHtml(name)+'<strong>'+safe(name)+'</strong>';dlmPlacePresetPreview.hidden=false}
+ else{dlmPlacePresetPreview.hidden=true;dlmPlacePresetPreview.innerHTML=''}
+ dlmRefreshPlacePicker();
+});
+document.getElementById('placeName').addEventListener('input',()=>{
+ if(document.getElementById('placeName').value.trim()!==dlmPlacePresetSelect.value){dlmPlacePresetSelect.value='';dlmRefreshPlacePicker();}
+});
+function dlmUpdatePlacePhotoContext(){
+ const name=document.getElementById('placeName').value.trim();
+ const parentId=document.getElementById('placeParent').value;
+ const parent=db.places.find(p=>p.id===parentId);
+ document.getElementById('dlmNewPlacePhotoTitle').textContent='📷 Foto della nuova posizione'+(name?' «'+name+'»':'')+' (facoltativa)';
+ document.getElementById('dlmNewPlacePhotoHint').textContent='La foto qui sotto verrà salvata per '+(name?'«'+name+'»':'la nuova posizione')+', non per '+(parent?'«'+parent.name+'»':'un’altra posizione')+'.';
+ const box=document.getElementById('dlmParentPhotoActions');
+ box.hidden=!parent;
+ if(parent){
+  document.getElementById('dlmParentPhotoText').textContent='Vuoi invece aggiungere una foto a «'+parent.name+'»? Puoi farlo qui, senza cambiare la foto della nuova posizione.';
+  document.getElementById('dlmParentPhotoButton').textContent='📷 Cambia la foto di «'+parent.name+'»';
+ }
+}
+document.getElementById('placeParent').addEventListener('change',dlmUpdatePlacePhotoContext);
+document.getElementById('placeName').addEventListener('input',dlmUpdatePlacePhotoContext);
+document.getElementById('dlmParentPhotoButton').addEventListener('click',()=>{
+ const parentId=document.getElementById('placeParent').value;
+ if(parentId&&db.places.some(p=>p.id===parentId))choosePlacePhoto(parentId);
+});
+dlmUpdatePlacePhotoContext();
+let dlmNewPlacePhoto='';
+document.getElementById('newPlaceCameraBtn').onclick=()=>document.getElementById('newPlaceCamera').click();
+document.getElementById('newPlaceGalleryBtn').onclick=()=>document.getElementById('newPlaceGallery').click();
+for(const id of ['newPlaceCamera','newPlaceGallery']){
+ document.getElementById(id).addEventListener('change',async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  let url='';
+  try{
+   url=URL.createObjectURL(file);const image=new Image();
+   await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url});
+   const scale=Math.min(1,640/Math.max(image.width,image.height));
+   const canvas=document.createElement('canvas');
+   canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+   canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+   dlmNewPlacePhoto=canvas.toDataURL('image/jpeg',.65);
+   const preview=document.getElementById('newPlacePhotoPreview');preview.src=dlmNewPlacePhoto;preview.hidden=false;
+   document.getElementById('newPlaceRemovePhoto').hidden=false;
+  }catch{toast('Impossibile leggere la fotografia')}finally{if(url)URL.revokeObjectURL(url)}
+ });
+}
+document.getElementById('newPlaceRemovePhoto').onclick=()=>{
+ dlmNewPlacePhoto='';const preview=document.getElementById('newPlacePhotoPreview');preview.hidden=true;preview.removeAttribute('src');
+ document.getElementById('newPlaceRemovePhoto').hidden=true;
+};
+document.getElementById('dlmSaveAndAddChild')?.addEventListener('click',()=>{const form=document.getElementById('placeForm');if(!form)return;form.requestSubmit();});
+const dlmInlinePlaceCreator=document.getElementById('dlmInlinePlaceCreator');
+const dlmItemFormForPlaces=document.getElementById('itemForm');
+function dlmToggleInlinePlace(open){
+ dlmInlinePlaceCreator.hidden=!open;
+ dlmItemFormForPlaces.style.display=open?'none':'';
+ if(open){document.getElementById('dlmItemPlacePanel').hidden=true;document.getElementById('dlmItemPlaceButton').setAttribute('aria-expanded','false');}
+ (open?dlmInlinePlaceCreator:document.getElementById('dlmItemPlaceButton')).scrollIntoView({behavior:'smooth',block:'start'});
+}
+document.getElementById('dlmOpenNewPlace')?.addEventListener('click',()=>dlmToggleInlinePlace(true));
+document.getElementById('dlmCancelNewPlace')?.addEventListener('click',()=>dlmToggleInlinePlace(false));
+const dlmHierarchyLevels=document.getElementById('dlmHierarchyLevels');
+function dlmAddHierarchyLevel(){
+ const count=dlmHierarchyLevels.children.length;
+ if(count>=4){toast('Puoi creare fino a quattro sottolivelli per ambiente');return}
+ const row=document.createElement('div');row.className='dlm-hierarchy-level';
+ row.style.cssText='border:1.5px solid #e4cef2;border-radius:17px;padding:14px;margin:12px 0;background:#fcf8ff';
+ row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center"><strong style="color:#633b91">Livello '+(count+2)+'</strong><button type="button" class="secondary dlm-remove-level" style="width:auto;padding:7px 12px">✕</button></div><label>Nome personalizzato<input class="dlm-level-name" maxlength="80" placeholder="Es. Scaffale, Ripiano, Scatola" required></label><label style="display:block;margin-top:9px;color:#633b91;font-weight:700">📷 Foto di questo livello (facoltativa)<input class="dlm-level-photo" type="file" accept="image/*" style="margin-top:7px"></label><img class="dlm-level-preview" hidden alt="Anteprima foto" style="width:100%;max-height:180px;object-fit:contain;margin-top:8px;border-radius:12px">';
+ row.querySelector('.dlm-remove-level').onclick=()=>{row.remove();dlmRefreshHierarchy()};
+ row.querySelector('.dlm-level-name').addEventListener('input',dlmRefreshHierarchy);
+ row.querySelector('.dlm-level-photo').addEventListener('change',e=>{const img=row.querySelector('.dlm-level-preview');if(img.dataset.url)URL.revokeObjectURL(img.dataset.url);const file=e.target.files[0];img.hidden=!file;if(file){img.dataset.url=URL.createObjectURL(file);img.src=img.dataset.url}});
+ dlmHierarchyLevels.appendChild(row);dlmRefreshHierarchy();
+}
+function dlmRefreshHierarchy(){
+ [...dlmHierarchyLevels.children].forEach((row,i)=>row.querySelector('strong').textContent='Livello '+(i+2));
+ const names=[dlmPlacePresetSelect.value||'Ambiente',...[...dlmHierarchyLevels.querySelectorAll('.dlm-level-name')].map(x=>x.value.trim()||'Nuovo livello')];
+ document.getElementById('dlmHierarchyPath').textContent=names.join(' → ');
+ document.getElementById('dlmAddHierarchyLevel').hidden=dlmHierarchyLevels.children.length>=4;
+}
+document.getElementById('dlmAddHierarchyLevel').addEventListener('click',dlmAddHierarchyLevel);
+dlmPlacePresetSelect.addEventListener('change',dlmRefreshHierarchy);
+dlmAddHierarchyLevel();
+async function dlmHierarchyPhoto(file){
+ if(!file)return '';
+ const url=URL.createObjectURL(file);
+ try{const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+ const scale=Math.min(1,640/Math.max(img.width,img.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.65)}
+ finally{URL.revokeObjectURL(url)}
+}
+$('#placeForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const environment=dlmCustomMode?dlmCustomEnvironmentName.value.trim():dlmPlacePresetSelect.value;
+ if(!environment){toast(dlmCustomMode?'Inserisci il nome della posizione principale':'Scegli un ambiente con icona 3D oppure Nome personalizzato');if(dlmCustomMode)dlmCustomEnvironmentName.focus();return}
+ const rows=[...dlmHierarchyLevels.children];
+ const names=rows.map(row=>row.querySelector('.dlm-level-name').value.trim());
+ if(names.some(n=>!n)){toast('Inserisci il nome di ogni livello');return}
+ const button=e.target.querySelector('[type=submit]');button.disabled=true;
+ try{
+  let parent=db.places.find(p=>p.name.toLocaleLowerCase('it')===environment.toLocaleLowerCase('it')&&!p.parentId);
+  const created=[];
+  if(!parent){parent={id:crypto.randomUUID(),name:environment,parentId:null};db.places.push(parent);created.push(parent)}
+  for(let i=0;i<rows.length;i++){
+   const place={id:crypto.randomUUID(),name:names[i],parentId:parent.id};
+   const photo=await dlmHierarchyPhoto(rows[i].querySelector('.dlm-level-photo').files[0]);
+   if(photo){place.photo=photo;try{const photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}');photos[place.id]=photo;localStorage.setItem('dlm-casa-dolce-casa-location-photos-v37',JSON.stringify(photos))}catch{}}
+   db.places.push(place);created.push(place);parent=place;
+  }
+  if(!save()){db.places=db.places.filter(p=>!created.includes(p));return}
+  renderPlaces();renderItems();document.getElementById('itemPlace').value=parent.id;document.getElementById('itemPlace').dispatchEvent(new Event('change',{bubbles:true}));if(typeof dlmItemPlaceRefresh==='function')dlmItemPlaceRefresh();if(typeof saveDraft==='function')saveDraft();dlmToggleInlinePlace(false);
+  for(const place of created){if(window.familyCreatePlace){try{await window.familyCreatePlace(place)}catch(err){console.warn('Sincronizzazione posizione',err)}}}
+  dlmHierarchyLevels.innerHTML='';dlmCustomEnvironmentName.value='';if(!dlmCustomMode)dlmAddHierarchyLevel();dlmRefreshHierarchy();toast('Posizione creata con QR 💜');
+ }catch(err){toast('Non è stato possibile salvare il percorso');console.error(err)}
+ finally{button.disabled=false}
+});function fullPlacePath(id){
+ if(!id)return 'Posizione non assegnata';
+ const names=[],seen=new Set();let p=db.places.find(x=>x.id===id);
+ while(p&&!seen.has(p.id)){seen.add(p.id);names.unshift(p.name);p=db.places.find(x=>x.id===p.parentId)}
+ return names.join(' → ')||'Posizione non assegnata';
+}
+function renderItems(){
+ const q=String($('#itemFilter')?.value||'').trim();
+ const normalize=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').replace(/[^a-z0-9]+/g,' ').trim();
+ const terms=normalize(q).split(/\s+/).filter(Boolean);
+ const matches=i=>{
+  const searchable=normalize([i.name,i.desc,i.author,i.barcode,i.category,fullPlacePath(i.place)].join(' '));
+  return terms.every(term=>searchable.includes(term));
+ };
+ const entry=i=>`<article class="entry"><div class="thumb">${i.photo?`<img class="thumb" src="${safe(i.photo)}" alt="">`:i.kind==='book'?'📖':'📦'}</div><div class="info"><strong>${safe(i.name)}</strong><small>📍 ${safe(fullPlacePath(i.place))}</small></div><button type="button" class="dlm-inline-qr" aria-label="Stampa QR di ${safe(i.name)}" onclick="printItemQR('${i.id}')">🖨️ QR</button><button aria-label="Apri" onclick="showItem('${i.id}')">›</button></article>`;
+ const items=db.items.filter(i=>i.kind!=='book'&&matches(i));
+ const groups=new Map();
+ function itemRootPlace(id){
+  let place=db.places.find(p=>p.id===id);const seen=new Set();
+  while(place?.parentId&&!seen.has(place.id)){seen.add(place.id);const parent=db.places.find(p=>p.id===place.parentId);if(!parent)break;place=parent}
+  return place||null;
+ }
+ items.forEach(i=>{const root=itemRootPlace(i.place);const key=root?.id||'__unassigned__';if(!groups.has(key))groups.set(key,{root,records:[]});groups.get(key).records.push(i)});
+ const list=$('#itemList');
+ const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(d=>d.dataset.category));
+ let locationPhotos={};
+ try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
+ const palettes=['lavender','rose','peach','mint','sky'];
+ const groupHtml=Array.from(groups.values()).sort((a,b)=>(a.root?.name||'Posizione non assegnata').localeCompare(b.root?.name||'Posizione non assegnata','it',{sensitivity:'base'})).map(({root,records},index)=>{
+  const category=root?.id||'__unassigned__';
+  const open=terms.length||previouslyOpen.has(category)||groups.size===1?' open':'';
+  const image=root&&(locationPhotos[root.id]||root.photo);
+  const label=root?.name||'Posizione non assegnata';
+  const subtitle=root?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
+  const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">`:dlmPlaceIconHtml(root?.name||label,root?.parentId);
+  const sortedRecords=records.sort((a,b)=>fullPlacePath(a.place).localeCompare(fullPlacePath(b.place),'it',{sensitivity:'base'})||String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+  return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${sortedRecords.map(entry).join('')}</div></details>`;
+ }).join('');
+ list.innerHTML=(terms.length?'<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto trovato':'oggetti trovati')+' per la ricerca</p>':'')+(groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>');
+ const books=db.items.filter(i=>i.kind==='book');
+ $('#bookList').innerHTML=books.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')||'<div class="empty">Nessun libro per ora. 💜</div>';
+}
+dlmItemPlaceInit();$('#itemFilter').addEventListener('input',renderItems);$('#quickSearch').addEventListener('input',e=>{$('#itemFilter').value=e.target.value;page('items')});function resetForm(){if(document.getElementById('coverChoices'))document.getElementById('coverChoices').innerHTML='';document.querySelector('#bookTitleSearchPanel')?.remove();$('#itemForm').reset();$('#editId').value='';$('#photoPreview').hidden=true;$('#photoPreview').removeAttribute('src');photoData='';for(const id of ['itemName','author','barcode','desc','itemCategory','value'])$('#'+id).value='';$('#itemPlace').value='';dlmItemPlaceRefresh();$('#formHeading').textContent='Aggiungi oggetto ✨';renderPlaces()}$('#photoCameraBtn').onclick=()=>$('#photoCamera').click();$('#photoGalleryBtn').onclick=()=>$('#photo').click();async function onPhoto(e){let f=e.target.files[0];if(!f)return;try{let img=new Image(),url=URL.createObjectURL(f);await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});let max=720,scale=Math.min(1,max/Math.max(img.width,img.height));let c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);photoData=c.toDataURL('image/jpeg',.68);lastAutoBookCover='';URL.revokeObjectURL(url);$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}catch{toast('Impossibile leggere la foto')}finally{saveDraft()}}['photo','photoCamera'].forEach(id=>$('#'+id).addEventListener('change',onPhoto));$('#itemForm').addEventListener('submit',e=>{e.preventDefault();let old=db.items.find(x=>x.id===$('#editId').value);if(!old&&freeLimitReached()){showFreeLimitModal();return}let i={id:old?.id||crypto.randomUUID(),kind:$('#kind').value,name:$('#itemName').value.trim(),author:$('#author').value.trim(),barcode:$('#barcode').value.trim(),desc:$('#desc').value.trim(),category:$('#itemCategory').value.trim(),place:$('#itemPlace').value,value:$('#value').value,photo:photoData||old?.photo||'',created:old?.created||Date.now()};if(!i.name)return; if(old) Object.assign(old,i);else db.items.unshift(i);if(save()){editing=null;localStorage.removeItem(DRAFT_KEY);renderItems();page(i.kind==='book'?'books':'items');toast('Salvato! 💜');if(old&&window.familyUpdateItem)window.familyUpdateItem(i);else if(!old&&window.familySyncQueue)window.familySyncQueue(i.id)}});window.showItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;$('#detailBody').innerHTML=`<h2>${safe(i.name)}</h2>${i.photo?`<img class="detail-photo" src="${safe(i.photo)}" alt="Foto dell'oggetto">`:'<div class="scan-box">📦</div>'}<div class="panel"><p class="pill">${i.kind==='book'?'📚 Libro':'📦 Oggetto'}</p>${i.author?`<p><b>Autore:</b> ${safe(i.author)}</p>`:''}${i.category?`<p><b>Categoria:</b> ${safe(i.category)}</p>`:''}<p>${safe(i.desc)||'Nessuna descrizione'}</p><p><b>📍 Posizione:</b> ${safe(placeName(i.place))}</p>${i.barcode?`<p><b>Codice:</b> ${safe(i.barcode)}</p>`:''}${i.value?`<p><b>Valore inserito:</b> ${safe(i.value)} €</p>`:''}<div class="row"><button class="secondary" onclick="editItem('${i.id}')">✏️ Modifica</button><button class="secondary" onclick="deleteItem('${i.id}')">🗑️ Elimina</button></div></div>`;page('detail')};window.editItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;editing=id;resetForm();editing=id;$('#editId').value=id;for(let [k,v] of [['kind',i.kind],['itemName',i.name],['author',i.author],['barcode',i.barcode],['desc',i.desc],['itemCategory',i.category],['itemPlace',i.place],['value',i.value]])$('#'+k).value=v||'';photoData=i.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}$('#formHeading').textContent='Modifica oggetto ✏️';dlmItemPlaceRefresh();updateKind();page('add');saveDraft()};window.deleteItem=async id=>{if(!confirm('Eliminare definitivamente questo elemento?'))return;if(window.familyDeleteItem){const ok=await window.familyDeleteItem(id);if(!ok)return}db.items=db.items.filter(i=>i.id!==id);save();page('items');toast('Elemento eliminato')};
+
+// Ricerca ISBN: cataloghi in parallelo; nessuna copertina di opere generiche viene accettata automaticamente.
+const isbnLookupBtn=$('#lookupBook');
+function checkISBN(code){if(!/^(?:\d{13}|\d{9}[\dX])$/.test(code))return false;let sum=0;if(code.length===13){for(let n=0;n<12;n++)sum+=Number(code[n])*(n%2?3:1);return (10-sum%10)%10===Number(code[12])}for(let n=0;n<10;n++)sum+=(10-n)*(code[n]==='X'?10:Number(code[n]));return sum%11===0}
+async function getCatalogJSON(url){const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),8000);try{const response=await fetch(url,{signal:ctrl.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);return await response.json()}finally{clearTimeout(timer)}}
+// Google Books supports JSONP for browser clients when cross-origin fetch fails.
+function getGoogleBooksJSONP(query){
+ return new Promise((resolve,reject)=>{
+  const callback='dlmGoogleBooks'+Date.now()+'_'+Math.floor(Math.random()*100000);
+  const script=document.createElement('script');
+  let finished=false;
+  const cleanup=()=>{clearTimeout(timer);script.remove();try{delete window[callback]}catch{window[callback]=undefined}};
+  const done=(error,data)=>{if(finished)return;finished=true;cleanup();error?reject(error):resolve(data)};
+  const timer=setTimeout(()=>done(Error('Timeout Google Books JSONP')),9000);
+  window[callback]=data=>done(null,data);
+  script.onerror=()=>done(Error('Google Books JSONP unavailable'));
+  script.src='https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:query,maxResults:'40',callback});
+  document.head.appendChild(script);
+ });
+}
+function isbn10of13(code){if(!/^978\d{10}$/.test(code))return '';const nine=code.slice(3,12);let sum=0;for(let n=0;n<9;n++)sum+=(10-n)*Number(nine[n]);let check=(11-(sum%11))%11;return nine+(check===10?'X':check)}
+function normISBN(s){return String(s||'').replace(/[\s-]/g,'').toUpperCase()}
+function exactVolume(v,isbn){const a=v?.industryIdentifiers||[];const alternate=isbn10of13(isbn);return a.some(x=>{const id=normISBN(x.identifier);return id===isbn||(alternate&&id===alternate)})}
+function uniqueNames(arr){return [...new Set((arr||[]).filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim()))]}
+let coverChecks=[];
+async function coverToPhoto(url){
+ const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),6500);
+ const host=(()=>{try{return new URL(url).hostname}catch{return 'sconosciuto'}})();
+ const note=(status)=>{coverChecks.push({host,status});return null};
+ try{
+  const response=await fetch(url,{signal:ctrl.signal});
+  if(!response.ok)return note('HTTP '+response.status);
+  if(!(response.headers.get('content-type')||'').startsWith('image/'))return note('risposta non immagine');
+  const blob=await response.blob();
+  if(blob.size<1800)return note('immagine vuota o troppo piccola');
+  if(blob.size>2500000)return note('immagine troppo grande');
+  const objectURL=URL.createObjectURL(blob),img=new Image();
+  try{
+   await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=objectURL});
+   if(img.naturalWidth<70||img.naturalHeight<90)return note('immagine non valida');
+   const scale=Math.min(1,380/Math.max(img.width,img.height)),c=document.createElement('canvas');
+   c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
+   c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+   coverChecks.push({host,status:'ok'});
+   return c.toDataURL('image/jpeg',.63);
+  }finally{URL.revokeObjectURL(objectURL)}
+ }catch(e){return note(e?.name==='AbortError'?'tempo scaduto':'connessione o accesso immagine bloccato')}
+ finally{clearTimeout(timer)}
+}
+// Cerca copertine di edizioni con ISBN corrispondente, indipendentemente dalla fonte del titolo.
+async function isbnCoverCandidates(isbn){
+ const candidates=['https://covers.openlibrary.org/b/isbn/'+encodeURIComponent(isbn)+'-L.jpg?default=false'];
+ const responses=await Promise.allSettled([
+  getCatalogJSON('https://openlibrary.org/isbn/'+encodeURIComponent(isbn)+'.json'),
+  getCatalogJSON('https://openlibrary.org/search.json?'+new URLSearchParams({isbn,limit:'5',fields:'isbn,cover_i,cover_edition_key'})),
+  getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:'isbn:'+isbn,maxResults:'10'}))
+ ]);
+ const edition=responses[0].status==='fulfilled'?responses[0].value:null;
+ const search=responses[1].status==='fulfilled'?responses[1].value:null;
+ const google=responses[2].status==='fulfilled'?responses[2].value:null;
+ for(const id of edition?.covers||[])if(Number(id)>0)candidates.push('https://covers.openlibrary.org/b/id/'+id+'-L.jpg?default=false');
+ for(const doc of search?.docs||[]){
+  if(!(doc.isbn||[]).some(code=>normISBN(code)===isbn||normISBN(code)===isbn10of13(isbn)))continue;
+  if(doc.cover_i>0)candidates.push('https://covers.openlibrary.org/b/id/'+doc.cover_i+'-L.jpg?default=false');
+ }
+ for(const item of google?.items||[]){
+  const volume=item.volumeInfo;
+  if(!volume||!exactVolume(volume,isbn))continue;
+  const link=volume.imageLinks?.extraLarge||volume.imageLinks?.large||volume.imageLinks?.medium||volume.imageLinks?.thumbnail;
+  if(link)candidates.push(link.replace(/^http:/,'https:').replace(/&edge=curl/g,''));
+ }
+ return [...new Set(candidates)];
+}
+// Proposte di copertine per titolo: mai salvate senza conferma dell'utente.
+async function suggestBookCovers(){
+ const title=$('#itemName').value.trim(),author=$('#author').value.trim(),isbn=($('#barcode').value||'').replace(/[^0-9X]/gi,'');
+ if(title.length<3){toast('Inserisci prima il titolo del libro');return}
+ let panel=document.getElementById('coverChoicePanel');
+ if(!panel){
+  panel=document.createElement('div');panel.id='coverChoicePanel';panel.className='panel';
+  panel.style.cssText='margin:14px 0;padding:16px;border:1px solid #e5d3f1;border-radius:18px';
+  document.getElementById('lookupBook').parentElement.insertAdjacentElement('afterend',panel);
+ }
+ panel.replaceChildren();
+ const status=document.createElement('p');status.textContent='Cerco copertine nei cataloghi…';panel.append(status);
+ const norm=t=>String(t||'').toLocaleLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+ const matches=(a,b)=>{const x=norm(a),y=norm(b);return !!x&&!!y&&(x===y||x.includes(y)||y.includes(x))};
+ const options=[];
+ try{
+  const searches=[
+   getCatalogJSON('https://openlibrary.org/search.json?'+new URLSearchParams({title,limit:'40',fields:'title,author_name,cover_i,isbn'})),
+   getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:title,maxResults:'40',printType:'books'})),
+   getCatalogJSON('https://opac.sbn.it/opacmobilegw/search.json?'+new URLSearchParams({isbn:isbn||'',rows:'10'}))
+  ];
+  const settled=await Promise.allSettled(searches);
+  if(settled[0].status==='fulfilled')for(const d of settled[0].value.docs||[]){
+   if(!d.cover_i||!matches(d.title,title))continue;
+   if(author&&(d.author_name||[]).length&&!(d.author_name||[]).some(x=>matches(x,author)))continue;
+   options.push({url:'https://covers.openlibrary.org/b/id/'+d.cover_i+'-M.jpg',source:'Open Library'});
+  }
+  if(settled[1].status==='fulfilled')for(const item of settled[1].value.items||[]){
+   const v=item.volumeInfo||{},url=v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail;
+   if(!url||!matches(v.title,title))continue;
+   if(author&&(v.authors||[]).length&&!(v.authors||[]).some(x=>matches(x,author)))continue;
+   options.push({url:url.replace(/^http:/,'https:'),source:'Google Books'});
+  }
+  if(settled[2].status==='fulfilled')for(const d of settled[2].value.briefRecords||[]){
+   if(!matches(d.titolo,title)||!d.copertina)continue;
+   const url=String(d.copertina).replace(/^http:/,'https:');
+   if(/^https:\/\//.test(url)&&!url.includes('covers.librarything.com'))options.push({url,source:'Catalogo SBN'});
+  }
+  const unique=options.filter((o,i)=>options.findIndex(x=>x.url===o.url)===i).slice(0,16);
+  panel.replaceChildren();
+  const heading=document.createElement('strong');heading.textContent='🖼️ Scegli la copertina del tuo libro';panel.append(heading);
+  const help=document.createElement('p');help.className='muted';help.textContent='Le immagini potrebbero appartenere ad altre edizioni. Scegli soltanto quella uguale al tuo libro.';panel.append(help);
+  const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px';panel.append(grid);
+  for(const option of unique){
+   const btn=document.createElement('button');btn.type='button';btn.className='secondary';btn.style.cssText='display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;white-space:normal';
+   const img=document.createElement('img');img.src=option.url;img.alt='Copertina candidata';img.loading='lazy';img.style.cssText='max-width:100%;height:145px;object-fit:contain';
+   img.onerror=()=>{btn.remove()};
+   const caption=document.createElement('span');caption.textContent='Usa questa · '+option.source;
+   btn.append(img,caption);
+   btn.onclick=async()=>{
+    btn.disabled=true;caption.textContent='Verifico immagine…';
+    const photo=await coverToPhoto(option.url);
+    if(!photo){caption.textContent='Immagine non scaricabile: usa Galleria';btn.disabled=false;return}
+    photoData=photo;lastAutoBookCover='';$('#photoPreview').src=photo;$('#photoPreview').hidden=false;
+    saveDraft();panel.remove();toast('Copertina scelta! Controlla che sia la tua edizione 💜');
+   };grid.append(btn);
+  }
+  if(!unique.length){const p=document.createElement('p');p.textContent='Nessuna immagine disponibile nei cataloghi interrogati.';panel.append(p)}
+  const link=document.createElement('a');
+  link.href='https://www.google.com/search?'+new URLSearchParams({tbm:'isch',q:[title,author,isbn,'copertina libro'].filter(Boolean).join(' ')});
+  link.target='_blank';link.rel='noopener noreferrer';link.textContent='🔎 Cerca altre copertine nelle immagini Google';
+  link.style.cssText='display:block;margin-top:16px;padding:12px;border:1px solid #ddc5ef;border-radius:14px;text-align:center;color:#68408b;font-weight:bold';
+  panel.append(link);
+  const tip=document.createElement('p');tip.className='muted';tip.textContent='Se trovi la copertina giusta su Google, salvala nelle Foto e torna qui: tocca Galleria. Nessun dato del libro verrà cancellato.';panel.append(tip);
+ }catch(e){status.textContent='Ricerca non disponibile. Riprova.'}
+}
+
+// Copertina fornita dall'utente per l'edizione italiana verificata di Ramses.
+const verifiedBooks={'9788856674347':{title:'Il sigillo del gatto',authors:['Geronimo Stilton'],publisher:'Piemme',date:'',cover:''},'9788865268001':{title:'Il Piccolo Principe',authors:['Antoine de Saint-Exupéry'],publisher:'Nord-Sud',date:'',cover:''},'9788804430308':{title:'Il romanzo di Ramses – Il figlio della luce',authors:['Christian Jacq'],publisher:'Mondadori',date:'1997',cover:'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAwICQsJCAwLCgsODQwOEh4UEhEREiUbHBYeLCcuLisnKyoxN0Y7MTRCNCorPVM+QkhKTk9OLztWXFVMW0ZNTkv/2wBDAQ0ODhIQEiQUFCRLMisyS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0v/wAARCAFoARgDASIAAhEBAxEB/8QAGwAAAQUBAQAAAAAAAAAAAAAAAgABAwQFBgf/xABDEAACAQMDAgMFBQYDBgYDAAABAgMABBEFEiExQRNRYQYicYGRFDJSobEVI0JiwdEz4fAkQ1NygpIWJoOisvElNFT/xAAZAQADAQEBAAAAAAAAAAAAAAAAAQIDBAX/xAApEQEBAAIBAwQCAgIDAQAAAAAAAQIRIQMSMRMUQVEEIjJhBUJxgZGh/9oADAMBAAIRAxEAPwDhyKKCISzxoxIDMAcDmkasaaAb2Mt0U7vpWXw0nloLa2KllitN+043yuTn5DAqzH4cK7tkUUa8khAPzqKKRI7Z5JCFBb61mXV09y3PCDotZyWrtkWNQ1SW5BijZlg8s8t8azcCrAtyQNzqpPQHr9BQywtCwVx1GQfMVrNTiIu0WKQFGecALj+tWo7dol3sFDeb9E/ufSjZI47K4lQtHEWAGTjrj4VXxzWpNM9ramHxZGeYBueMDz8+apQwSXEmyJSzenalL9npHHE0jbUGTV9dMU2rzG4Rdnn0NEbUJEFBLKSAQhGXP9BQXjLCgtowoBwzle57DNLe/B60oYrTitLZIP3g3O2DuZ9owfLz8qz8VqWTyraK0TsNgkwo6E4z/ejIQMljHJlrW3aQLj3QxHz6f1qH7DIxx9ikH/qY/WgbULtxzO3yAFRNcTt96aQ/9Ro1RuLv7HyPeBj/APUB/pVa+RFt40TaVjYrx1+fFVjknJJJ+NX5lFxpzTspRg+T5MemaXMDKUlHDKSCOhHatJn+2wqxeUPEBuUHPzArPIHWrdpcQ2/vGJ5Hxg5bA/SqpQTW3joGLrluknTPxFVpoJbd9ki7W/Wp5rvxJQyQqoI2lOoYVGTK8oMituPAG39KU2OFm0ncMsBJ8GQ4x5Hzqw2ntCpkmCoCwVXAxnPnUX2XUbaJ5VhmjjH3mCdPie1QPPPKP3ssjjyLEilo98Jrm3gt41ZS6Sk4aM4+o9KgtgEuS7HarKcnyqFnBPAwangglK+5G7E9cKTT8QeU0YhUEzTl42+8Cp35qFisswZAVQYAz1NTLYXb9YGVfNiF/WguIWtsb2j57K4Yj44pTQ5NO+4geVQmmVssaNlJGQKrwSYHdZxecTlPkeR/WhFNAcxzJ5gN8x/904qaqDFbXsvZfatSV2GUh98/HtWMtdz7L2f2XTRIww8x3H4dqi+FYzltdaVDmlWTR423WrFk6xGWRjjamB8TW37SezD6ZJ4lu3iW7HjPVT5GueZCo5BBNdenP4FJK0mMngdB5UoQDIu44XIzQU4oJplpI4yBJGGY7i+4YA/qar38wmaLDiQhPebGCTUCQyP9yN2+Ck1Kthdt0t5f+00uIfJWc6QSFmQMcYBIztPnirUF7CGbx1klQY2jjkjuf7VANNuu8YX/AJnA/rVrTdJ+06ha2800SJNKEJWQEjNHFHMVr2a3ncvFHIrHH3mBGKC3uJLfeEOVcYZc9RV57loLySCPT4FCsV8F4dzD4k85q3dRWqaDpLTK6u/inMSKC2GAGSaNBnW2oTQO7RRoS2AAQTtA6AUN5czXLYmijVjzkR4Y104AX2v0rAKoIITzxxsyc1nX5F5pduIbjxDbO/iJOwEqliOmTyvHboc0cBjCyuDOYfAkEoGShXBA8znpWm1nd3awWdsgjZQI2Uyou9jyMc89au390V9pL2e2mtJI3QBllcFJV2qCuf8AXSqcVxYWvtLb3Fv+7tI5UdsZYLjBYDuRnOKAqQ6NPPdrbJLbmVgxwJM42jJzj4VHpmlzam8qQFcxoW94/ePZR6ntVzTb6Cy1w3UhZoQ0n3F5IYEDg/GooNSaxs447FnSbxfEkkKjnH3QPhz9aAHS9JGoRXDfaY4Hi2hRLwrkk8Z7dO9HcWU8GmXKXYnjmtpkURMcLht3OPl+dFearFP9uMdp4X2wKXAfhWBySBjue1V5dWu5dO+wSuJIQQVLjLLjsD1x6UA+gWkF5dzRTx7/APZ5XTkjDKpI6fCrehadZT2Tfbnjja7YxW7u2ChAzuHmMkA/Os7Tr5tPmeZF3SGNkXPQbgQT9Cagaee4WGFnLCIbY1/CCc/rQG5Dp1zBpU8dnGRqcNwVuEX/ABVjA4298ZznHpT6ZLcQXCnWpZYQ8MsVtLOSTC5H3sdQPX1rLnlhZWaeeee7xgSbsgemTyaokk8nk+ZonIdB7PQvpureLNdWmwRuCn2lSJsgjb16E+dVEsNSstzvZI6EfeYqyD1Bzisg0OKNE0X1WYM2NkZ6fu0UfmKryahcyHmaTH/MarUqeoe6mabceRn1NS+5szjPFVFGTVhjtTbxnvQQF61ZjPY1WFSoaVNat4lNzGD91zsPz4qEAjg9R1qSOTGCDyOaO6C/aZSpUhm3Db055qaqJtLtTe3sUIH3jz8K9FVQiqqjAUYFc37HWe1JLthyfdT+tdLms8q0xKlUUrnoOppVKlm7toXsZftRUwlSWY+VeSahjxyFJKjpnyr0HWbmSD2aZZTkzEIvwrzu8Obh/jXTHPUNEKbFOBQSX7TPtC+NJtHQbzQM7t952PxNNTigGxRLwcg4NKnAoC6+q38iFHvJmBG05c5I8s9artJI6qrOzKn3VLEgfAUAoqDJiWOSSfjU8VpLMrOF2xqNzO3AAqLaeDg89K1BmO32yZdxiafPOMcIp/Wpt0citCtraEG7jeaQjIiU7QvxPn6VUkKtIzIuxSchc5xVyxhiuJ3lu3bw1y8hH+u9TwW9t4PimI4mDLGGfoeg+efoBS3oa2yqWK2GaxUELFAdvIJY87Rjz7nt5UxFrHbiJJoFJkXdJjc2OpI9M9qO4aZBWnEErEBY3JY4Hu9TWgkxklVnu9kZzlivI+A88d6dr5VDBpXlG3EYUn3eeck+fTNG6NRlyxtG7I6lWU4IPY1MlrJDCJGXDTHZEO/PU/T9aEzMbnx5FDnfuKnofSpTeyPNE0cC7k3YAy2c96d2OFOZAkrKvIU465oaleCZcs0LqOvKkCoqZGOKHHFXYNNuLhS0QRwOuHBx8alWwVBtnvLaPzXcWI+go3BqqCxE1IIVz1q7PaW8FoJYrxZyX2kKpGPrVJpyRwuPWiXY1pKiLGfdHzqK4cM+QQa02gFnYRXEsXiyzfcVvuqPM+dQRatdIw92HaP4fBXFKXfg7NeVFFYjIFTRxlhxVq9uYLi4aSFdivg7egBxz+dQsQFGDgU9kEjbwKlgjaeVI05ZjgVGDnOPKtr2Qt1nv3dv9wu4A+vFK+Dnl19lbraWkUC9FH51MTgUxYVDLLngVi2OvvtmlSQkDgUqAyfbaRUisrZem4t8hx/WuBlOZGPma6n2uufH1FAucRw9/XNcseWNdDCmogKarVkkckyRPGG3NjOSKCV8UgK2dWjtdOnjgitI3JjDs0jMTz6ZprA2d9KIZbZYWbo0ZP8AWp7uNq1zpkYogKtajaGxu3gJ3bcEHzB6VAKqXZGAqTYwQMVO08A9jRQxtLIsaDLMcAV0M9tBPYTWdvlpbM8n8Td8fnU5ZaOTbASeZE2LIwXqAD0oA7qrKGYK33hng/GnxSIzTIo42kdY16uwApTwNBK0TjDKcGrmjxeLqlsh6b8n5c1f1iGK9t/ttoG91isinqMVFy1lpUm4wcUqenjRpZFjQZZjgD1qyWrKy8e3uJmHuxrhfVqpV1FpLH4kmlx7SkMJy2OWfuc1zMq7XZfIkVGOVtuzs1BWlv8AarqKEHHiMBmrF9dyW0rW9oTbxJx7nDN6k9aqQyvBMksZw6MGB9RW+8Fnrq77dhFdEe9ETzn08x+dGV1d3wJNxiw6ncqkkckryRyKVKs2e3XmqJq7eafPZsRIpwO9UzVTXwm7+Wv7Lti+lTs8LflzWbfpsu5B65q57Ott1eAfi3L9Qal1GW2gum32Ymc85aQgdfIVPjNX+rH5xjJx5VKo4x1q099BLaSxLaRQscFWTJJ56c1WB444q9pdDZvBq9hHaPIEuYhhQx+9jpj1rPvdGuLdjj3gOw61mgkGtSy1+5gAS4AuYfwv1HwNR23H+Kty+WS6lGKkYIo42znd5V0Gs2lvd2J1C3bjAKg9fIg/CueXjBNVjl3QrNU6dcZIra9lphDrCoDxKhT+o/SsjaOoqW0nFteQTD/dyAmneSnFeiSPgdajj/Ee9ZlzrNsHO1t3wqhcazJJxH7opY9LKtLnI6CW5jj+84HzpVyTzu5yzZNKt5+PPlneql9qpPE1e7YYwqhfyFc13rW1efxZrmUEESSnGPLmsgVkBCrukLvv4R/NVEda1fZ5N+oxjypZeDnlL7THOsyL+FEX/wBoptCtt9148reHbwe9JIeg/wA6l1u92arcxpbWxEb7QzR5Jx5mrNsYtX0/7LlYJozuQLwrH1FZ71ifyy9UvPt9/LcBdqscIp7KOBVYCimhkglaOVSrqcEGkilmCgZJOBWk1IlqaOot0nv2H+CuIx5ueBS0WSaC/VijlZDtc7T371YvrmXTI4LK1lMbou6Zl6lj2/151RfUb1wQ13OQe3iGs9XLd+1eB6xZ/ZL51Awje8tUsVv3A/aujJOOZ7fhvXzrBp4Xc0LGj7PrjUN/aON2/Ko9GvhbXLLKf3E/D57eRqxoo2w3834YCM/GsjHFLXdbD8SLWrWJsrogf4bcqak03Fpby37j3l9yEHu57/IVdsMavZGzkb9/EMxse6/5VQ1SVS0dtEf3Vuu0fzN3NKW39aevktBlKatESc+JlST3yKh1OPw72UeuaCyYx3kDKMkSKePjWv7QabN9rMkablPXBFO3WQ1uOfIpuRyDgirdqqw30Xj+4quN+ewqebTIwxMV9alD0Jk5qrdJ0s6VqL33+w3n73cD4ch+8CB0J7ise7i8G4kjHY1oWzWulsZhKLm4AIQIDtXPck9azZGaR2djlmOSaWM53Bbwl0pvD1O1bylX9ate0MWy7z6kVUtJI4LhJpI2k2MGVQ2ASPPir15rSXT7nsISf5mJ/tTsvduFNa0xwpJ4qe4ga3lKE5Ixn6Zq0urNFzDaWkZ8xHk/maqzSvPI0khyzHJ4pzZcLsGmS3VglxbIWZXKuB17VGmkXzttFtIB3ZhgD5mq8M0kPMUjpnrtYilLNLL9+WR8/iYmjVPcal9dQ2mmLp8MqyyE5ldTlR6D6CsbimxTgDNOTRW7EKY4YHml0FGoGz1pkreJhyuakSd0PDUMtt4g3qcMOPjQJFIOqk1pMMvMLcXo7wHhxj1pVUIYfwmlWkz6k+E6ie8GyPaCcFjjPlVQdKu6mrJIsbAhlUbgfPrVIVzb21sOvWuh9l7ZhdeM6lUGMMwwK59akySOSTRZuaEuq0dat5Y9Su5HX3WmYhgcg5PFU4pHhkDxkhl6Go1FGBRJxom+13p+q26i9f7NcoMCTaSDUOmx2FpdiW4u1lVDlRGjHP1FZIFSKKnt40e096wlu5ZRL4viMWLbSOp9aiApwKMLVeCXtI1FdPMu+JpVcD3d2B+lQXcltM7NDbNCSc48TI/Sigs5ZiAqnmtiz9nJJMGQH58flS7ZvYufwzLbUjb28lvDZxFZeH3FmJ/OoPsNxO25IBGD2yQPz5rsTptlpVuJbkbiR7sY93Px9Kyp7qa8/wAMLbW/YIuCf9eZqbcMJujDHq9XLtwjKi057V1la7SBh0IPNCLKz/4s8nqsZ/tV5Y40YlVy34m5J+dOSfOue/k/Uenh/jMrP3z/APFL7JYD7xuF9WUj+lGmmWc/+FPu/wCoGrJyR1qGSEOcso3dmHB+tPH8n7iep/irr9M7/wBmf2ckC7k3Mp6EAMPyqnLo80fX8wRWrYX8+nTLvbdExwWPT4N/eu4tIba/tlmhOM8Mp/hPlXRM5ZuPNy6efTy7M+K8pewmX+DI9OahMZHUEfGvV59Ehkzuijb5YNZl17MQyA4Vl/MfnT3C/Z5wUoCldjd+yMoyYSG9OhrDvNHurVsSRMvxGKob+2Tt5pEVO0bK2CCD61C47UGANg0RNBjmnoAqQbjpzSBpjQD/ABogwA6UPJp+nBphLANwfjoRU4UVWtn2yEHowxVvBrt6POLHPybYKVOKVbaSj1tvF1O5PYOR9OKzKuXL+JLNIf4mJ+pqmOa8jHiOzPm7GoohTCiAJ6CrQJaMUAGKlAoA1FSKtNGhY4ArodK0CSfEk3uIemRyfgKC2yba0knYCNSSfSuj032bJw0/B8hya6LT9JjhUCNAo7k9TWtFAkY4HNTcteBrflnWWkRwqNqBPXua0UgiiGSBxySalFUNdnMGlzsOrAL9TU+RbqOYuXGr6jPcT5+ywnAX8R7D+tWbbThdAyN7qdgKy7ViNOjx/GS59STVkapJDb+EvHrXm9bK5Z16/wCP0MsOnO3zVbUIkgmKIcgVUp5HLsWY5JqNmx8aUj1MZZOTs2O9CDQE06VWitS7QwIYZUjBFa3sffPb3xtHbKMdnP1U/wBKyQfdqbSMnW02dd8X1zXR+PebHl/5PGenM/mV6NSxT0q3eWEoD1ANRS2kcqkMoIPYjIqwKVMOa1L2WtbgEovhN5r0+lcjqvstd2u50TxEHdOfy616nihlhjZSWwuO9VMqnUeGSxNGSGGKizivTNftvZ6UN9qvIEl/FEdzfQZzXAXsNrHMy283ixjoxQqfpVzktqQbmjByOlCwQdDTA0zGGx3p+vU0NKgDiAEqk9ARmr7LhiD2OKzCa0IjujU+Yrq/HvNjLMWKVPSrrZs9+I2qBQCMd6mlP7uoBkcivHjto8UakihzSzzTSmBBHNXrCwmu2ARTg9DQ6XYi5lHiyJEg5LOeP867fTm021QKsrN5kRk5qtMsspPlDo2gRwbXkXfJ2B6CuptrMIAW61Vg1GxVf3cjhvNojirceoW0h4nQfE4/Wou1TPG+KtDgelLdz/Wo/dlGAQynuDmhDBW2jPzqFJ81Q1uIz6XOoGSAG+hzVxW460icgjAIPY0Czc04OyKmzMJPvwsVI9OoNRyKKta7pk1hc/aLUEqeAPxD8PxFZaXAmyyn4g9RXF1ulccu6eK9n8HrTqYdtvMG3FQscmk7570GfOokejaE9aNaHinLBF3MQqjuarzwjic1LuVEJY8AZJrb9jbBpro3ci4AO/nzxhR9OazdJ0m41a4UbCsIOcMOvqfT0ru4/selWyxNMkar1LMMsfOuvpdPsm75rwfzfyZ18pjj/Gf/AGrZpVi3vtRY2ynZukPmfdH5/wBq5vUPbW4kytuRGP5Bz9TWnbXH6kvjl3c08Vum+aRI183bFYt/7XadaAiMvO38vur9TXnl1qlzcuWkkJJ7k5P1NUXkJOSSaqYw+a63UPbq8kytsqQDzAyfqf7Vzd/rF5eHNxcSS5/ExI+lZ7NUZNVBobys3egOcUOcHnmpRIjjLcEdjQYrKxlvpGjgKGQDIQtgt8KtNpZhsnupJ4ygcRqE53N3HpgVRhlKXMbrIYirA716r6103tMUurNJI2LLGolQjoyk7Sf0+tRllZlIqSWObYjjFN1oRRCtUlirtpzCM9iRVKrdmRtkHfgitujdZxGfhPSpUq72DNm/whUQyAM9KmlICjNQNIWPNeNHdVq1t5LxmSLZvVdwUnG4d8Ub272kaTuEdJCQjKwIOOtLR32Xyy5IESlzjv6fOrPtPKjaiFRyfDQKUxgIfIfrS7r3aLW4pG6kP8ZA9OKcSt3Zj86qhqINVbTpejuZUPuyup9GIq3Fq97H926kPox3frWQJMU/jAUFqN9NduVOcqG/EmVP5Vftfa6+gADTs4HZwG/zrjzcHtTiZiOCaE9knh6Fb+2SsczRxknrglf71ox+11mwG5GHwcGvLhu6mjwSOM0tQ+3L4r1F/abTp0MbxtIG42kqc/nXP6gmlXEpeB5LeTzLLkfn+tcvpilJmmfOIlz171A4Mjl2JyTmnqaTJlcvPh0EkTp9y6tZR/M200o455SQiW7kDJxcLxXPeEM8mtDRAsd0/wDNEwqPSwvw6vc9fCfyXx4eMy31nCP5CZG/LijjvdJtWDr413MOjuvA+A6CueUADoKIGnjjjj4iOpnn1eM8rXVjWriXS5pbRnQRN78ZbGR58daw5dTuZSSZNufwjH50eh3Aiu/CfmOcbGH6VTuoWtriSFuqNgeo7VrbxtyY4YzO42BZyxyxLHzJzQFqYmhJqG52aoyacmgNMGJoDTmhNAMTQmiNNigLVhaxXCzNLKyCJQ3uru4zjPwFbV1eLIl3CojkZLUMHR8rg7MgDyGMisbTriK0maSWJpQUK7Q+0HIwc8GpoL+2tmYw2CncpRvFmZsg9emKzyl2uWaUQaMULEM5YKEBOQozgfWmzWiEnTrU1owEwBxyCOarbiaJGw4PrV45auys3GnSoc80q9PbmZc7ZIFRZpSn3mqHd5V4zurS0qVY5Lgum9RCWxux0IP9Ks3b297C9wzlpEgDHaeEOeAT3JJ+QrMtrtLVZVa3WUyKVJLkYB7cUX29RbSwR2cCJJjccsTkdOppa52N8IN+OtD4hJwKYc4HlRKoBzVpNuJNGoYmiVRRigjJHnrU6JjtgUKmpFNASADIouKjzyKkQb2CjvQE7nw7NUHBkOT8Kgop23y4HRRgUNFLHwVWdPbbcf8ASaq1NaHE4+Bogy/jVcdPnSpefxNKkYlYggg4I6VpauRcwW98vVxsk9D/AKzWWDWhp7CeCezY/fG5PQirn0y6k1Zl9M+mNMzFeDwRwRQF6locmhJpi1DmgHNCaRpwM0GalRbacLRsBxSC1KFrS9n9Pj1HVoraZWaNgS204xgHvSuWps5NsrFCa2vaHT7bTr9bW3D5SNfELHOWPPFZTpTxvdNizSGnpsUqZNKA7o1NKhsivgjcejYpV6fTu8ZXNl5Y7nIJJ5oFxQk5olrynYIgEcCmVcV0EWjW02gveweNJOF4TrhgeeAPKsDvilMtizQgKempCqSMGiFAKIUEkBqRaiWpFoA6ltmPvueijioelGGxCqDqTzQKdTxk9TRA0GcUs0jHmjhbEoqAtTK5Eq/GjZWcEz4Zx/MaiMvkaG4J8RviahzQax4pqW3uWhnSQdVOap5owaNlZtf1VALjxU+5KNwqlmrit9osTGfvQnK/CqVO+U4+NHpZpqIDJoUcc0arxTAVKo4pAglLFGKVIw4rqdGntb2D9nWtm4URb5y8mPEYYx93nGSO+AO1cyAMjPTvW9b2lpbazbi2naJkdGAmYbZkOOQ3GMjsfrWfU1pWKN7ZZ9DmkW6FylrINjFSpTPBXnqDwR8DWJIoIrTtVAj1W1zkKu9fij/2JrPIqsPkqpMuDTKuTVooCTQ+GMVqlLYqrJMhznAYc+RwfyNKlbLslXBwDx9aVdnRzkx1WOc5YgqW3jMs8cY6uwX6moqltl8S5iT8TqPzrgrpdNbwqmqzJ4qCW3jJijbIWEDpyD16Z+NYeqagNSmWY28cLBcMUJO/1Oe9WlkilvNV8eZYlkDKGPJxvHAHc4FRX32ZdNgMdusbSOTGxOXKDglj6n9KicU7zFAU9Bmn3VqgeaIGot1PvoCZTUimqwbmjD4pBb4IpA5bI4xUKHIJ7UQY4xQEhYU26gpqQGTTA+8DQ7qQPIoAZuXY+tQkc1NJyaDb50AIHNSKKeNST0qdIu+KAVqximB7Hg008PhysB07VMsYHSpZBuVXPwNPadcqQjNGsdTUuKW1ACiip6bNAKlSzTE0A4NadxeadNbW0JtrpvAUgMZlBOTnH3TxnP1rKzSzSs2bUtdQtbOQyW9gCSpUiWYsCD1BAAqlLIssrOsaRKxyETOB8M1DmlmiSTkDpUOaW6qIRODnypUBalVylpjVa0+5WzuVnaBZihyoZiAD58VVFFWdWuSXsDOW/Z8OScktI5/rSvNRa7hjia3t4xEMKY0IYDyySeKpU9GoNlTE0iaamRwaQphRqvNICRSak2GnRamVeQKCCBtT8zSDUTDd0pLEe9Aht1LNF4RoxEKRocHyqRIySPjUoQCiUe8KAiVN2aIRAHNOnBYetFmkDKuDUoqPPNEDQB5q1p6rMZLd/wCMZU+Rqnup45TFIrqeVORTicpuE6mN2RhgqcGhqzqbI8qzIRiRckZ71SLU9DG7mxE0JamJJoTQYt9NvNNTUGfdT5oaKMKXUOxVSeSBnA88UBZ0+yl1C6W3gK+IwJG44BwM1HcQyW08kEw2yRsVYeordtDY2UcjaVMl1eJEziSRGVlwOdoxjgZ69azdWzcGO/5zONsgPVZFABHz4PzrOZW5f0q48KGaWaamrVIs0qGlTJmAVZ0+yk1C8itYiA8hwCeg9aiVa1dEgmX7RdQI7zRp4cKoMku2Rn5DcflUZXUXOaztRtDY301qzhzE20sBjNV663VrxbVIrfVtPa7ufAVlaQ+GFJHoNx9cnkiuW2c9KWNtnIymqjxSC5qUJ6VIsYqkoVSjC4qYLRBOaABFqyAFjPODQAAUZPTnFAEi4XnvRYqaS0mitorl1AhmyI23A7sdeKJrOVbAXpKeC0nhj3ud2M4x8KnZ6VzgelLpQt7w681b0uy/aE5hMojIRnztzwoyf0o2FYmluANFMLdYg0M8jvuwVaPbx59TUupWcdpHZvHI7/aYRKdwA25JGPypbGlUnEjUi4q3dwQ2MoinRpbjaC67tqpkZx5k+fSoZ5LSS3HhW7Qzhuf3hZSuD2PQ5xRsaQ7qIGr08EA9n7W5SJRM9w8bvk8gAEcZx3qb2USGXXrOG4ijlilfayuoIORTlFZeTSPTNa2lWSXFzfT3CB4rKJ5mQcByDgLx0GfyquusX0cgdLlkH4FACfDb0xVJ2oU1buu29vNp1jq1tEsP2ktHNEgwokXuB2B8qws0AqbNLNCTQD5ps02aWaYPmijVpZFRFyzkKo8yajNPHI0bq6EhlOQfI0Bv6Qs+k3sqPGjPNBII5UYMoIBJwfPIxiq9zfSXWhReMfEkW4IaRjlvu5GfPqfpRNfmznWcRB7a8UyiM8bXIIbHkc5+INQWFtNdabdxQxPIyskihRknGQcfI1jr/atP6jP3Us0zBkYqwKkHBBGCKbNbMxZpUOaVBqqitewuJI9A1ONcBXeJc45yScjPwFZojwvqa34tGul9nnARQ81wjhDIoJQK3PJ45Pes87NKie9tTqMmnteyOIFt4YYgijfI7AEgZ8s5J7cedYF1AkF1NEjiRY3ZQ34gDjNdFp1vey3kUt9dWsX2S3KW3iXCBVYDC9Ce5zn0rm54jBK8ZdHKHG5G3Kfge9Th9CgpUINPurQhA05NBupZoIatRcHrUYNPuoDa1E7dA0gefjH/ANwpSt/5Wh9b1v8A4Cqt9qMFxpthbRrIHtg4ZmAw2454ol1S1OkR2EtvKxSYy+IsgXkjGMYNQpQLVr+yx/8AywyMjwZcjz9w1k3EsUjgwxGJAAAC24n1JwKm07UH0248eJEd9pUb8kYIwenpTvgBmlgeNBFb+EwOSd5bI+daOsPtttFcjIFqOPPDtWKXBPAx6Cp7rUJrqGCKXZsgXZGAoG0eWaLBtp+1EJ/aLX8Z32t5iWKQdOeq/EHtUMccLezs9wIkMyXKR+JznaVJx5dRVC21G6tUZIJ3RG6p1U/I8UpLy7vdsLSPIM5WNRgZ9AO9LQayxyTeyWY0Z/CvudozjKUGgJNba/pjSRuhaZGAYYO3djP61mNLeWhMLPPCV6x7iuPlRT292kEd3Or+HLkJIz53Y645zTKugsryPSfaDULe+RvslyZYJcDkKTwwqlcaHcRyEwy29xB/DMkyBSPXJyPgaz7Ozmu455Iim2BN8m58EL5479RR2ljLdiR12JFEAZJZDhU8snz9BzVJXtTu4hp9npsEglW3LSSSL91pG7D0AGM9+ayTWna6XbXUqwx6tbiVjhQ8bqpPlnFNpOlpqKXbPcGI2sRmYCPcSo645HPNMM7rTECrN3HaxrGbWeSXOd4ePYV6Y7nOaqmmAmlTkUNAKnR2jdXTgqcjIzQ04oDQk1zU5CN15Jx0wAMfQVA+o3sn37u4b4yGq/NKpmMnwe6dmLEkkknqTTU1LpVEfilTUqDIEZpiRnoKDNNmoUkJAqNmpic0NAFmlmmpUyPmnzQ0+cUBp29lbnSJb+Z5v3cyxbEA5yCc5PwqSw06z1VjBaXEsN4RmOOcArIfIMOh+Ip149kZT+K+Uf8AsNVdBR31mzCHBWVWLfhUHJPyANSabQbGK81T7LeRvgK5IDbSCqk/0qnNPbyQqsVsIZA2SwdmyMdOa2tFuEufau6uYh7ji4kUY7bWIrDmu5LiJVZIgEOcxxKnXzwPSl8j4X7+GCPQ9NnjhVZpmlEjjOW2kAfrS9l0SbXLaKaNJI3JDK6gg8Hzo9SU/wDhrR27b5//AJCn9lI3X2jsVZSCTkAjsVNG+KPlkOxZ2J6k+WK2fZ6O3IdbsDben7KjH+AkZ3fI7PrWa9hdhpSbaVRGTuJQgDnFXdQuLjTRbWcZEZhiDvlATvb3jyR24Hyo88BlzxPbzyQyjbJGxVh5EUoW2So3kwP51q+0G28FvqkbITcxjx0DDKyDgnHXB61jrywAx86cu4TV9qBj2hv/AFkz9QDUt0d3snYH/h3Uq/UA0WvJa3uryXEWoW3gyBctlsghQDxj0qrZ3tu+mzadds0cZkE0MoXdsbGMEeRHlSniH8pvZ9stqEf47GX8gG/pV6VP/JltJEPdN6/jY89o25+WfrWVDPBYRT+DMJ55ozECqkKinqecEnHHTvU2ja0dPSa3mhW6srgASwOcZx0IPYjzqk1SViGBBwfOuh9jCH1SeBxuWe1mQgHBPu5/pVDdoW/eo1Hbn/COz6bv8qLTNXTT9aOorbbgGcpCHwACCMZx5GqSrXktm0UYtreSFwTuLy79w4x2GO9Uy2avXN3ZtDKltYGF5CPfaYvtGc4AwKziaYPmlS60qAdcU4xmgoh0zQBnFS6faHUL6K2VwhkONxGccZquTWt7MWTXWoiXfsjt/fY+fp8+anK6xtVjN3TLuIjb3MsLEExsVJHQ4NBnNbntTp8dvIlzFIGDnw2Uc4KgdT51gZowy7ps8pq6Sq1KgBpVRIc1sw6Zat7M3GoSNKLlZQsYyNpXIB/WsZRuIA6mvTBY6Z+ypNKmWQRxKokZufCYruyWHYE5/wDusepl26aYzbzLNNmk2AxAOQDwfOmzWiT5p80OaWaCHmhJ5pqVINGHVjHpv2BrWCWEyeKS+7duxjOQR2qFr9/CeKGOO3jcYcRg5YeRJJOPTpVSlS1AtWF/cafMZrVwkhUruKg8Hr1pp76e4jEcjIEDbtqRqgz8gKrZpUwuJql9HCsKXcyxJ91FcgD5VC1zO0rStNIZW6vvO4/Ooc0s0gkaaR/vyO3xYmgzTU1MHzTZps01AFupZoaWaCHmiU1GDRKaYTg1IBmq6tUgaqJJnj1piOaDcTSLGgJBwuOKA0OSaIDtQRZ9aQ+dLbS5HTNALrWlocjx3MpD5QRlniwD4oHO3B/0Bms4VvRXdtEti80SiHwiqui+8jjIYHzByD86jPxpePktWcvpckivF4VxcLKqhgTkp7w9MH9a56r0Y36RMv8AwpkYfMEH9BVPBxntTwmpoZXd2Q680qalVJRKcMCDjB6iu2ub2CS4ktsyTQ3UJurhJFwSgiG1Qc/e93OfWuIUFiFUFmPAAGSa37+e907XZJLWB2ljhSIZjLBf3YB+YrLPlriyL3TrqxSJrmLwxKDt94E8YyDjoeRwfOqtbPtFDcW0OnwzxyLiHxGdwffdzubnuRwKxaeN3CvFKnpqVUk9PTUqQKlSpUAqVKmoB6WaamoAqampZoB6almmzQCpUqbNAPTg0OafNBJFqZcYqupqVW4qoSUUiOKYGiXnrTBgKIDFPgCiDZBGKARXAyaHjzpc556U3egEwB6Cr8eoWyWK2smnrLhixdpmB3dMjHSqFMaVmxLpoR6nFDG8cenW4WQAOGZ23Y586oM25iQoUE8KM4FDiiokkPezbaVEBzSpkggnltpRLBI0Ug6MhwR86sNrGpN11C6P/rN/eqZpqnUXtJNcTXBBnmklI6F2LfrUVKlTIqVKlSB6VdLons3HdTR292JvtEkfilFYIIk6DdkEkny8qo+0uiPoV/4O/wASKQbom7kZ6H1qJnjbpXbdbZFKlSqklTGtvSdM91Zp4klllXNtbyNjf5uwyPdHPxNbftjo+lWOmo6yRQ3yjcqooUTDIB4HxrO9STLS+2624imJqFpDmm31rpCbNLNQb6bfRoNa1snYTLNC6u8R8DcCu58jp58ZqpPDJbyeHMhRxzg01tqMlsuEVSS2WLDO4fh+HJqC5kiaZmt1ZIzyFJzt9KUl2d1pJmmJqDcaW409JT5olyxAUEk8ADvVfcaltrh7eeOaM4eNgyk+Yo0bopvZia1topLq4SF5cAKyEqGPRWbsax2R4ZWikUpIhKsp6g10k+s3kvs9DMkUdyXYidnQMEI6Hb0+dZFvcrqKC3vHAlAxDcN1H8rHuvr2rLDLLX7Lyk+FVTUgPFRyRvDK0UqlJEOGU9QaJTW0ZN/2Y0ePUZHluCDBGcbM4Ltj9Kk1XRtkzpBbCBw2I/eOycYz7u7+IZ6ZrK0m9FlqVvOxOxHBYDy6H8qv61ZXct7LOkxu0b312nLKp6e75eo4rK7mfNaTXb4Y7AqxVlKspwQRgg02a0Fb9pJsfi+QYVj/AL0fhP8AN5Hv0qgcjIIwR1B7VrKiwOTmnIpZ2mrelWwvdQhgbO1jzjrgDJ/SnbrkpNqoTuSBTlcdfyrppptZsYs21rbW9vuChIljkIz0z1J+NZ15E9wZo7m2W2v4BvZVTbvXvkdMgc8etRMlaZXHWlTjFKrJXtLSe8lMdvGXYDcecBR5kngD41dTQ5ZSEivdPeU8CNbgZJ8h2/OrdraGSys9PVzH9sDXNwwGSUXO0Y7/AHWOPMirtpo2iJLGsl5FIHQS755/D2A9F2r1PnyKxubWYuVlieCV4pUKSISrKw5BHahrb9r4gureMhVo54kZWQkgkDaeTz1WsSrxu5tFmqatS1UaXapeyKDdS/8A6qMM7R3kI/IevPaj0PR5L5jcyRM1rGeRnHiEfwg9APM9AKvX8H2ZBqVxCt9NM4SM4xbpxwFHVwAMDovHepyylulSfKf2Qm1UXa3DXTxaeGaSZ5T7sndsZ6njqK5zUbpry+nnLMVeRmUMegJJ/rW5r7zWemwxXE5lvrvJnPaNFPEajoBnrjuK5qlhN3uGXHBVf023jCPe3a5toCBs6eK/ZB+p9KfRNHudavBBbL7o5kkI4Qf67V0S2NlLcLbo0ckdowiRXJ8JHY497HMjk9hgDHXAozyk4GMc6ttd6rK95cOscTthp5OF9FUdT5ACi9qLmIy21lA7ullF4Zd+pbqa0bGRts2q37+LLEkgtUxhU2jG4AcAAkADz+Fcm5JJJOSepox5v/Ay4gaalTVszKmp6agGp6alTB6WaalQDg0QNDT0g1dDvGhuRAZGSKYgFlOCh7MP9c1oSwK98LK+tf8AaGPuT2oA8T129D+RrI06wur6TFpEXKkZIIGK9A/Yi5gmkWR5Y3MgAcDk4yOe3eufqZTGtcZbGDLpUl7EYvESW5gG1ZBwWUfwup5UjsenbNYckbwyNHKjJIpwysMEVq2q3Mk6p4qW+pae2C8rgAxjrk99v5g1D7Q6kupahvRg6Iu0SBNpbz+Iz0z2qsLd6LKTW1AVt6QY7yymt55TFLbjxbeYdU55Hw5B+tYgrp9BtdNtBFd3WpQ+IykGDsARjBP9MVWd4Tj5R2sb3gnTURE00DiMMTskLHOMMOD07/WpG05NXSR7WXddRcOsg2M3/MPP1HXvVrW7rTLqxljhvofFwG92I++w9QPlWVDqFsuL5zI17t2NEvCycY3Mfh1Hcis53XmLuvDKlRopGSRSrKcEEcg1p+zfh/tNd7orFSqbwSCx4AOPiazZHeSRnclmY5JJzk1Lat4VxFIcgI4Y7Tzwe1bWbmmc4rbm1meLV1WaGCDwZNjusfJHTnnPTnFV7uUWmoWJD+KkSKfF6iQEknHpyRSuLnT726mUwi2iblJ8EuG/mAPOeantJdOtbVkuLhbzbuMcTWzbQ2PxZBAz2qNa+Fb/ALY13Cba6mh/4blflmlRXlw13dPO6qrSHJVRwOKVaRDUltJbPULbUZ28GytIItsgYZkIUHavmSSR9aoQW9zr179tla3gjaRY13v4ak9kXGe1UrTVruzgMMDoIy27DRK/PTPINBeald33h/aZi4jzsAAULnrgAVlMbGtyjS9s55pdfnimJxBhEXOQBgE/U5NYQ6807MWJLEknqSc5pqvGamkXm7dndXQ1fS7OOOSCDTLdd93FE21kA6Lg8nPY9yat+zsSanC17frEiG5EsAaYKECjCqB5DpXA0jWd6fGpV9ztPanQo7h0ntb6xVIYcGN7jnOSxxnr171xVLjypVWOPbNbTbtr+z+snTTNDI8yQTqQTERlGIwG9ceVTwXdlbahYW8d3iztX8Z5/DJ8STrnb17AfWsGmNFwlHdY7nUdf0G6spLVppijLt9yALz3PpXC6gtoswFjJLJFjrKoBBoHNQ0YYTHwMsrl5NU9jFFNdxRzsyxFvfZOoHc1BThiudpIzwcGtEuiuPZy3giZxM8pjSbIUj33RgAB8jn5Go7jStNi+1RLK4niBeJnb3JAFBKcfxAn54rB3scZY8dOaalq/Z7b97pmnRRsynayeCwAlzvBTLj5H9cVMLHSIG/eSQSQtcKQxk94QlSTwD1BwPjXNU1Gv7G3R2x0VJIi3hGL9yRvHvZz+83emM/lioryXS/styIDCHeBAgEfIcPzzjuvesGnxR2jYcU4FPSxVEmhlki4jkdM9drEUZlkb70jt8WJqFakFTQMc0amowaNaQSqM1IoxQR1Mq5qoRhkGjjxu5FPgUiQKYE3UHNN3zVqGzu3j3paTvH13CNiPrUQznDJgjzFIAXGalIz0ocEcYwfhS8ZQOSBTB3XFKtb2etluZ/tMg3Qwnjj7zf5Uqxy6nbdNMcNzblCaat/VLO0vb2Se3DW4kO4ptyAe+KrjRYupuHA9EH96U6mPzV+jn9MkUjW0NKtB0eY/ED+9TR2Fgq4eGSQ+Zkx+lHq4n6Gf05801dCLCyzkQNjyMmf6VGdMtWbIjYDy3/5UvWxP0M2FTZre/ZlqDnwyfQsaIWFrkHwFHzP96XrYn7fNz9MTXSpbW4JxBF/20/hRg8RRD4IKn18T9tl9uUYE9AaDY+fut9K7FRt4UKPgopFnHIYj4Ue5k+D9rftx3hyfgb/ALTSMUmM+G+P+U12HvHqxPzp8Hpk0vc/0ftP7cgttO4ysMhA7hTS+zTk8Qyf9prsCvBoQtL3V+j9rPty6abeN0gf54FI6XeD/cn6iup2jFMVpe6y+le1x+3Lrpd43SA/UVMmi3LfeaNPQnP6V0iLzihK+9Sv5OZ+1wYKaFMes0Y+tH+wn7zp8lNbgFORS9xmftsGH+xJB92dT/0mpF0Qke9cD5J/nWvinXpS9fM/b4fTOTRYcHdNJx6CpYtChOMzvz6Cr/QE1LH0FT62f2r0On9IYfZ61Ay0srfQVbj0OyUAlZG+L1LE3SrKnPeo9bqfap0en9IDpVj/APz4Hoxo4bCygfdHbRhh3PvY+tTqTT9aXq5/Z+lh9JzeXDKqG5nKL90eIagAXJbw0yTnJXJJpE+dIGjvyvmj08J8D3EgZC49VFAY4sY8GL/sH9qcfGnJ4o7r9n24/SMP4U0SrhQzYAXgUqzdaufs6KynDKCR8egpVvjhcpuObPKY3Smi5NSlfdpUqzrpBikRSpUA6jinA5pUqWwYr1pKtKlQYkXk0BX3jSpVIGq8ULrxSpUjOFzimI5FKlSAmWmC0qVAOFytCRSpUGKNfepnHNKlQDAU+OKVKgjY5p1HBpUqYJvu/OjQ8UqVBLEZqyhyKVKlYaZTzin74pUqQI9fOnHSlSpghx2pMTilSoJy2vz+JKVB4LbR8BSpUq9HpTWEed1r+9f/2Q=='}};
+let lastAutoBookCover='';
+async function lookupISBN(){
+ const isbn=normISBN($('#barcode').value);
+ if(!checkISBN(isbn)){toast('Controlla il codice ISBN: inserisci un ISBN valido');return}
+ if(!navigator.onLine){toast('Per cercare un libro serve Internet');return}
+ isbnLookupBtn.disabled=true;isbnLookupBtn.textContent='📚 Cerco libro e copertina…';
+ coverChecks=[];
+ try{
+  const verified=verifiedBooks[isbn];
+  let title='',authors=[],publisher='',date='',source='',exactCovers=[],reachable=false,availableSources=[];
+  // Cerca prima nella funzione SBN verificata, senza cambiare i dati gia salvati.
+  if(!verified){
+   try{
+    const endpoint='https://ephdnunjudbwlgbxdadm.supabase.co/functions/v1/cerca-libro-isbn?isbn='+encodeURIComponent(isbn);
+    const response=await fetch(endpoint,{headers:{'apikey':'sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT'}});
+    if(response.ok){
+     const book=await response.json();
+     if(book?.trovato&&book?.titolo){
+      title=String(book.titolo).trim();
+      authors=book.autore?[String(book.autore).trim()]:[];
+      publisher=String(book.editore||'').trim();
+      date=String(book.anno||'').trim();
+      source=String(book.fonte||'SBN');
+      if(book.copertina)exactCovers.push(String(book.copertina).replace(/^http:/,'https:'));
+      reachable=true;availableSources.push(source);
+     }
+    }
+   }catch(err){console.warn('Ricerca SBN tramite Supabase:',err)}
+  }
+  if(title){ /* Scheda trovata tramite Supabase: salta le ricerche alternative. */ }
+  else if(verified){title=verified.title;authors=verified.authors;publisher=verified.publisher;date=verified.date;source='scheda verificata'}
+  else{
+   const [gResult,eResult,sResult]=await Promise.allSettled([
+    getCatalogJSON('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent('isbn:'+isbn)+'&maxResults=5'),
+    getCatalogJSON('https://openlibrary.org/isbn/'+encodeURIComponent(isbn)+'.json'),
+    getCatalogJSON('https://openlibrary.org/search.json?isbn='+encodeURIComponent(isbn)+'&limit=3&fields=title,author_name,first_publish_year,publisher,isbn,cover_i')
+   ]);
+   const g=gResult.status==='fulfilled'?gResult.value:null;
+   const e=eResult.status==='fulfilled'?eResult.value:null;
+   const r=sResult.status==='fulfilled'?sResult.value:null;
+   reachable=!!(g||e||r);if(g)availableSources.push('Google Books');if(e||r)availableSources.push('Open Library');
+   let v=(g?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
+   let d=r?.docs?.find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10of13(isbn)));
+   // Ulteriori ricerche automatiche, sempre con controllo dell'ISBN esatto.
+   // Alcuni cataloghi indicizzano il codice nella ricerca generale ma non in quella ISBN.
+   if(!e?.title&&!v?.title&&!d?.title){
+    const extra=await Promise.allSettled([
+     getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:isbn,maxResults:'20'})),
+     getCatalogJSON('https://openlibrary.org/search.json?'+new URLSearchParams({q:isbn,limit:'20',fields:'title,author_name,first_publish_year,publisher,isbn,cover_i'}))
+    ]);
+    const eg=extra[0].status==='fulfilled'?extra[0].value:null;
+    const eo=extra[1].status==='fulfilled'?extra[1].value:null;
+    reachable=reachable||!!(eg||eo);if(eg)availableSources.push('Google Books');if(eo)availableSources.push('Open Library');
+    const matchedGoogle=(eg?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
+    const matchedOpen=(eo?.docs||[]).find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10of13(isbn)));
+    if(matchedGoogle)v=matchedGoogle;
+    if(matchedOpen)d=matchedOpen;
+   }
+   // Prova anche l'ISBN-10 equivalente e la ricerca Google per il mercato italiano.
+   // I risultati vengono accettati solo quando l'identificativo dell'edizione coincide.
+   if(!e?.title&&!v?.title&&!d?.title){
+    const isbn10=isbn10of13(isbn);
+    const requests=[
+     getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:'isbn:'+isbn,country:'IT',maxResults:'40'})),
+     ...(isbn10?[
+      getCatalogJSON('https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:'isbn:'+isbn10,maxResults:'40'})),
+      getCatalogJSON('https://openlibrary.org/search.json?'+new URLSearchParams({isbn:isbn10,limit:'20',fields:'title,author_name,first_publish_year,publisher,isbn,cover_i'}))
+     ]:[])
+    ];
+    const responses=await Promise.allSettled(requests);
+    for(const result of responses){
+     if(result.status!=='fulfilled')continue;
+     reachable=true;
+     availableSources.push('ricerca alternativa');
+     const data=result.value;
+     if(!v?.title)v=(data?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
+     if(!d?.title)d=(data?.docs||[]).find(x=>(x.isbn||[]).some(k=>normISBN(k)===isbn||normISBN(k)===isbn10));
+    }
+   }
+   // Fallback JSONP: Google Books may be reachable even when Safari blocks fetch/CORS.
+   if(!v?.title){
+    for(const query of ['isbn:'+isbn,...(isbn10of13(isbn)?['isbn:'+isbn10of13(isbn)]:[])]){
+     try{
+      const data=await getGoogleBooksJSONP(query);
+      reachable=true;availableSources.push('Google Books JSONP');
+      const match=(data?.items||[]).map(x=>x.volumeInfo).find(x=>exactVolume(x,isbn));
+      if(match){v=match;break}
+     }catch(err){console.warn('Google Books JSONP:',err)}
+    }
+   }
+   // Seconda possibilità: endpoint libri che può restituire schede assenti dalla ricerca.
+   let alternate=null;
+   if(!e?.title&&!v?.title&&!d?.title){
+    try{const bookMap=await getCatalogJSON('https://openlibrary.org/api/books?bibkeys=ISBN:'+encodeURIComponent(isbn)+'&jscmd=data&format=json');alternate=bookMap['ISBN:'+isbn]||null}catch(err){console.warn('Scheda alternativa:',err)}
+   }
+   // Catalogo delle biblioteche italiane (SBN): tentativo aggiuntivo per ISBN
+   // meno diffusi. Il gateway mobile non garantisce CORS o disponibilità:
+   // in caso di errore non interrompe le altre ricerche.
+   let sbn=null;
+   if(!e?.title&&!v?.title&&!d?.title&&!alternate?.title){
+    try{
+     const catalog=await getCatalogJSON('https://opac.sbn.it/opacmobilegw/search.json?isbn='+encodeURIComponent(isbn));
+     availableSources.push('SBN');reachable=true;
+     const rec=(catalog?.briefRecords||[]).find(x=>x?.titolo);
+     if(rec){
+      const raw=String(rec.titolo).replace(/[\x00-\x1f\x7f-\x9f]/g,'');
+      const author=String(rec.autorePrincipale||'').trim();
+      const parts=author.split(', ');
+      const publication=String(rec.pubblicazione||'');
+      sbn={title:raw.split(' / ')[0].trim(),authors:author?[parts.length>1?parts.slice(1).join(' ')+' '+parts[0]:author]:[],publisher:publication.split(':')[1]?.split(',')[0]?.trim()||'',date:publication.match(/\b(?:18|19|20)\d{2}\b/)?.[0]||''};
+     }
+    }catch(err){console.warn('Catalogo SBN non disponibile:',err)}
+   }
+   // Titolo della scheda ISBN, non dell'opera generica.
+   title=e?.title||v?.title||d?.title||alternate?.title||sbn?.title||'';
+   if(v?.subtitle&&title===v.title)title+=': '+v.subtitle;
+   source=sbn?.title?'SBN':e?.title?'Open Library':v?.title?'Google Books':'Open Library Search';
+   authors=uniqueNames(v?.authors?.length?v.authors:(d?.author_name?.length?d.author_name:(alternate?.authors||[]).map(a=>a.name)));
+   if(!authors.length&&sbn?.authors?.length)authors=sbn.authors;
+   publisher=e?.publishers?.join(', ')||v?.publisher||d?.publisher?.[0]||alternate?.publishers?.map(p=>p.name).join(', ')||sbn?.publisher||'';
+   date=e?.publish_date||v?.publishedDate||String(d?.first_publish_year||'')||sbn?.date||'';
+   if(!authors.length&&e?.authors?.length){
+    const results=await Promise.allSettled(e.authors.slice(0,3).filter(a=>a.key).map(a=>getCatalogJSON('https://openlibrary.org'+a.key+'.json')));
+    authors=uniqueNames(results.filter(x=>x.status==='fulfilled').map(x=>x.value.name));
+   }
+   // Solo foto associate alla scheda della specifica edizione.
+   if(alternate?.cover?.large)exactCovers.push(alternate.cover.large);
+   for(const id of (e?.covers||[]))exactCovers.push('https://covers.openlibrary.org/b/id/'+id+'-L.jpg?default=false');
+   exactCovers.push('https://covers.openlibrary.org/b/isbn/'+isbn+'-L.jpg?default=false');
+   // La miniatura di Google Books potrebbe appartenere a un'edizione differente;
+   // non viene quindi scelta automaticamente.
+  }
+  if(!title){showSBNLookup(isbn);const sources=[...new Set(availableSources)];toast(reachable?'Nessuna scheda ISBN trovata nelle fonti raggiunte ('+sources.join(', ')+'). Prova Cerca per titolo e autore.':'Non riesco a collegarmi ai cataloghi. Controlla la connessione e riprova.');ensureBookSearch();return}
+  if(normISBN($('#barcode').value)!==isbn)return;
+  $('#kind').value='book';updateKind();$('#itemName').value=title;
+  if(authors.length)$('#author').value=uniqueNames(authors).join(', ');
+  const notes=[publisher&&'Editore: '+publisher,date&&'Pubblicazione: '+date].filter(Boolean).join(' · ');
+  if(notes&&!$('#desc').value.trim())$('#desc').value=notes;
+  if(!photoData||photoData===lastAutoBookCover){
+   let nextCover=verified?.cover||'';
+   if(!nextCover){
+    // Prima le fonti alternative: il server LibraryThing indicato da SBN puo essere offline.
+    const alternatives=await isbnCoverCandidates(isbn).catch(()=>[]);
+    const candidates=[...new Set([...alternatives,...exactCovers.filter(url=>!url.includes('covers.librarything.com'))])];
+    for(const url of candidates){nextCover=await coverToPhoto(url);if(nextCover)break}
+   }
+   if(nextCover){photoData=nextCover;lastAutoBookCover=nextCover;$('#photoPreview').src=nextCover;$('#photoPreview').hidden=false}
+   else {photoData='';lastAutoBookCover='';$('#photoPreview').removeAttribute('src');$('#photoPreview').hidden=true}
+  }
+  saveDraft();
+  if(photoData)toast('Libro trovato con copertina: controlla che sia la tua edizione 💜');
+  else{
+   const checks=coverChecks||[];
+   const reasons=[...new Set(checks.map(x=>x.status))];
+   const detail=checks.length?'Copertina non recuperata ('+reasons.join(', ')+').':'Nessuna copertina associata a questo ISBN.';
+   toast('📚 Libro trovato! La copertina non è disponibile automaticamente. Puoi sceglierne un’altra in «Cambia copertina».');
+   console.info('Diagnostica copertine ISBN',isbn,checks);
+  }
+ }catch(e){console.warn('Errore ricerca ISBN:',e);toast('Ricerca non riuscita. Riprova.')}finally{isbnLookupBtn.disabled=false;isbnLookupBtn.textContent='📖 Cerca ISBN online'}
+}
+// Ricerca aggiuntiva, utilizzabile anche con libri senza ISBN registrato nei cataloghi.
+// Fallback SBN: opens the national catalogue in a new browser tab.
+function showSBNLookup(isbn){
+ let box=document.getElementById('sbnLookupHelp');
+ if(!box){
+  box=document.createElement('div');box.id='sbnLookupHelp';box.className='panel';
+  box.style.cssText='margin:14px 0;padding:16px;border:1px solid #e5d3f1;border-radius:18px';
+  const isbnButtons=document.getElementById('lookupBook')?.parentElement;
+  if(isbnButtons)isbnButtons.insertAdjacentElement('afterend',box);
+  else document.getElementById('barcode')?.closest('label')?.insertAdjacentElement('afterend',box);
+ }
+ if(!box)return;
+ box.innerHTML='<strong>🇮🇹 Cerca nel catalogo delle biblioteche italiane</strong><p class="muted">Non abbiamo trovato una scheda automatica. Puoi cercare lo stesso ISBN nel catalogo nazionale SBN, senza riscriverlo.</p><a id="sbnLookupLink" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 16px;border-radius:16px;background:#f0e2fa;color:#603b81;font-weight:bold;text-decoration:none">📚 Apri ricerca SBN</a>';
+ document.getElementById('sbnLookupLink').href='https://opac.sbn.it/search?query='+encodeURIComponent(isbn);
+}
+function ensureBookSearch(){
+ if(document.querySelector('#bookTitleSearchPanel'))return;
+ const panel=document.createElement('div');panel.id='bookTitleSearchPanel';panel.className='panel';
+ panel.style.cssText='margin:16px 0;padding:16px;border:1px solid #e5d3f1;border-radius:18px';
+ panel.innerHTML='<strong>🔎 Cerca un libro per titolo e autore</strong><p class="muted">Utile quando il codice non viene riconosciuto. Scegli la scheda che corrisponde al tuo libro.</p><input id="bookQueryTitle" type="text" placeholder="Titolo del libro" aria-label="Titolo da cercare" style="width:100%;margin:6px 0 10px"><input id="bookQueryAuthor" type="text" placeholder="Autore (facoltativo)" aria-label="Autore da cercare" style="width:100%;margin-bottom:10px"><button type="button" id="runBookSearch" class="secondary">Cerca per titolo</button><div id="bookSearchResults" aria-live="polite"></div>';
+ const anchor=$('#lookupBook');anchor.parentElement.insertAdjacentElement('afterend',panel);
+ $('#bookQueryTitle').value=$('#itemName').value||'';$('#bookQueryAuthor').value=$('#author').value||'';
+ $('#runBookSearch').addEventListener('click',searchByBookTitle);
+}
+function sameWords(a,b){const clean=t=>String(t||'').toLocaleLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();return clean(a)===clean(b)}
+async function searchByBookTitle(){
+ const title=$('#bookQueryTitle').value.trim(),author=$('#bookQueryAuthor').value.trim(),results=$('#bookSearchResults');
+ if(title.length<3){toast('Scrivi almeno tre caratteri del titolo');return}
+ $('#runBookSearch').disabled=true;results.textContent='Cerco nei cataloghi…';
+ try{
+  const urls=[
+   'https://openlibrary.org/search.json?'+new URLSearchParams({title, ...(author?{author}:{}),limit:'8',fields:'title,author_name,edition_key,isbn,cover_i,first_publish_year,publisher'}),
+   'https://www.googleapis.com/books/v1/volumes?'+new URLSearchParams({q:'intitle:'+title+(author?' inauthor:'+author:''),maxResults:'8'})
+  ];
+  const settled=await Promise.allSettled(urls.map(getCatalogJSON));const options=[];
+  if(settled[0].status==='fulfilled')for(const d of (settled[0].value.docs||[])){
+    if(!d.title)continue;options.push({title:d.title,authors:d.author_name||[],publisher:d.publisher?.[0]||'',date:String(d.first_publish_year||''),isbn:'',source:'Open Library'});
+  }
+  if(settled[1].status==='fulfilled')for(const entry of (settled[1].value.items||[])){
+    const v=entry.volumeInfo;if(!v?.title)continue;options.push({title:v.title+(v.subtitle?': '+v.subtitle:''),authors:v.authors||[],publisher:v.publisher||'',date:v.publishedDate||'',isbn:'',source:'Google Books'});
+  }
+  const unique=options.filter((v,i)=>options.findIndex(x=>sameWords(x.title,v.title)&&sameWords(x.authors[0],v.authors[0]))===i).slice(0,10);
+  results.replaceChildren();if(!unique.length){results.textContent='Nessun risultato. Puoi compilare i dati manualmente.';return}
+  const note=document.createElement('p');note.className='muted';note.textContent='Controlla titolo e autore: la copertina va aggiunta dalla tua edizione.';results.append(note);
+  unique.forEach(book=>{const b=document.createElement('button');b.type='button';b.className='secondary';b.style.cssText='display:block;width:100%;text-align:left;margin-top:8px;white-space:normal';b.textContent=book.title+' — '+(book.authors.join(', ')||'Autore sconosciuto')+' ('+book.source+')';b.onclick=()=>{ $('#itemName').value=book.title;$('#author').value=book.authors.join(', ');if(!$('#desc').value.trim())$('#desc').value=[book.publisher&&'Editore: '+book.publisher,book.date&&'Pubblicazione: '+book.date].filter(Boolean).join(' · ');saveDraft();toast('Dati inseriti. Verifica l’edizione e aggiungi la copertina 💜');};results.append(b)});
+ }catch(e){results.textContent='Ricerca non disponibile. Riprova.'}finally{$('#runBookSearch').disabled=false}
+}
+// Il comando è accessibile anche prima di una ricerca ISBN fallita.
+setTimeout(()=>{if($('#kind')){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent='🔎 Cerca per titolo';b.style.marginTop='10px';b.onclick=()=>{ensureBookSearch();$('#bookTitleSearchPanel').scrollIntoView({behavior:'smooth',block:'nearest'})};$('#lookupBook').parentElement.insertAdjacentElement('afterend',b)}},0);
+
+// Ricerca EAN tramite Open Products Facts: conserva il codice anche se la scheda non esiste.
+function isEAN(code){return /^\d{13}$/.test(code)&&checkISBN(code)}
+let catalogSearchBusy=false;
+async function lookupEAN(){
+ const code=normISBN($('#barcode').value);
+ if(!isEAN(code)){toast('Inserisci un codice EAN a 13 cifre valido');return}
+ if(!navigator.onLine){toast('Serve Internet per cercare il codice');return}
+ if(catalogSearchBusy)return;
+ catalogSearchBusy=true;
+ const btn=$('#lookupBook'),oldText=btn.textContent;
+ btn.disabled=true;btn.textContent='🔎 Cerco il codice EAN…';
+ try{
+  const data=await getCatalogJSON('https://world.openproductsfacts.org/api/v2/product/'+encodeURIComponent(code)+'?fields=code,product_name,product_name_it,generic_name,brands,description,image_front_url,image_url,categories');
+  const p=data?.status===1?data.product:null;
+  const name=String(p?.product_name_it||p?.product_name||p?.generic_name||'').trim();
+  if(!p||!name){toast('EAN non presente nell’archivio. Puoi inserire titolo e autore manualmente.');return}
+  // Non sovrascrive dati già inseriti dall'utente.
+  if(!$('#itemName').value.trim())$('#itemName').value=name;
+  const notes=[p.brands&&'Marca/Editore: '+p.brands,p.description||p.categories].filter(Boolean).join(' · ');
+  if(notes&&!$('#desc').value.trim())$('#desc').value=notes;
+  if(!photoData){
+   const cover=await coverToPhoto(p.image_front_url||p.image_url||'');
+   if(cover){photoData=cover;lastAutoBookCover=cover;$('#photoPreview').src=cover;$('#photoPreview').hidden=false}
+  }
+  saveDraft();toast('Prodotto trovato tramite EAN! Controlla i dati 💜');
+ }catch(e){console.warn('Ricerca EAN:',e);toast('Archivio EAN non raggiungibile. Puoi inserire i dati manualmente.')}
+ finally{catalogSearchBusy=false;btn.disabled=false;btn.textContent=oldText;updateCodeLookupLabel()}
+}
+async function lookupCode(){
+ const code=normISBN($('#barcode').value);
+ if(!code){toast('Prima scansiona o inserisci un codice');return}
+ // ISBN-13: soltanto 978 / 979, non un qualsiasi EAN a 13 cifre.
+ if((/^97[89]\d{10}$/.test(code)||/^(?:\d{9}[\dX])$/.test(code))&&checkISBN(code))return lookupISBN();
+ if(isEAN(code))return lookupEAN();
+ toast('Codice non valido: controlla le cifre inserite');
+}
+isbnLookupBtn.addEventListener('click',lookupCode);
+
+let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;$('#scanBack').hidden=false;page('scan');void startCamera()};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){
+ code=String(code||'').trim();if(!code)return;stopCamera();
+ if(code.startsWith('DLM-I-')){const item=db.items.find(i=>i.id===code.slice(6));if(item)showItem(item.id);else $('#scanResult').innerHTML='<div class="panel">Oggetto o libro non presente in questo archivio.</div>';return}
+ if(code.startsWith('DLM-P-')){
+  const p=db.places.find(x=>x.id===code.slice(6));
+  if(!p){$('#scanResult').innerHTML='<div class="panel">Posizione non presente in questo archivio.</div>';focusScanResult();return}
+  const items=db.items.filter(i=>i.place===p.id);
+  const children=db.places.filter(x=>x.parentId===p.id);
+  let photos={};try{photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{};
+  const locationPhoto=photos[p.id]||p.photo||'';
+  const photoHtml=locationPhoto?'<img src="'+safe(locationPhoto)+'" alt="Foto di '+safe(p.name)+'" style="width:100%;max-height:240px;object-fit:cover;border-radius:18px;margin:6px 0 14px" loading="lazy">':'';
+  const objectHtml=items.length?'<details open><summary style="cursor:pointer;font-weight:700;padding:12px 0">📦 Oggetti contenuti ('+items.length+')</summary>'+items.map(i=>'<button type="button" class="secondary" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:8px 0;padding:9px 12px;min-height:66px" onclick="showItem(\''+i.id+'\')"><span style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;flex-shrink:0;background:#f3e6fa;border-radius:12px;overflow:hidden">'+(i.photo?'<img src="'+safe(i.photo)+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">':(i.kind==='book'?'📚':'📦'))+'</span><span style="flex:1;min-width:0;overflow-wrap:anywhere">'+safe(i.name)+'</span><span aria-hidden="true">›</span></button>').join('')+'</details>':'<p class="hint">Questa posizione non contiene ancora oggetti.</p>';
+  const childHtml=children.length?'<h4 style="margin:18px 0 8px">🏠 Sottoposizioni</h4>'+children.map(x=>'<button type="button" class="secondary full" style="margin:6px 0;text-align:left" onclick="resolveScan(\'DLM-P-'+x.id+'\')">📍 '+safe(x.name)+' →</button>').join(''):'';
+  $('#scanResult').innerHTML='<div class="panel">'+photoHtml+'<h3>📍 '+safe(p.name)+'</h3><p class="hint" style="overflow-wrap:anywhere">🏡 '+safe(placePath(p.id))+'</p><p><strong>📦 '+items.length+' oggetti</strong> · '+children.length+' sottoposizioni</p>'+objectHtml+childHtml+'<button type="button" class="secondary full" onclick="openScannedPlace(\''+p.id+'\')">📍 Apri questa posizione</button><button type="button" class="primary full" onclick="assignScannedPlace(\''+p.id+'\')">＋ Aggiungi qui un oggetto</button></div>';
+  focusScanResult();
+  return;
+ }
+ if(scanForItem){scanForItem=false;page('add');restoreDraft(false);$('#barcode').value=code;saveDraft();toast('Codice inserito nel modulo');if(/^\d{13}$/.test(code)&&isEAN(code))lookupCode();return}
+ const item=db.items.find(i=>i.barcode===code);if(item)showItem(item.id);else {$('#scanResult').innerHTML='<div class="panel">Nessun oggetto associato a questo codice. Puoi aggiungerlo manualmente.</div>';focusScanResult();}
+}
+// Porta subito in vista il risultato dopo una scansione QR o codice a barre.
+function focusScanResult(){
+ const result=document.querySelector('#scanResult');
+ if(!result)return;
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  if(!document.querySelector('#scan.page.active'))return;
+  result.scrollIntoView({behavior:'smooth',block:'start'});
+ }));
+}
+window.openScannedPlace=id=>{page('places');openSearchedPlace(id)};
+window.assignScannedPlace=id=>{editing=null;resetForm();page('add');$('#itemPlace').value=id;saveDraft()};
+$('#manualGo').onclick=()=>resolveScan($('#manualScan').value);let html5scanner=null,zxReader=null,zxControls=null,scanBusy=false,scanTimeout=null,scanHandled=false,zxingLoading=null;
+async function loadZXing(){
+ if(window.ZXing?.BrowserMultiFormatReader)return true;
+ if(!navigator.onLine)return false;
+ if(!zxingLoading)zxingLoading=new Promise((resolve)=>{const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';script.onload=()=>resolve(!!window.ZXing?.BrowserMultiFormatReader);script.onerror=()=>resolve(false);document.head.appendChild(script)}).then(ok=>{if(!ok)zxingLoading=null;return ok});
+ return zxingLoading;
+}
+function scanStatus(message){$('#scanMessage').hidden=false;$('#scanMessage').textContent=message}
+function cameraError(){stopCamera();scanStatus('Non riesco a leggere il codice. Prova una foto dalla galleria oppure inseriscilo manualmente.');toast('Scansione non disponibile: prova dalla galleria')}
+async function startCamera(){
+  if(scanBusy)return;scanBusy=true;scanHandled=false;scanStatus('Carico il lettore…');$('#startScan').disabled=true;
+  try{
+    if('BarcodeDetector' in window){
+      const supported=await BarcodeDetector.getSupportedFormats?.()||['qr_code','ean_13','ean_8','upc_a','code_128','code_39'];const formats=['qr_code','ean_13','ean_8','upc_a','code_128','code_39'].filter(f=>supported.includes(f));if(!formats.length)throw Error('Nessun formato supportato');const detector=new BarcodeDetector({formats});
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+      $('#camera').srcObject=stream;$('#camera').hidden=false;await $('#camera').play();$('#scanMessage').hidden=true;
+      $('#stopScan').hidden=false;$('#startScan').hidden=true;
+      let detecting=false;scanTimer=setInterval(async()=>{if(detecting||!stream||$('#camera').readyState<2)return;detecting=true;try{const results=await detector.detect($('#camera'));if(results.length&&!scanHandled){scanHandled=true;resolveScan(results[0].rawValue)}}catch{}finally{detecting=false}},350);
+    }else{
+      if(!await loadZXing()){scanStatus('Il lettore richiede Internet al primo utilizzo. Puoi inserire il codice manualmente.');toast('Impossibile caricare il lettore');return}
+      zxReader=new ZXing.BrowserMultiFormatReader(new Map(),120);
+      $('#camera').hidden=false;$('#stopScan').hidden=false;$('#startScan').hidden=true;
+      scanStatus('Avvio la fotocamera…');
+      const video=$('#camera');
+      // ZXing library avvia il flusso e analizza continuamente i fotogrammi.
+      zxReader.decodeFromVideoDevice(null,video,(result,err)=>{if(result&&!scanHandled){scanHandled=true;resolveScan(result.getText())}})
+        .then(()=>{}).catch(()=>cameraError());
+      scanTimeout=setTimeout(()=>{if($('#scan').classList.contains('active')&&!video.videoWidth)cameraError();else if(video.videoWidth)$('#scanMessage').hidden=true},7000);
+    }
+  }catch(e){cameraError()}finally{scanBusy=false;$('#startScan').disabled=false}
+}
+function stopCamera(){clearTimeout(scanTimeout);scanTimeout=null;clearInterval(scanTimer);scanTimer=null;
+  if(zxReader){try{zxReader.reset()}catch{}zxReader=null}
+  if(html5scanner){const old=html5scanner;html5scanner=null;old.stop().then(()=>old.clear()).catch(()=>{})}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  const v=$('#camera');if(v.srcObject){try{v.srcObject.getTracks().forEach(t=>t.stop())}catch{}v.srcObject=null}
+  v.hidden=true;$('#html5reader').hidden=true;scanHandled=false;$('#scanMessage').hidden=false;$('#scanMessage').textContent='📷 Inquadra un codice oppure scegli una foto.';
+  $('#stopScan').hidden=true;$('#startScan').hidden=false;scanBusy=false
+}
+$('#scanImageBtn').onclick=()=>$('#scanImageFile').click();
+let jsQRLoading=null;
+async function loadJsQR(){
+ if(typeof window.jsQR==='function')return true;
+ if(!navigator.onLine)return false;
+ if(!jsQRLoading)jsQRLoading=new Promise(resolve=>{
+  const script=document.createElement('script');
+  script.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+  script.onload=()=>resolve(typeof window.jsQR==='function');
+  script.onerror=()=>resolve(false);
+  document.head.appendChild(script);
+ }).then(ok=>{if(!ok)jsQRLoading=null;return ok});
+ return jsQRLoading;
+}
+$('#scanImageFile').addEventListener('change',async e=>{
+ const file=e.target.files?.[0];if(!file)return;
+ scanStatus('Leggo il QR dalla fotografia…');
+ let url=null;
+ try{
+  url=URL.createObjectURL(file);
+  const img=new Image();img.src=url;await img.decode();
+  let code=null,reason='';
+  if('BarcodeDetector' in window){
+   try{
+    const supported=await BarcodeDetector.getSupportedFormats();
+    if(supported.includes('qr_code')){
+     const detector=new BarcodeDetector({formats:['qr_code']});
+     const found=await detector.detect(img);
+     if(found.length)code=found[0].rawValue;
+    }
+   }catch(err){reason=String(err?.message||err)}
+  }
+  if(!code&&await loadJsQR()){
+   const canvas=document.createElement('canvas');
+   const maxSide=1600,scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+   canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+   canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+   const ctx=canvas.getContext('2d',{willReadFrequently:true});
+   ctx.drawImage(img,0,0,canvas.width,canvas.height);
+   const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+   let found=window.jsQR(pixels.data,canvas.width,canvas.height,{inversionAttempts:'attemptBoth'});
+   if(!found){
+    const pad=40;
+    const padded=document.createElement('canvas');
+    padded.width=canvas.width+pad*2;padded.height=canvas.height+pad*2;
+    const pctx=padded.getContext('2d',{willReadFrequently:true});
+    pctx.fillStyle='#fff';pctx.fillRect(0,0,padded.width,padded.height);
+    pctx.drawImage(canvas,pad,pad);
+    const px=pctx.getImageData(0,0,padded.width,padded.height);
+    found=window.jsQR(px.data,padded.width,padded.height,{inversionAttempts:'attemptBoth'});
+   }
+   if(!found){
+    // QR viola su bianco: binarizza, ingrandisci e riprova con diversi margini.
+    for(const threshold of [185,145,210]){
+     if(found)break;
+     const factor=2,pad=32;
+     const enhanced=document.createElement('canvas');
+     enhanced.width=canvas.width*factor+pad*2;enhanced.height=canvas.height*factor+pad*2;
+     const ec=enhanced.getContext('2d',{willReadFrequently:true});
+     ec.fillStyle='#fff';ec.fillRect(0,0,enhanced.width,enhanced.height);
+     ec.imageSmoothingEnabled=false;ec.drawImage(canvas,pad,pad,canvas.width*factor,canvas.height*factor);
+     const image=ec.getImageData(0,0,enhanced.width,enhanced.height);
+     for(let k=0;k<image.data.length;k+=4){
+      const v=(image.data[k]*0.299+image.data[k+1]*0.587+image.data[k+2]*0.114)<threshold?0:255;
+      image.data[k]=image.data[k+1]=image.data[k+2]=v;image.data[k+3]=255;
+     }
+     found=window.jsQR(image.data,enhanced.width,enhanced.height,{inversionAttempts:'attemptBoth'});
+    }
+   }
+   if(found)code=found.data;
+  }
+  if(!code){
+   if(await loadZXing()){
+    const reader=new ZXing.BrowserMultiFormatReader();
+    try{const result=await reader.decodeFromImageElement(img);code=result.getText()}
+    catch(err){reason=String(err?.message||err)}
+    finally{reader.reset()}
+   }else reason='Lettori esterni non caricati';
+  }
+  if(!code)throw Error(reason||'QR non riconosciuto');
+  resolveScan(code);toast('QR riconosciuto 💜');
+ }catch(err){
+  const detail=String(err?.message||err).slice(0,140);
+  console.warn('Lettura immagine fallita',err);
+  scanStatus('Non sono riuscito a leggere il QR dalla foto. Dettaglio tecnico: '+detail+'. Puoi inviarmi uno screenshot di questo messaggio.');
+  toast('Codice non trovato nella foto');
+ }finally{if(url)URL.revokeObjectURL(url);e.target.value=''}
+});
+$('#startScan').onclick=startCamera;$('#stopScan').onclick=stopCamera;if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});const dlmBookCategoryDefaults=['Narrativa','Romanzi','Gialli e thriller','Fantasy e fantascienza','Libri di cucina','Bambini e ragazzi','Fumetti e manga','Storia','Scienza e natura','Manuali e hobby','Viaggi','Biografie','Saggi','Poesia','Scuola e studio','Arte e fotografia','Sport','Religione e spiritualità','Salute e benessere','Economia e lavoro','Lingue straniere','Dizionari ed enciclopedie','Altro'];
+const dlmBookCategoryStorage='dlm-custom-book-categories-v1';
+function dlmBookCategoryOptions(){
+ let custom=[];try{custom=JSON.parse(localStorage.getItem(dlmBookCategoryStorage)||'[]')}catch{}
+ const fromBooks=db.items.filter(i=>i.kind==='book').map(i=>i.category).filter(Boolean);
+ return [...new Set([...dlmBookCategoryDefaults,...custom,...fromBooks].map(x=>String(x||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'it',{sensitivity:'base'}));
+}
+function dlmSyncBookCategory(){
+ const picker=document.getElementById('dlmBookCategorySelect');if(!picker)return;
+ const current=$('#itemCategory').value.trim();
+ picker.replaceChildren(new Option('Seleziona una categoria…',''),...dlmBookCategoryOptions().map(v=>new Option(v,v)));
+ if(current&&!Array.from(picker.options).some(o=>o.value===current))picker.add(new Option(current,current));
+ picker.value=current;
+}
+document.getElementById('dlmBookCategorySelect')?.addEventListener('change',e=>{$('#itemCategory').value=e.target.value;saveDraft()});
+document.getElementById('dlmAddBookCategory')?.addEventListener('click',()=>{
+ const name=prompt('Come vuoi chiamare la nuova categoria di libri?')?.trim();
+ if(!name)return;
+ if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
+ let custom=[];try{custom=JSON.parse(localStorage.getItem(dlmBookCategoryStorage)||'[]')}catch{}
+ const existing=dlmBookCategoryOptions().find(x=>x.toLocaleLowerCase()===name.toLocaleLowerCase());
+ const chosen=existing||name;
+ if(!existing){custom.push(chosen);try{localStorage.setItem(dlmBookCategoryStorage,JSON.stringify(custom))}catch{}}
+ $('#itemCategory').value=chosen;dlmSyncBookCategory();saveDraft();toast('Categoria disponibile nella tendina 💜');
+});
+function updateKind(){const isBook=$('#kind').value==='book';const bookPicker=document.getElementById('dlmBookCategoryPicker');if(bookPicker)bookPicker.hidden=!isBook;const objectCategory=document.getElementById('dlmObjectCategoryLabel');if(objectCategory)objectCategory.hidden=isBook;if(isBook)dlmSyncBookCategory();const photoAiDropdown=document.getElementById('photoAiDropdown');if(photoAiDropdown){photoAiDropdown.hidden=isBook;if(isBook)photoAiDropdown.open=false;}$('#authorWrap').hidden=!isBook;$('#lookupBook').hidden=!isBook;['bookIsbnTools','sbnDirectBox','bookCoverTools'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook});['googleCoverSearchBtn','pasteBookCoverBtn','pasteCoverHelp'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook})}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,category:$('#itemCategory').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemCategory','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=isEAN(code)&&!/^97[89]/.test(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
+$('#barcode').addEventListener('input',updateCodeLookupLabel);
+$('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
+
+/* Aggiornamento PWA: conserva archivio e bozze nel localStorage. */
+const DLM_VERSION='13';
+let dlmUpdateInProgress=false;
+let dlmLastUpdateCheck=0;
+async function dlmCheckUpdate(showFeedback=false){
+  if(dlmUpdateInProgress)return;
+  if(!('serviceWorker' in navigator)){if(showFeedback)toast('Aggiornamento non supportato da questo browser');return}
+  if(!navigator.onLine){if(showFeedback)toast('Connettiti a Internet per aggiornare');return}
+  dlmUpdateInProgress=true;
+  const btn=document.getElementById('updateAppBtn');
+  if(btn){btn.disabled=true;btn.textContent='↻ Controllo aggiornamenti…'}
+  try{
+    const registration=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
+    await registration.update();
+    // Aggiorna anche i documenti principali senza eliminare le cache offline.
+    const resp=await fetch('./casa-dolce-casa.html?update='+Date.now(),{cache:'no-store'});
+    if(!resp.ok)throw Error('Non raggiungibile');
+    const html=await resp.text();
+    const match=html.match(/casa-dolce-casa\.js\?v=([\w.-]+)/);
+    const latest=match?match[1]:null;
+    if(latest && latest!== 'v'+DLM_VERSION && showFeedback){
+      if(showFeedback)toast('Nuova versione trovata: la carico…');
+      if(document.querySelector('#add.page.active'))saveDraft();
+      const address=new URL(location.href);address.searchParams.set('appv',latest);
+      location.replace(address.toString());
+      return;
+    }
+    if(showFeedback)toast('App aggiornata! Versione '+DLM_VERSION+' 💜');
+  }catch(error){
+    console.warn('Aggiornamento non riuscito',error);
+    if(showFeedback)toast('Impossibile controllare gli aggiornamenti. Riprova online.');
+  }finally{dlmUpdateInProgress=false;if(btn){btn.disabled=false;btn.textContent='↻ Aggiorna app'}}
+}
+const dlmUpdateButton=document.getElementById('updateAppBtn');
+// Il controllo degli aggiornamenti è gestito unicamente dallo script dlm-safe-updates nell'HTML.
+const dlmVersionLabel=document.getElementById('appVersion');
+if(dlmVersionLabel)dlmVersionLabel.textContent='Versione '+DLM_VERSION;
+// Controllo manuale: evita ricaricamenti spontanei mentre si scorre.
+// Il pulsante Aggiorna app resta disponibile quando necessario.
+
+
+/* Backup locale v07: mai cancellare i dati prima della validazione. */
+(function(){
+  const exportBtn=document.getElementById('exportArchiveBtn');
+  const importBtn=document.getElementById('importArchiveBtn');
+  const fileInput=document.getElementById('importArchiveFile');
+  const status=document.getElementById('archiveStatus');
+  if(!exportBtn||!importBtn||!fileInput)return;
+  function report(message){if(status)status.textContent=message;toast(message)}
+  function validText(v,max){return typeof v==='string'&&v.length<=max}
+  function validateArchive(data){
+    if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Formato backup non valido');
+    if(data.format!=='dove-lho-messo-backup'||data.schema!==1)throw Error('File non riconosciuto come backup di Dove l’ho messo?');
+    const content=data.archive;
+    if(!content||!Array.isArray(content.places)||!Array.isArray(content.items))throw Error('Archivio incompleto');
+    if(content.places.length>10000||content.items.length>30000)throw Error('Archivio troppo grande');
+    const placeIDs=new Set(),itemIDs=new Set();
+    for(const p of content.places){
+      if(!p||typeof p!=='object'||!validText(p.id,64)||!/^[a-zA-Z0-9_-]+$/.test(p.id)||placeIDs.has(p.id)||!validText(p.name,1000))throw Error('Posizione non valida o duplicata');
+      placeIDs.add(p.id);
+    }
+    for(const i of content.items){
+      if(!i||typeof i!=='object'||!validText(i.id,64)||!/^[a-zA-Z0-9_-]+$/.test(i.id)||itemIDs.has(i.id)||!['book','object'].includes(i.kind)||!validText(i.name,500)||!i.name.trim())throw Error('Oggetto o libro non valido');
+      itemIDs.add(i.id);
+      for(const prop of ['author','barcode','desc','place','value'])if(i[prop]!=null&&!validText(i[prop],50000))throw Error('Dati non validi in '+prop);
+      if(i.photo!=null){if(!validText(i.photo,12000000))throw Error('Foto troppo grande');if(i.photo&&!/^(data:image\/(?:jpeg|png|webp);base64,|https:\/\/)/i.test(i.photo))throw Error('Tipo di foto non supportato')}
+    }
+    return {places:content.places,items:content.items};
+  }
+  exportBtn.addEventListener('click',()=>{
+    try{
+      if(document.getElementById('add')?.classList.contains('active'))saveDraft();
+      const data={format:'dove-lho-messo-backup',schema:1,appVersion:DLM_VERSION,exportedAt:new Date().toISOString(),archive:db,draft:localStorage.getItem(DRAFT_KEY)};
+      const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download='dove-lho-messo-backup-'+new Date().toISOString().slice(0,10)+'.json';
+      document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+      report('Backup pronto: salvalo nell’app File e conservalo al sicuro 💜');
+    }catch(err){console.error(err);report('Backup non riuscito: controlla lo spazio disponibile')}
+  });
+  importBtn.addEventListener('click',()=>fileInput.click());
+  fileInput.addEventListener('change',async()=>{
+    const file=fileInput.files?.[0];fileInput.value='';if(!file)return;
+    try{
+      if(file.size>50000000)throw Error('Il file supera 50 MB');
+      const parsed=JSON.parse(await file.text());
+      const incoming=validateArchive(parsed);
+      const message='Il backup contiene '+incoming.items.length+' oggetti/libri e '+incoming.places.length+' posizioni.\n\nATTENZIONE: il ripristino SOSTITUIRÀ i '+db.items.length+' oggetti/libri e le '+db.places.length+' posizioni attualmente salvati su questo dispositivo.\n\nVuoi continuare?';
+      if(!confirm(message)){report('Ripristino annullato: nessun dato modificato');return}
+      const previousArchive=localStorage.getItem(KEY),previousDraft=localStorage.getItem(DRAFT_KEY);
+      try{
+        localStorage.setItem(KEY,JSON.stringify(incoming));
+        if(typeof parsed.draft==='string')localStorage.setItem(DRAFT_KEY,parsed.draft);
+        else localStorage.removeItem(DRAFT_KEY);
+      }catch(error){
+        try{if(previousArchive===null)localStorage.removeItem(KEY);else localStorage.setItem(KEY,previousArchive);if(previousDraft===null)localStorage.removeItem(DRAFT_KEY);else localStorage.setItem(DRAFT_KEY,previousDraft)}catch{}
+        throw Error('Spazio insufficiente: archivio precedente non modificato');
+      }
+      db=incoming;editing=null;resetForm();renderPlaces();renderItems();renderStats();page('home');
+      report('Backup ripristinato! '+incoming.items.length+' oggetti/libri, '+incoming.places.length+' posizioni 💜');
+    }catch(error){console.error(error);report('Ripristino non riuscito: '+(error.message||'file non valido'))}
+  });
+})();
+
+
+/* v08 — libreria visiva e copertine scelte dall'utente. */
+let dlmBookView='grid';
+function dlmRenderBooks(){
+ const holder=document.getElementById('bookList');if(!holder)return;
+ const q=(document.getElementById('bookFilter')?.value||'').toLocaleLowerCase().trim();
+ const books=db.items.filter(i=>i.kind==='book'&&[i.name,i.author,i.barcode,i.category].some(s=>String(s||'').toLocaleLowerCase().includes(q))).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+ const previouslyOpen=new Set([...holder.querySelectorAll('details[open]')].map(el=>el.dataset.bookCategory));
+ const categories=new Map();
+ for(const book of books){
+  const category=String(book.category||'').trim()||'Da classificare';
+  if(!categories.has(category))categories.set(category,[]);
+  categories.get(category).push(book);
+ }
+ const palettes=['lavender','rose','peach','mint','sky'];
+ const icons=[['narrativa','📖'],['romanzo','📖'],['cucina','👩‍🍳'],['ricette','👩‍🍳'],['bambin','🧸'],['ragazz','🧸'],['fantasy','🪄'],['gialli','🔎'],['manual','🛠️'],['scienza','🔬'],['storia','🏛️'],['viaggi','🧳'],['fumett','💬']];
+ const tile=i=>`<button type="button" class="book-tile" onclick="showItem('${i.id}')"><span class="book-cover">${i.photo?`<img loading="lazy" src="${safe(i.photo)}" alt="Copertina di ${safe(i.name)}" onerror="this.replaceWith(document.createTextNode('📖'))">`:'📖'}</span><span class="book-text"><strong>${safe(i.name)}</strong><small>${safe(i.author||'Autore da inserire')}</small></span></button>`;
+ holder.classList.toggle('book-list',dlmBookView==='list');
+ holder.classList.add('dlm-book-categories');
+ holder.innerHTML=[...categories.entries()].sort((a,b)=>a[0].localeCompare(b[0],'it')).map(([category,records],index)=>{
+  const icon=icons.find(([key])=>category.toLocaleLowerCase().includes(key))?.[1]||'📚';
+  const picture=records.find(book=>book.photo)?.photo;
+  const photo=picture?`<img src="${safe(picture)}" alt="Copertina di un libro della categoria ${safe(category)}" loading="lazy">`:`<span aria-hidden="true">${icon}</span>`;
+  const open=q||previouslyOpen.has(category)||categories.size===1?' open':'';
+  return `<details class="dlm-location-card dlm-location-${palettes[index%palettes.length]} dlm-book-category" data-book-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${photo}</span><span class="dlm-location-info"><strong>${safe(category)}</strong><small>Esplora i libri di questa tipologia</small><span class="dlm-location-total">${records.length} ${records.length===1?'libro':'libri'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="dlm-book-category-items">${records.map(tile).join('')}</div></details>`;
+ }).join('')||'<div class="empty">Non ci sono libri da mostrare 💜</div>';
+ document.getElementById('booksGridBtn')?.setAttribute('aria-pressed',String(dlmBookView==='grid'));
+ document.getElementById('booksListBtn')?.setAttribute('aria-pressed',String(dlmBookView==='list'));
+}
+const dlmOriginalRenderItems=renderItems;
+renderItems=function(){dlmOriginalRenderItems();dlmRenderBooks()};
+document.getElementById('booksGridBtn')?.addEventListener('click',()=>{dlmBookView='grid';dlmRenderBooks()});
+document.getElementById('booksListBtn')?.addEventListener('click',()=>{dlmBookView='list';dlmRenderBooks()});
+document.getElementById('bookFilter')?.addEventListener('input',dlmRenderBooks);
+
+let dlmCoverCandidates=[];
+async function dlmCheckCoverCandidate(candidate){
+ return new Promise(resolve=>{
+  const img=new Image();let finished=false;
+  const timeout=setTimeout(()=>finish(false),4500);
+  function finish(ok){if(finished)return;finished=true;clearTimeout(timeout);img.onload=null;img.onerror=null;resolve({...candidate,valid:ok})}
+  img.onload=()=>finish(img.naturalWidth>=70&&img.naturalHeight>=90);
+  img.onerror=()=>finish(false);
+  img.src=candidate.url;
+ });
+}
+async function dlmSuggestCovers(){
+ const target=document.getElementById('coverChoices');const button=document.getElementById('findCoversBtn');
+ if(!target||!button)return;
+ const isbn=normISBN(document.getElementById('barcode').value);
+ const title=document.getElementById('itemName').value.trim();
+ if(!checkISBN(isbn)&&!title){toast('Inserisci prima un ISBN o un titolo');return}
+ if(!navigator.onLine){toast('Serve Internet per cercare le copertine');return}
+ button.disabled=true;target.textContent='Cerco e verifico le copertine…';dlmCoverCandidates=[];
+ try{
+   const urls=[];
+   if(checkISBN(isbn)){
+     try{const d=await getCatalogJSON('https://openlibrary.org/isbn/'+encodeURIComponent(isbn)+'.json');for(const id of (d.covers||[]).slice(0,3))urls.push({url:'https://covers.openlibrary.org/b/id/'+id+'-L.jpg?default=false',source:'Open Library · ISBN'})}catch{}
+     urls.push({url:'https://covers.openlibrary.org/b/isbn/'+isbn+'-L.jpg?default=false',source:'Open Library · ISBN'});
+   }
+   try{
+     const query=checkISBN(isbn)?'isbn:'+isbn:'intitle:'+title;
+     const d=await getCatalogJSON('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent(query)+'&maxResults=6');
+     for(const item of (d.items||[])){
+       const v=item.volumeInfo||{};
+       if(checkISBN(isbn)&&!exactVolume(v,isbn))continue;
+       const url=v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail;
+       if(url)urls.push({url:url.replace(/^http:/,'https:'),source:'Google Books · da verificare'});
+     }
+   }catch{}
+   const unique=[...new Map(urls.map(c=>[c.url,c])).values()].slice(0,8);
+   if(!unique.length){target.replaceChildren();return}
+   const results=await Promise.all(unique.map(dlmCheckCoverCandidate));
+   dlmCoverCandidates=results;
+   const count=results.filter(c=>c.valid).length;
+   if(!count){target.replaceChildren();return}
+   target.innerHTML='<p class="hint">Copertine disponibili nei cataloghi: verifica che corrispondano alla tua edizione.</p><div class="cover-options">'+results.map((candidate,n)=>candidate.valid?`<button class="cover-option" type="button" data-cover-index="${n}"><img src="${safe(candidate.url)}" alt="Copertina proposta ${n+1}"><small>${safe(candidate.source)} · Usa questa</small></button>`:'').join('')+'</div>';
+   // Se il browser perde la connessione dopo il controllo, non nascondere la scheda.
+   target.querySelectorAll('button.cover-option img').forEach(img=>img.addEventListener('error',()=>{
+      const btn=img.closest('button');if(!btn)return;
+      btn.disabled=true;btn.removeAttribute('data-cover-index');
+      img.replaceWith(Object.assign(document.createElement('span'),{textContent:'📖 Anteprima non disponibile'}));
+      const label=btn.querySelector('small');if(label)label.textContent='Immagine non disponibile';
+   }));
+ }catch(e){console.warn('Ricerca copertine:',e);target.textContent='Cataloghi momentaneamente non disponibili. Puoi aggiungere la foto manualmente.'}
+ finally{button.disabled=false}
+}
+document.getElementById('findCoversBtn')?.addEventListener('click',dlmSuggestCovers);
+document.getElementById('coverChoices')?.addEventListener('click',async e=>{
+ const b=e.target.closest('[data-cover-index]');if(!b)return;
+ const item=dlmCoverCandidates[Number(b.dataset.coverIndex)];if(!item)return;
+ b.disabled=true;toast('Preparo la copertina scelta…');
+ const photo=await coverToPhoto(item.url);
+ b.disabled=false;
+ if(!photo){toast('Non riesco a salvare questa immagine. Prova un’altra o usa Galleria.');return}
+ photoData=photo;lastAutoBookCover=photo;
+ const preview=document.getElementById('photoPreview');preview.src=photo;preview.hidden=false;
+ document.getElementById('coverChoices').innerHTML='<p class="hint">✅ Copertina selezionata. Puoi cambiarla in qualsiasi momento.</p>';
+ saveDraft();toast('Copertina aggiunta! 💜');
+});
+
+/* Correzione impaginazione libri: separa sempre titolo e autore. */
+(()=>{const style=document.createElement('style');style.textContent=`
+#bookList .book-tile .book-text{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0;width:100%;}
+#bookList .book-tile .book-text strong{display:block;width:100%;line-height:1.3;overflow-wrap:anywhere;}
+#bookList .book-tile .book-text small{display:block;width:100%;line-height:1.4;overflow-wrap:anywhere;}
+#coverChoices .cover-option{overflow:hidden;min-width:0;}
+#coverChoices .cover-unavailable{opacity:.7;border:1px solid #d9bfe9;border-radius:14px;background:#faf7fd;}
+#coverChoices .cover-option:disabled{cursor:default;opacity:.7;}
+`;document.head.appendChild(style)})();
+
+
+/* v11: pulsante stabile nell'HTML; nessun aggiornamento automatico. */
+(()=>{
+  const btn=document.getElementById('googleCoverSearchBtn');
+  if(!btn)return;
+  const sync=()=>{btn.hidden=document.getElementById('kind')?.value!=='book'};
+  document.getElementById('kind')?.addEventListener('change',sync);
+  document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>setTimeout(sync,0)));
+  btn.addEventListener('click',async()=>{
+    const title=document.getElementById('itemName')?.value.trim()||'';
+    const author=document.getElementById('author')?.value.trim()||'';
+    const isbn=normISBN(document.getElementById('barcode')?.value||'');
+    const desc=document.getElementById('desc')?.value||'';
+    const publisher=(desc.match(/Editore:\s*([^·\n]+)/i)||[])[1]||'';
+    if(!title&&!isbn){toast('Inserisci prima il titolo o un ISBN');return}
+    saveDraft();
+    const terms=[isbn,title,author,publisher,'copertina libro'].filter(Boolean).join(' ');
+    // Azione diretta da un tocco dell'utente: funziona anche su Safari iOS.
+    const url='https://www.google.com/search?udm=2&q='+encodeURIComponent(terms);
+    // Non navigare mai la scheda dell'app: su iOS il ritorno può apparire bianco.
+    try{sessionStorage.setItem('dlm-returning-from-cover-search','1')}catch(e){}
+    coverPromptShown=false;
+    // Apertura diretta della ricerca Google; nessun foglio di condivisione.
+    const opened=window.open(url,'_blank','noopener,noreferrer');
+    if(!opened)toast('Google non si è aperto. Riprova da Safari.');
+  });
+  sync();
+  let coverPromptShown=false;
+  function promptCoverAfterReturn(){
+    let pending=false;
+    try{pending=sessionStorage.getItem('dlm-returning-from-cover-search')==='1'}catch(e){}
+    if(!pending||coverPromptShown||document.visibilityState==='hidden')return;
+    if(document.getElementById('kind')?.value!=='book')return;
+    coverPromptShown=true;
+    try{sessionStorage.removeItem('dlm-returning-from-cover-search')}catch(e){}
+    page('add');
+    const dropdown=document.getElementById('bookCoverDropdown');
+    if(dropdown)dropdown.open=true;
+    updateKind();
+    let notice=document.getElementById('dlmCoverReturnPrompt');
+    if(!notice){
+      notice=document.createElement('div');
+      notice.id='dlmCoverReturnPrompt';
+      notice.style.cssText='margin:12px 0;padding:15px;border:1px solid #dfc7f0;border-radius:16px;background:#f8edff;color:#62348c;';
+      notice.innerHTML='<strong>💜 Hai copiato la copertina?</strong><p style="margin:8px 0 12px">Se hai scelto «Copia immagine» su Google, tocca qui per inserirla nel libro.</p><button type="button" id="dlmCoverReturnPaste" style="width:100%;padding:12px;border-radius:30px;background:#ead5fa;color:#61318b;font-weight:700;border:1px solid #d8b7ed">📋 Incolla la copertina copiata</button><button type="button" id="dlmCoverReturnDismiss" style="margin-top:8px;background:transparent;border:0;color:#744b91;text-decoration:underline">Non ora</button>';
+      document.getElementById('bookCoverTools')?.prepend(notice);
+      notice.querySelector('#dlmCoverReturnPaste')?.addEventListener('click',()=>{notice.remove();document.getElementById('pasteBookCoverBtn')?.click()});
+      notice.querySelector('#dlmCoverReturnDismiss')?.addEventListener('click',()=>notice.remove());
+    }
+    notice.scrollIntoView({block:'center',behavior:'smooth'});
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')promptCoverAfterReturn()});
+  window.addEventListener('focus',promptCoverAfterReturn);
+  window.addEventListener('pageshow',()=>{
+    let returning=false;
+    try{returning=sessionStorage.getItem('dlm-returning-from-cover-search')==='1';sessionStorage.removeItem('dlm-returning-from-cover-search')}catch(e){}
+    if(!returning)return;
+    if(document.getElementById('kind')?.value!=='book')restoreDraft(false);
+    if(document.getElementById('kind')?.value==='book'){
+      page('add');
+      const dropdown=document.getElementById('bookCoverDropdown');
+      if(dropdown)dropdown.open=true;
+      updateKind();
+    }
+  });
+})();
+
+
+/* v12 - incolla immagine dagli appunti iOS/WebKit, solo con tocco esplicito. */
+(()=>{
+  const button=document.getElementById('pasteBookCoverBtn');
+  const help=document.getElementById('pasteCoverHelp');
+  const kind=document.getElementById('kind');
+  if(!button||!kind)return;
+  const sync=()=>{const isBook=kind.value==='book';button.hidden=!isBook;if(help)help.hidden=!isBook};
+  kind.addEventListener('change',sync);
+  document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>setTimeout(sync,0)));
+  sync();
+  button.addEventListener('click',async()=>{
+    if(!navigator.clipboard?.read){
+      toast('Il tuo browser non consente di incollare immagini: usa Galleria.');return;
+    }
+    button.disabled=true;
+    try{
+      // La lettura degli appunti avviene esclusivamente dopo il tocco sul pulsante.
+      const entries=await navigator.clipboard.read();
+      let imageBlob=null;
+      for(const entry of entries){
+        const mime=entry.types.find(t=>t.startsWith('image/'));
+        if(mime){imageBlob=await entry.getType(mime);break}
+      }
+      if(!imageBlob){
+        toast('Negli appunti non c’è una foto. Copia l’immagine, non il link, oppure usa Galleria.');return;
+      }
+      if(imageBlob.size>12000000){toast('Immagine troppo grande: usa Galleria.');return}
+      const url=URL.createObjectURL(imageBlob);
+      try{
+        const img=new Image();
+        await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+        if(!img.naturalWidth||!img.naturalHeight)throw new Error('Immagine non valida');
+        const scale=Math.min(1,720/Math.max(img.naturalWidth,img.naturalHeight));
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+        canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+        canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+        const newPhoto=canvas.toDataURL('image/jpeg',.68);
+        // Conserva la foto precedente se il caricamento/convertitore fallisce.
+        photoData=newPhoto;
+        lastAutoBookCover='';
+        const preview=document.getElementById('photoPreview');
+        preview.src=newPhoto;preview.hidden=false;
+        saveDraft();
+        // Mostra subito la copertina inserita, senza spostare il pulsante Salva.
+        const dropdown=document.getElementById('bookCoverDropdown');
+        if(dropdown)dropdown.open=false;
+        requestAnimationFrame(()=>requestAnimationFrame(()=>{
+          preview.scrollIntoView({behavior:'smooth',block:'center'});
+        }));
+        toast('Copertina incollata! Premi Salva per confermare 💜');
+      }finally{URL.revokeObjectURL(url)}
+    }catch(error){
+      console.warn('Incolla copertina:',error);
+      toast('Impossibile incollare: autorizza gli appunti o usa Galleria.');
+    }finally{button.disabled=false}
+  });
+})();
+
+// Release the camera when iPhone locks, the app is backgrounded or the page leaves.
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera()});
+window.addEventListener('pagehide',()=>stopCamera());
