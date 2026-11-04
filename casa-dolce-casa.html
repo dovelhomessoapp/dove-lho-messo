@@ -746,7 +746,7 @@ html{scroll-padding-bottom:calc(var(--dlm-nav-height) + 20px)}
 #dlmHelpBtn{bottom:calc(var(--dlm-nav-height) + 16px);right:max(14px,calc((100vw - 560px)/2 + 14px),var(--dlm-safe-right))}
 #dlmGuideOverlay{padding-top:max(18px,var(--dlm-safe-top));padding-bottom:max(18px,var(--dlm-safe-bottom));padding-left:max(18px,var(--dlm-safe-left));padding-right:max(18px,var(--dlm-safe-right))}
 #dlmGuideDialog{max-height:100%;overflow-y:auto;overscroll-behavior:contain}
-@supports (-webkit-touch-callout:none){
+@media (hover:none) and (pointer:coarse){
   /* A readable input size avoids Safari zooming the page when editing. */
   .app input,.app select,.app textarea{font-size:16px!important}
 }

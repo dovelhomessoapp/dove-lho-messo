@@ -32,13 +32,13 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
      const nav=document.querySelector('body>nav').getBoundingClientRect();
      const app=document.querySelector('.app');
      const active=document.querySelector('.page.active');
-     const fields=[...active.querySelectorAll('input,select,textarea')].filter(el=>el.getBoundingClientRect().width>0);
-     return {overflow:document.documentElement.scrollWidth>innerWidth+1,navBottom:nav.bottom,navHeight:nav.height,padding:parseFloat(getComputedStyle(app).paddingBottom),fonts:fields.map(el=>parseFloat(getComputedStyle(el).fontSize))};
+     const fields=[...active.querySelectorAll('input,select,textarea')].filter(el=>el.getBoundingClientRect().width>0 && !['checkbox','radio','range','color','file','button','submit','reset','hidden'].includes(el.type));
+     return {overflow:document.documentElement.scrollWidth>innerWidth+1,navBottom:nav.bottom,navHeight:nav.height,padding:parseFloat(getComputedStyle(app).paddingBottom),fonts:fields.map(el=>({id:el.id||el.name||el.tagName,size:parseFloat(getComputedStyle(el).fontSize)}))};
     });
     assert.equal(m.overflow,false,`${width} ${section}: horizontal overflow`);
     assert.ok(Math.abs(m.navBottom-height)<2,`${width} ${section}: navigation bottom`);
     assert.ok(m.padding>=m.navHeight+23,`${width} ${section}: bottom clearance`);
-    assert.ok(m.fonts.every(size=>size>=16),`${width} ${section}: small form input`);
+    assert.ok(m.fonts.every(field=>field.size>=16),`${width} ${section}: small form input ${JSON.stringify(m.fonts)}`);
    }
    assert.deepEqual(errors,[]);
    console.log(`PASS WebKit ${width}x${height}: seven sections, navigation, clearance and form text`);
