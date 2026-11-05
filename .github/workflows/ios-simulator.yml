@@ -1,0 +1,54 @@
+name: iOS simulator build
+on:
+  push:
+    branches: [ios-native-preparation]
+    paths: ['native/ios/**', '.github/workflows/ios-simulator.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Select installed Xcode 26 or later
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcode_path=$(find /Applications -maxdepth 1 -name 'Xcode_2*.app' | sort -V | tail -1)
+          test -n "$xcode_path"
+          echo "DEVELOPER_DIR=$xcode_path/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Prepare bundled iOS project
+        working-directory: native/ios
+        run: |
+          npm ci --no-audit --no-fund
+          npm run prepare:ios
+          npm run check
+      - name: Verify the bundled app with WebKit, without external requests
+        run: |
+          npm install --prefix "$RUNNER_TEMP/dlm-webkit" --no-audit --no-fund playwright@1.62.1
+          node "$RUNNER_TEMP/dlm-webkit/node_modules/playwright/cli.js" install webkit
+          cd native/ios/www
+          DLM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/dlm-webkit/node_modules/playwright" node ../../../checks/iphone-layout.cjs
+      - name: Compile for iPhone simulator without signing
+        working-directory: native/ios
+        run: |
+          xcodebuild -version
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/dlm-ios-build.log" 2>&1 || { tail -100 "$RUNNER_TEMP/dlm-ios-build.log"; exit 1; }
+          test -d build/Build/Products/Debug-iphonesimulator/App.app
+          echo 'Simulator build succeeded. No IPA, signing or TestFlight upload performed.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install and launch on an available iPhone simulator
+        working-directory: native/ios
+        run: python3 scripts/simulator-smoke.py
+      - name: Preserve simulator launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-simulator-launch
+          path: ${{ runner.temp }}/dlm-ios-smoke/
+          if-no-files-found: ignore
+          retention-days: 7

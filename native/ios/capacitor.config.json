@@ -1,0 +1,11 @@
+{
+  "appId": "it.dovelhomesso.casadolcecasa",
+  "appName": "Dove l’ho messo?",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#f9effe",
+    "preferredContentMode": "mobile",
+    "allowsLinkPreview": false
+  }
+}
