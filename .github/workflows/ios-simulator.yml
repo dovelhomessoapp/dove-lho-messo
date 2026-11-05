@@ -41,3 +41,14 @@ jobs:
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/dlm-ios-build.log" 2>&1 || { tail -100 "$RUNNER_TEMP/dlm-ios-build.log"; exit 1; }
           test -d build/Build/Products/Debug-iphonesimulator/App.app
           echo 'Simulator build succeeded. No IPA, signing or TestFlight upload performed.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install and launch on an available iPhone simulator
+        working-directory: native/ios
+        run: python3 scripts/simulator-smoke.py
+      - name: Preserve simulator launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-simulator-launch
+          path: ${{ runner.temp }}/dlm-ios-smoke/
+          if-no-files-found: ignore
+          retention-days: 7

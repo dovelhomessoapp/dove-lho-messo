@@ -15,7 +15,7 @@ xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk 
 
 `prepare:ios` generates a fresh platform. For an existing generated platform use `npm run stage`, `python3 scripts/configure-ios.py`, `npx cap sync ios`. Generated folders are ignored by git; the lockfile pins npm packages, and the generated SPM dependency is exact.
 
-The GitHub Actions workflow runs on a standard macos-15 runner on this preparation branch. It performs staging validation, WebKit layout checks with external requests blocked, then compiles without signing. No Apple credentials or upload are configured.
+The GitHub Actions workflow runs on a standard macos-15 runner on this preparation branch. It performs staging validation, WebKit layout checks with external requests blocked, then compiles without signing, installs on an available iPhone simulator and verifies that the app process remains running after launch. A launch screenshot is saved as a seven-day workflow artifact; this smoke check does not prove that every screen or network flow works. No Apple credentials or upload are configured.
 
 ## Native-specific staging
 
