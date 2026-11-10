@@ -77,6 +77,7 @@ jobs:
               f.write('PROFILE_NAME='+p['Name']+'\n')
           print('Profile matches the app, team and App Store distribution method.')
           PY
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$RUNNER_TEMP/profile.plist")
           keychain_password=$(openssl rand -hex 24)
           echo "::add-mask::$keychain_password"
           security create-keychain -p "$keychain_password" "$RUNNER_TEMP/dlm-signing.keychain-db"
