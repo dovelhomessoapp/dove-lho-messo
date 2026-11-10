@@ -20,12 +20,11 @@ candidates = [(runtime, device) for runtime, group in devices['devices'].items()
               if device.get('isAvailable') and device['name'].startswith('iPhone')]
 if not candidates:
     raise SystemExit('No available iPhone simulator runtime')
-runtime, device = sorted(candidates, key=lambda pair: (pair[0], pair[1]['name']))[-1]
-udid = device['udid']
+# Reuse the store screenshot device so only one iPhone needs its first boot.
+udid = run('python3', str(root / 'scripts/store-simulator.py'))
+runtime, device = next((runtime, device) for runtime, device in candidates
+                       if device['udid'] == udid)
 print('Simulator:', device['name'], runtime, flush=True)
-if device['state'] != 'Booted':
-    subprocess.run(['xcrun', 'simctl', 'boot', udid], check=True)
-subprocess.run(['xcrun', 'simctl', 'bootstatus', udid, '-b'], check=True, timeout=240)
 subprocess.run(['xcrun', 'simctl', 'install', udid, str(app)], check=True)
 bundle = 'it.dovelhomesso.casadolcecasa'
 launch = run('xcrun', 'simctl', 'launch', udid, bundle)

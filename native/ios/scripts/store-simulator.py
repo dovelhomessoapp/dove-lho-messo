@@ -7,7 +7,7 @@ for name in preferred:
     if matches:
         d=matches[-1]
         if d['state']!='Booted': subprocess.run(['xcrun','simctl','boot',d['udid']],check=True,stdout=subprocess.DEVNULL)
-        subprocess.run(['xcrun','simctl','bootstatus',d['udid'],'-b'],check=True,stdout=subprocess.DEVNULL,timeout=240)
+        subprocess.run(['xcrun','simctl','bootstatus',d['udid'],'-b'],check=True,stdout=subprocess.DEVNULL,timeout=600)
         print(d['udid'])
         break
 else: raise SystemExit('No supported Dynamic Island iPhone simulator found')
