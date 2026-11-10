@@ -59,6 +59,12 @@ jobs:
           npm run prepare:ios
           npm run check
           gem install --user-install xcodeproj --no-document
+      - name: Verify populated position picker with WebKit
+        run: |
+          npm install --prefix "$RUNNER_TEMP/dlm-webkit" --no-audit --no-fund playwright@1.62.1
+          node "$RUNNER_TEMP/dlm-webkit/node_modules/playwright/cli.js" install webkit
+          cd native/ios/www
+          DLM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/dlm-webkit/node_modules/playwright" node ../../../checks/iphone-place-picker.cjs
       - name: Install signing identity in temporary keychain
         env:
           P12: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
