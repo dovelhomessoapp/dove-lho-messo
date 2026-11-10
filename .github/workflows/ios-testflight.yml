@@ -37,6 +37,14 @@ jobs:
           for field in P12 P12_PASSWORD PROFILE API_P8 API_KEY_ID API_ISSUER_ID; do
             if [ -z "${!field}" ]; then echo "::error::Missing credential: $field"; exit 1; fi
           done
+          umask 077
+          printf '%s\n' "$API_P8" > "$RUNNER_TEMP/api-preflight.p8"
+          if ! openssl pkey -in "$RUNNER_TEMP/api-preflight.p8" -noout >/dev/null 2>&1; then
+            rm -f "$RUNNER_TEMP/api-preflight.p8"
+            echo "::error::APP_STORE_CONNECT_API_KEY_P8 must contain the complete original PEM text from the Apple .p8 file."
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/api-preflight.p8"
       - name: Select installed Xcode 26 or later
         run: |
           set -euo pipefail
@@ -144,8 +152,11 @@ jobs:
           mkdir -p private_keys
           printf '%s\n' "$API_P8" > "private_keys/AuthKey_$API_KEY_ID.p8"
           trap 'rm -rf private_keys' EXIT
-          xcrun altool --validate-app -f "$IPA_PATH" --type ios --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER_ID"
-          xcrun altool --upload-app -f "$IPA_PATH" --type ios --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER_ID"
+          xcrun altool --validate-app -f "$IPA_PATH" --type ios --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/dlm-validate.log"
+          if grep -q "ERROR:" "$RUNNER_TEMP/dlm-validate.log"; then exit 1; fi
+          xcrun altool --upload-app -f "$IPA_PATH" --type ios --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/dlm-upload.log"
+          if grep -q "ERROR:" "$RUNNER_TEMP/dlm-upload.log"; then exit 1; fi
+          grep -Eqi "UPLOAD SUCCEEDED|No errors uploading" "$RUNNER_TEMP/dlm-upload.log" || { echo "::error::Apple upload success was not confirmed"; exit 1; }
           echo 'Signed build uploaded to App Store Connect. Apple processing and TestFlight availability are still pending. No App Review submission or public release performed.' >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve build diagnostics without signing credentials
         if: always()
