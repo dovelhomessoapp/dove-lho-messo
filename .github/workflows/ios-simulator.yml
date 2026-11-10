@@ -44,6 +44,30 @@ jobs:
       - name: Install and launch on an available iPhone simulator
         working-directory: native/ios
         run: python3 scripts/simulator-smoke.py
+      - name: Capture real app screens on a Dynamic Island iPhone
+        working-directory: native/ios
+        run: |
+          set -euo pipefail
+          gem install --user-install xcodeproj --no-document
+          export GEM_HOME="$(ruby -e 'puts Gem.user_dir')"
+          ruby scripts/add-screenshot-tests.rb
+          mkdir -p ios/App/StoreScreenshots
+          cp scripts/StoreScreenshots.swift ios/App/StoreScreenshots/
+          device_id=$(python3 scripts/store-simulator.py)
+          xcrun simctl status_bar "$device_id" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
+          xcodebuild -project ios/App/App.xcodeproj -scheme StoreScreenshots -configuration Debug -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath build -resultBundlePath "$RUNNER_TEMP/StoreScreenshots.xcresult" CODE_SIGNING_ALLOWED=NO test > "$RUNNER_TEMP/dlm-screenshots.log" 2>&1 || { tail -100 "$RUNNER_TEMP/dlm-screenshots.log"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/dlm-store-screenshots"
+          xcrun xcresulttool export attachments --path "$RUNNER_TEMP/StoreScreenshots.xcresult" --output-path "$RUNNER_TEMP/dlm-store-screenshots"
+      - name: Preserve store screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-store-screenshots
+          path: |
+            ${{ runner.temp }}/dlm-store-screenshots/
+            ${{ runner.temp }}/dlm-screenshots.log
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Preserve simulator launch evidence
         if: always()
         uses: actions/upload-artifact@v4
