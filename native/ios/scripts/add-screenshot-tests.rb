@@ -8,6 +8,7 @@ group = project.main_group.new_group('StoreScreenshots', 'StoreScreenshots')
 file = group.new_file('StoreScreenshots.swift')
 target.source_build_phase.add_file_reference(file)
 target.build_configurations.each do |config|
+  config.build_settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
   config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'it.dovelhomesso.casadolcecasa.screenshots'
   config.build_settings['GENERATE_INFOPLIST_FILE'] = 'YES'
   config.build_settings['SWIFT_VERSION'] = '5.0'
