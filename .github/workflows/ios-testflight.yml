@@ -2,7 +2,7 @@ name: iOS signed build and TestFlight upload
 on:
   push:
     branches: [ios-native-preparation]
-    paths: ['.github/workflows/ios-testflight.yml', 'native/ios/scripts/QRPDF.swift']
+    paths: ['.github/workflows/ios-testflight.yml', 'native/ios/scripts/QRPDF.swift', 'casa-dolce-casa-pantry.js']
   workflow_dispatch:
 permissions:
   contents: read
