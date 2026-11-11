@@ -28,4 +28,16 @@ final class StoreScreenshots: XCTestCase {
             capture(name)
         }
     }
+
+    func testQRPDFPreview() {
+        continueAfterFailure = false
+        let app = XCUIApplication(bundleIdentifier: "it.dovelhomesso.casadolcecasa")
+        app.launchArguments = ["--qr-pdf-smoke"]
+        app.launch()
+        let preview = app.navigationBars["Etichette QR A4"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 30), "Generated QR PDF did not open in the native viewer")
+        XCTAssertTrue(preview.buttons["Condividi"].exists)
+        preview.buttons["Fine"].tap()
+        XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 5))
+    }
 }

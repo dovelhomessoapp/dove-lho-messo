@@ -1,11 +1,34 @@
 import Capacitor
 import PDFKit
 import UIKit
+#if DEBUG && targetEnvironment(simulator)
+import WebKit
+#endif
 
 final class DLMBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
         bridge?.registerPluginInstance(QRPDFPlugin())
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--qr-pdf-smoke") {
+            let source = """
+                window.addEventListener('load', () => {
+                    const openPreview = () => {
+                        if (typeof window.downloadAllQRA4 !== 'function') {
+                            setTimeout(openPreview, 100);
+                            return;
+                        }
+                        db.places.push({ id: 'qr-smoke', name: 'Scaffale di prova' });
+                        window.downloadAllQRA4(new Set(['P:qr-smoke']), false);
+                    };
+                    setTimeout(openPreview, 1000);
+                }, { once: true });
+                """
+            webView?.configuration.userContentController.addUserScript(
+                WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            )
+        }
+        #endif
     }
 }
 

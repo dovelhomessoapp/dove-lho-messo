@@ -14,6 +14,13 @@ data.update({
 with info.open('wb') as f: plistlib.dump(data,f)
 
 app = info.parent
+scene = app / 'SceneDelegate.swift'
+scene_text = scene.read_text()
+root_controller = 'window?.rootViewController = CAPBridgeViewController()'
+if scene_text.count(root_controller) != 1:
+    raise RuntimeError('Capacitor root controller not found in SceneDelegate')
+scene.write_text(scene_text.replace(root_controller, 'window?.rootViewController = DLMBridgeViewController()'))
+
 storyboard = app / 'Base.lproj/Main.storyboard'
 document = ET.parse(storyboard)
 controller = document.find(".//viewController[@customClass='CAPBridgeViewController']")
