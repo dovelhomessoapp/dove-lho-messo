@@ -13,7 +13,9 @@ final class DLMBridgeViewController: CAPBridgeViewController {
 final class QRPDFPlugin: CAPPlugin, CAPBridgedPlugin {
     let identifier = "QRPDFPlugin"
     let jsName = "QRPDF"
-    let pluginMethods = [CAPPluginMethod(name: "preview", returnType: CAPPluginReturnPromise)]
+    let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "preview", returnType: CAPPluginReturnPromise)
+    ]
 
     @objc func preview(_ call: CAPPluginCall) {
         guard let base64 = call.getString("base64"), let data = Data(base64Encoded: base64) else {
