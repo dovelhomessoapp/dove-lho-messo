@@ -240,6 +240,22 @@ $('pantryCamera').onclick=async()=>{
   info.textContent=message;
  };
  pantryScanning=true;
+ const nativeScanner=window.dlmStoreDistribution==='app-store'&&window.Capacitor?.Plugins?.PantryBarcode;
+ if(nativeScanner){
+  try{
+   const result=await nativeScanner.scan();
+   if(!active())return;
+   if(!result.useWeb){
+    if(result.code&&pantryFoundBarcode(result.code,session))return;
+    stopPantryCamera();
+    return;
+   }
+  }catch(err){
+   console.warn('Scanner iOS dispensa',err);
+   fail('La lettura con la fotocamera non è disponibile. Puoi usare una foto o inserire il codice a mano.');
+   return;
+  }
+ }
  video.hidden=false;$('pantryStop').hidden=false;
  info.textContent='📷 Avvio lo scanner automatico…';
  try{

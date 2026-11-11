@@ -9,6 +9,9 @@ final class DLMBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
         bridge?.registerPluginInstance(QRPDFPlugin())
+        if #available(iOS 16.0, *) {
+            bridge?.registerPluginInstance(PantryBarcodePlugin())
+        }
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("--qr-pdf-smoke") {
             let source = """
