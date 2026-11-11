@@ -344,7 +344,7 @@ function render(){
  const totalUnits=sorted.reduce((n,l)=>n+Number(l.quantity||0),0);
  const overview=$('pantryOverview');
  if(overview)overview.innerHTML=[
- ['all','assets/alimenti.png',totalUnits,'Confezioni'],
+ ['all','assets/inventario.png',totalUnits,'Confezioni totali'],
  ['open','assets/cibi-aperti-3d.png',openCount,'Aperte'],
  ['soon','assets/cibi-in-scadenza-3d.png',expiringSoon,'Entro 5 giorni'],
  ['expired','assets/cibi-scaduti-3d.png',overdue,'Scadute']
