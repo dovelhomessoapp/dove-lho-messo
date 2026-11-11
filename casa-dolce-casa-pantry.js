@@ -745,7 +745,7 @@ $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume]
  busy=true;try{if(b.dataset.consume&&l.quantity<=1)await rememberPantryPosition(l);if(b.dataset.delete||l.quantity<=1){await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'DELETE'})}
  else{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:l.quantity-1})})}
  await refresh();
- if(b.dataset.consume&&l.quantity<=1){
+ if(b.dataset.consume&&l.quantity<=1&&confirm('🛒 Hai finito '+l.name+'. Vuoi aggiungerlo al carrello?')){
   try{
    const quantity=await chooseShoppingQuantity(l.name,true);
    if(quantity!==null){
