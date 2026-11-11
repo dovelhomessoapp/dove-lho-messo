@@ -9,7 +9,7 @@ permissions:
 jobs:
   capture:
     runs-on: macos-15-intel
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,9 +41,11 @@ jobs:
           fi
           xcrun simctl install "$device_id" "$RUNNER_TEMP/ipad-build/Build/Products/Debug-iphonesimulator/App.app"
           xcrun simctl launch "$device_id" it.dovelhomesso.casadolcecasa
-          sleep 20
           mkdir -p "$RUNNER_TEMP/ipad-screenshots"
-          xcrun simctl io "$device_id" screenshot "$RUNNER_TEMP/ipad-screenshots/Dove-lho-messo-Home-iPad.png"
+          for delay in 90 90 120; do
+            sleep "$delay"
+            xcrun simctl io "$device_id" screenshot "$RUNNER_TEMP/ipad-screenshots/Dove-lho-messo-Home-iPad-${delay}-$(date +%s).png"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: ipad-app-store-screenshots
