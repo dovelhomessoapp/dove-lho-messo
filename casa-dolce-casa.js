@@ -278,6 +278,16 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
   pdf+='trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';
   const pdfBytes=new Uint8Array(pdf.length);for(let j=0;j<pdf.length;j++)pdfBytes[j]=pdf.charCodeAt(j)&255;
   const file=new File([pdfBytes],'etichette-qr-A4.pdf',{type:'application/pdf'});
+  if(window.dlmStoreDistribution==='app-store'){
+   const dataURL=await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error);
+    reader.readAsDataURL(file);
+   });
+   await window.Capacitor.Plugins.QRPDF.preview({base64:dataURL.slice(dataURL.indexOf(',')+1)});
+   return;
+  }
   const isAndroid=/Android/i.test(navigator.userAgent);
   // On Android use the native file share/save sheet instead of opening a PDF
   // inside the installed PWA, where pull-to-refresh can leave a blank viewer.

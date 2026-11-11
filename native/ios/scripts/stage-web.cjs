@@ -1,0 +1,32 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path');
+const native=path.resolve(__dirname,'..'),root=path.resolve(native,'../..'),out=path.join(native,'www');
+fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(out,{recursive:true});
+const names=['casa-dolce-casa.html','casa-dolce-casa.js','casa-dolce-casa-bridge.js','casa-dolce-casa-pantry.js','casa-dolce-casa-gemini.js','casa-dolce-casa-photo-ai.js','casa-dolce-casa-value-estimate.js','style.css','qr.js','privacy.html','elimina-account.html','icon-192.png','icon-512.png','apple-touch-icon.png'];
+for(const name of names)fs.copyFileSync(path.join(root,name),path.join(out,name));
+fs.cpSync(path.join(root,'assets'),path.join(out,'assets'),{recursive:true});
+fs.mkdirSync(path.join(out,'vendor'));
+fs.copyFileSync(require.resolve('@zxing/library/umd/index.min.js'),path.join(out,'vendor/zxing.js'));
+fs.copyFileSync(require.resolve('jsqr/dist/jsQR.js'),path.join(out,'vendor/jsqr.js'));
+function replaceOnce(source,from,to){if(source.split(from).length!==2)throw Error('Source changed; inspect native transform: '+from);return source.replace(from,to)}
+require('./stage-catalogs.cjs')(out);
+let html=fs.readFileSync(path.join(out,'casa-dolce-casa.html'),'utf8');
+html=replaceOnce(html,'./store-distribution.js?v=android1','./native-context.js');
+html=replaceOnce(html,'<script src="./qr.js">','<script src="./vendor/zxing.js"></script><script src="./vendor/jsqr.js"></script><script src="./qr.js">');
+html=html.replace(/<link\b[^>]*rel="manifest"[^>]*\/?\s*>/g,'');
+const safeUpdates=/<script id="dlm-safe-updates">[\s\S]*?<\/script>/;
+if(!safeUpdates.test(html))throw Error('Web update block missing');
+html=html.replace(safeUpdates,'');
+html=html.replace('</head>','<style>#updateAppBtn,#googleCoverSearchBtn{display:none!important}</style></head>');
+// Both entry names remain local: internal navigation never downloads a new app shell.
+for(const name of ['index.html','casa-dolce-casa.html'])fs.writeFileSync(path.join(out,name),html);
+fs.writeFileSync(path.join(out,'native-context.js'),"Object.defineProperty(window,'dlmStoreDistribution',{value:'app-store',writable:false,configurable:false});document.documentElement.dataset.distribution='app-store';\n");
+let bridge=fs.readFileSync(path.join(out,'casa-dolce-casa-bridge.js'),'utf8');
+if((bridge.match(/google-play/g)||[]).length!==3)throw Error('Store routing changed; inspect guards');
+bridge=bridge.replaceAll('google-play','app-store').replaceAll('questa versione Android','questa versione iPhone');
+const webReturn='https://dovelhomessoapp.github.io/dove-lho-messo/casa-dolce-casa.html';
+bridge=replaceOnce(bridge,"new URL('./casa-dolce-casa.html',location.href).href",JSON.stringify(webReturn));
+bridge=replaceOnce(bridge,'new URL(location.pathname,location.origin).href',JSON.stringify(webReturn));
+bridge=bridge.replaceAll('Su iPhone apri l’app dalla schermata Home.','Le notifiche native sono ancora in preparazione in questa build iOS.');
+fs.writeFileSync(path.join(out,'casa-dolce-casa-bridge.js'),bridge);
+console.log('Staged bundled iOS app, local scanners and existing account bridge. No production files changed.');

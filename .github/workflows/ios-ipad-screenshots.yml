@@ -1,0 +1,64 @@
+name: App Store iPad screenshots
+on:
+  push:
+    branches: [ios-native-preparation]
+    paths: ['.github/workflows/ios-ipad-screenshots.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          xcode_path=$(find /Applications -maxdepth 1 -name 'Xcode_2*.app' | sort -V | tail -1)
+          test -n "$xcode_path"
+          echo "DEVELOPER_DIR=$xcode_path/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Prepare the app
+        working-directory: native/ios
+        run: |
+          npm ci --no-audit --no-fund
+          npm run prepare:ios
+          npm run check
+          # Reproduce a returning visitor who has already closed the Home guide.
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("index.html", "casa-dolce-casa.html"):
+              page = Path("ios/App/App/public") / name
+              html = page.read_text()
+              assert "dlm-guide-seen-v4-" in html and "</head>" in html
+              script = """<script>localStorage.setItem('dlm-guide-seen-v4-home','1');</script>"""
+              page.write_text(html.replace("</head>", script + "</head>", 1))
+          PY
+      - name: Capture the app on a 13-inch iPad simulator
+        working-directory: native/ios
+        run: |
+          set -euo pipefail
+          device_id=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; devices=[d for runtime, group in json.load(sys.stdin)["devices"].items() if ".iOS-" in runtime for d in group if d["isAvailable"] and "iPad" in d["name"] and ("13-inch" in d["name"] or "12.9-inch" in d["name"])]; devices.sort(key=lambda d: ("Pro" in d["name"], "13-inch" in d["name"])); print(devices[-1]["udid"])')
+          xcrun simctl boot "$device_id"
+          xcrun simctl bootstatus "$device_id" -b
+          xcrun simctl status_bar "$device_id" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
+          if ! xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath "$RUNNER_TEMP/ipad-build" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/ipad.log" 2>&1; then
+            tail -100 "$RUNNER_TEMP/ipad.log"
+            exit 1
+          fi
+          xcrun simctl install "$device_id" "$RUNNER_TEMP/ipad-build/Build/Products/Debug-iphonesimulator/App.app"
+          xcrun simctl launch "$device_id" it.dovelhomesso.casadolcecasa
+          mkdir -p "$RUNNER_TEMP/ipad-screenshots"
+          for delay in 90 90 120; do
+            sleep "$delay"
+            xcrun simctl io "$device_id" screenshot "$RUNNER_TEMP/ipad-screenshots/Dove-lho-messo-Home-iPad-${delay}-$(date +%s).png"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipad-app-store-screenshots
+          path: ${{ runner.temp }}/ipad-screenshots
+          if-no-files-found: error
+          retention-days: 14
