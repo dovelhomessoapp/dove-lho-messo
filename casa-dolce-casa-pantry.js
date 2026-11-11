@@ -508,18 +508,18 @@ function choosePurchasedExpiry(){
   overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
  });
 }
-function choosePurchasedQuantity(initial){
+function choosePantryQuantity(initial,{titleText,noteText,confirmText='Continua'}){
  return new Promise(resolve=>{
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(30,16,45,.48);display:flex;align-items:center;justify-content:center;padding:22px';
   const panel=document.createElement('div');
   panel.style.cssText='background:white;border-radius:22px;padding:24px;width:min(100%,420px);box-shadow:0 14px 50px #24133244';
-  const title=document.createElement('h3');title.textContent='🛒 Quante confezioni hai comprato?';title.style.cssText='margin:0 0 10px;color:#7432a6';
-  const note=document.createElement('p');note.textContent='Puoi cambiare la quantità prevista nella lista.';note.style.cssText='margin:0 0 14px;color:#725a83';
-  const input=document.createElement('input');input.type='number';input.min='1';input.max='99999';input.step='1';input.value=String(initial);input.inputMode='numeric';input.setAttribute('aria-label','Quantità acquistata');input.style.cssText='box-sizing:border-box;width:100%;padding:14px;border:1px solid #d8b9eb;border-radius:12px;font-size:20px;background:#faf5ff;color:#42265c';
+  const title=document.createElement('h3');title.textContent=titleText;title.style.cssText='margin:0 0 10px;color:#7432a6';
+  const note=document.createElement('p');note.textContent=noteText;note.style.cssText='margin:0 0 14px;color:#725a83';
+  const input=document.createElement('input');input.type='number';input.min='1';input.max='99999';input.step='1';input.value=String(initial);input.inputMode='numeric';input.setAttribute('aria-label','Quantità');input.style.cssText='box-sizing:border-box;width:100%;padding:14px;border:1px solid #d8b9eb;border-radius:12px;font-size:20px;background:#faf5ff;color:#42265c';
   const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;margin-top:18px';
   const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='Annulla';
-  const save=document.createElement('button');save.type='button';save.className='primary';save.textContent='Continua';
+  const save=document.createElement('button');save.type='button';save.className='primary';save.textContent=confirmText;
   actions.append(cancel,save);panel.append(title,note,input,actions);overlay.appendChild(panel);document.body.appendChild(overlay);
   const finish=value=>{overlay.remove();resolve(value)};
   cancel.onclick=()=>finish(null);
@@ -529,7 +529,10 @@ function choosePurchasedQuantity(initial){
 }
 async function offerPurchasedToPantry(item){
  if(!confirm('🛒 '+item.name+' acquistato! Vuoi aggiungerlo alla dispensa?'))return;
- const amount=await choosePurchasedQuantity(item.quantity);
+ const amount=await choosePantryQuantity(item.quantity,{
+  titleText:'🛒 Quante confezioni hai comprato?',
+  noteText:'Puoi cambiare la quantità prevista nella lista.'
+ });
  if(amount===null)return;
  const key=value=>String(value||'').normalize('NFKC').toLocaleLowerCase('it').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
  const rows=await request('pantry_product_positions?select=last_zone,last_shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&product_key=eq.'+encodeURIComponent(key(item.name))+'&limit=1');
@@ -551,6 +554,13 @@ async function offerPurchasedToPantry(item){
  await rememberPantryPosition({name:item.name,zone:placement.zone,shelf:placement.shelf});
  await refresh();
  $('shoppingStatus').textContent='💜 Acquisto aggiunto alla dispensa nella posizione scelta';
+}
+function chooseShoppingQuantity(name,consumed=false){
+ return choosePantryQuantity(1,{
+  titleText:'🛒 Quante confezioni vuoi aggiungere?',
+  noteText:consumed?'Hai finito '+name+'.':'Da comprare: '+name,
+  confirmText:'Aggiungi alla spesa'
+ });
 }
 async function addToShopping(name,quantity=1){
  if(!access)throw Error('Accedi alla casa');
@@ -691,7 +701,9 @@ $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume]
   busy=true;
   b.disabled=true;
   try{
-   await addToShopping(l.name,1);
+   const quantity=await chooseShoppingQuantity(l.name);
+   if(quantity===null)return;
+   await addToShopping(l.name,quantity);
    message.textContent='💜 Aggiunto alla lista della spesa';
   }catch(err){
    message.textContent='Lista della spesa non aggiornata: '+err.message;
@@ -732,5 +744,18 @@ $('pantryList').onclick=async e=>{const b=e.target.closest('button[data-consume]
  }
  busy=true;try{if(b.dataset.consume&&l.quantity<=1)await rememberPantryPosition(l);if(b.dataset.delete||l.quantity<=1){await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'DELETE'})}
  else{await request('pantry_lots?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(access.homeId),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:l.quantity-1})})}
- await refresh();if(b.dataset.consume&&l.quantity<=1&&confirm('🛒 Hai finito '+l.name+'. Vuoi aggiungerlo alla mia lista della spesa?')){try{await addToShopping(l.name,1);$('shoppingBox').open=true;status.textContent='💜 Aggiunto alla lista della spesa'}catch(err){status.textContent='Alimento consumato, ma lista della spesa non aggiornata: '+err.message}}}catch(err){status.textContent='Modifica non riuscita: '+err.message}finally{busy=false}};
+ await refresh();
+ if(b.dataset.consume&&l.quantity<=1){
+  try{
+   const quantity=await chooseShoppingQuantity(l.name,true);
+   if(quantity!==null){
+    await addToShopping(l.name,quantity);
+    $('shoppingBox').open=true;
+    status.textContent='💜 Aggiunto alla lista della spesa';
+   }
+  }catch(err){
+   status.textContent='Alimento consumato, ma lista della spesa non aggiornata: '+err.message;
+  }
+ }
+ }catch(err){status.textContent='Modifica non riuscita: '+err.message}finally{busy=false}};
 })();
