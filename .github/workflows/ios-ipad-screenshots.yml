@@ -27,6 +27,16 @@ jobs:
           npm ci --no-audit --no-fund
           npm run prepare:ios
           npm run check
+          # Reproduce a returning visitor who has already closed the Home guide.
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("index.html", "casa-dolce-casa.html"):
+              page = Path("ios/App/App/public") / name
+              html = page.read_text()
+              assert "dlm-guide-seen-v4-" in html and "</head>" in html
+              script = """<script>localStorage.setItem('dlm-guide-seen-v4-home','1');</script>"""
+              page.write_text(html.replace("</head>", script + "</head>", 1))
+          PY
       - name: Capture the app on a 13-inch iPad simulator
         working-directory: native/ios
         run: |
