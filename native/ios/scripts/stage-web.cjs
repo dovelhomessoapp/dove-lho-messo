@@ -17,7 +17,12 @@ html=html.replace(/<link\b[^>]*rel="manifest"[^>]*\/?\s*>/g,'');
 const safeUpdates=/<script id="dlm-safe-updates">[\s\S]*?<\/script>/;
 if(!safeUpdates.test(html))throw Error('Web update block missing');
 html=html.replace(safeUpdates,'');
-html=html.replace('</head>','<style>#updateAppBtn,#googleCoverSearchBtn{display:none!important}</style></head>');
+html=replaceOnce(html,'</head>',`<style>
+#updateAppBtn,#googleCoverSearchBtn{display:none!important}
+html[data-distribution="app-store"]{overflow-x:hidden;overscroll-behavior:none!important}
+html[data-distribution="app-store"] body>nav{right:0!important;width:auto!important;max-width:100%!important}
+html[data-distribution="app-store"] #pantry input[type="file"]{min-width:0;max-width:100%}
+</style></head>`);
 // Both entry names remain local: internal navigation never downloads a new app shell.
 for(const name of ['index.html','casa-dolce-casa.html'])fs.writeFileSync(path.join(out,name),html);
 fs.writeFileSync(path.join(out,'native-context.js'),"Object.defineProperty(window,'dlmStoreDistribution',{value:'app-store',writable:false,configurable:false});document.documentElement.dataset.distribution='app-store';\n");

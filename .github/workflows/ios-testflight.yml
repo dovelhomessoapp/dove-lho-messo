@@ -2,7 +2,7 @@ name: iOS signed build and TestFlight upload
 on:
   push:
     branches: [ios-native-preparation]
-    paths: ['.github/workflows/ios-testflight.yml', 'native/ios/scripts/QRPDF.swift', 'native/ios/scripts/stage-catalogs.cjs', 'casa-dolce-casa-pantry.js']
+    paths: ['.github/workflows/ios-testflight.yml', 'native/ios/scripts/QRPDF.swift', 'native/ios/scripts/stage-web.cjs', 'native/ios/scripts/stage-catalogs.cjs', 'casa-dolce-casa-pantry.js']
   workflow_dispatch:
 permissions:
   contents: read
@@ -59,11 +59,12 @@ jobs:
           npm run prepare:ios
           npm run check
           gem install --user-install xcodeproj --no-document
-      - name: Verify populated position picker with WebKit
+      - name: Verify iPhone layout and populated position picker with WebKit
         run: |
           npm install --prefix "$RUNNER_TEMP/dlm-webkit" --no-audit --no-fund playwright@1.62.1
           node "$RUNNER_TEMP/dlm-webkit/node_modules/playwright/cli.js" install webkit
           cd native/ios/www
+          DLM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/dlm-webkit/node_modules/playwright" node ../../../checks/iphone-layout.cjs
           DLM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/dlm-webkit/node_modules/playwright" node ../../../checks/iphone-place-picker.cjs
       - name: Install signing identity in temporary keychain
         env:

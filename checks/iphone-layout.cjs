@@ -40,8 +40,31 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
     assert.ok(m.padding>=m.navHeight+23,`${width} ${section}: bottom clearance`);
     assert.ok(m.fonts.every(field=>field.size>=16),`${width} ${section}: small form input ${JSON.stringify(m.fonts)}`);
    }
+   await page.evaluate(()=>{
+    window.page('pantry');
+    document.querySelector('#pantryOnline').hidden=false;
+    document.querySelector('#pantryAddDetails').open=true;
+   });
+   await page.locator('#pantryAddDetails input[type="file"]').first().waitFor({state:'visible'});
+   for(const fraction of [0,0.5,1]){
+    const layout=await page.evaluate(async fraction=>{
+     const scroll=document.scrollingElement;
+     const target=Math.round((scroll.scrollHeight-innerHeight)*fraction);
+     window.scrollTo({left:100,top:target,behavior:'instant'});
+     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+     const nav=document.querySelector('body>nav');
+     const {left,right,bottom}=nav.getBoundingClientRect();
+     const lastTab=nav.querySelector('button[data-page="pantry"]').getBoundingClientRect();
+     return {target,x:scrollX,y:scrollY,left,right,bottom,lastTabRight:lastTab.right};
+    },fraction);
+    assert.equal(layout.x,0,`${width}: the open pantry form permits horizontal scrolling`);
+    assert.ok(Math.abs(layout.y-layout.target)<2,`${width}: vertical pantry scrolling failed`);
+    assert.ok(Math.abs(layout.left)<2 && Math.abs(layout.right-width)<2 && Math.abs(layout.bottom-height)<2,
+     `${width}: the pantry navigation left the viewport edges`);
+    assert.ok(layout.lastTabRight<=width,`${width}: the pantry tab is clipped`);
+   }
    assert.deepEqual(errors,[]);
-   console.log(`PASS WebKit ${width}x${height}: seven sections, navigation, clearance and form text`);
+   console.log(`PASS WebKit ${width}x${height}: seven sections, navigation, clearance, form text and pantry scrolling`);
    await context.close();
   }
  }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve))}

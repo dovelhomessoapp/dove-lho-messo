@@ -1,13 +1,12 @@
 import Capacitor
 import PDFKit
 import UIKit
-#if DEBUG && targetEnvironment(simulator)
 import WebKit
-#endif
 
 final class DLMBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
+        webView?.scrollView.isDirectionalLockEnabled = true
         bridge?.registerPluginInstance(QRPDFPlugin())
         if #available(iOS 16.0, *) {
             bridge?.registerPluginInstance(PantryBarcodePlugin())
