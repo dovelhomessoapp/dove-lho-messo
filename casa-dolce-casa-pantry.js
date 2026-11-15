@@ -883,6 +883,9 @@ if (match) {
 }
  $('pantryForm').reset();await refresh();pantryPopulateShelf($('pantryShelf'),$('pantryZone').value);status.textContent='💜 Alimento salvato per tutta la famiglia';
  closeSavedPantryForm(addSection,status.textContent);
+ if(root.classList.contains('active')){
+  addSection.querySelector(':scope > summary').scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
+ }
  }catch(err){error.textContent='Salvataggio non riuscito: '+err.message}finally{busy=false}};
 $('pantrySearch').addEventListener('input',()=>{
  overviewFilter='';

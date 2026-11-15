@@ -19,13 +19,24 @@ if(!safeUpdates.test(html))throw Error('Web update block missing');
 html=html.replace(safeUpdates,'');
 html=replaceOnce(html,'</head>',`<style>
 #updateAppBtn,#googleCoverSearchBtn{display:none!important}
-html[data-distribution="app-store"]{overflow-x:hidden;overscroll-behavior:none!important}
+/* Only the content scrolls. Keep the WebView document and navigation in place. */
+html[data-distribution="app-store"],
+html[data-distribution="app-store"] body{height:100%;overflow:hidden;overscroll-behavior:none!important}
+html[data-distribution="app-store"] body>.app{
+  position:absolute;inset:0;min-height:0;overflow:hidden auto;
+  overscroll-behavior:none;
+  scroll-padding-bottom:calc(var(--dlm-nav-height) + 20px);
+}
+html[data-distribution="app-store"] body>.app>main{overflow-x:clip}
 html[data-distribution="app-store"] body>nav{right:0!important;width:auto!important;max-width:100%!important}
 html[data-distribution="app-store"] #pantry input[type="file"]{min-width:0;max-width:100%}
 </style></head>`);
 // Both entry names remain local: internal navigation never downloads a new app shell.
 for(const name of ['index.html','casa-dolce-casa.html'])fs.writeFileSync(path.join(out,name),html);
 fs.writeFileSync(path.join(out,'native-context.js'),"Object.defineProperty(window,'dlmStoreDistribution',{value:'app-store',writable:false,configurable:false});document.documentElement.dataset.distribution='app-store';\n");
+const appScriptPath=path.join(out,'casa-dolce-casa.js');
+const appScript=fs.readFileSync(appScriptPath,'utf8');
+fs.writeFileSync(appScriptPath,replaceOnce(appScript,'scrollTo(0,0)}document.querySelectorAll(\'[data-page]\')','$(\'.app\').scrollTo(0,0)}document.querySelectorAll(\'[data-page]\')'));
 let bridge=fs.readFileSync(path.join(out,'casa-dolce-casa-bridge.js'),'utf8');
 if((bridge.match(/google-play/g)||[]).length!==3)throw Error('Store routing changed; inspect guards');
 bridge=bridge.replaceAll('google-play','app-store').replaceAll('questa versione Android','questa versione iPhone');

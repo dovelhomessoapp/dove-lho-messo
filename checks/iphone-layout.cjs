@@ -1,4 +1,4 @@
-// Empty local archive only: block all external requests, including Supabase.
+// Synthetic pantry data only. Block all external requests.
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
@@ -42,44 +42,48 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
    }
    await page.evaluate(()=>{
     window.page('pantry');
-    document.querySelector('#pantryOnline').hidden=false;
     document.querySelector('#pantryAddDetails').open=true;
+    const fetchOriginal=window.fetch.bind(window);
+    const lots=Array.from({length:80},(_,i)=>({
+     id:'lot-'+i,name:'Alimento di prova '+i,quantity:1,zone:'dispensa',shelf:'Ripiano '+(i%5)
+    }));
+    let rejectNextFood=true;
+    window.fetch=(url,options={})=>{
+     if(typeof url!=='string'||!url.includes('/rest/v1/'))return fetchOriginal(url,options);
+     if(options.method==='POST'&&url.endsWith('/pantry_lots')&&rejectNextFood){
+      rejectNextFood=false;
+      return Promise.resolve(Response.json({message:'Errore di prova'},{status:400}));
+     }
+     if(options.method==='POST'&&url.endsWith('/pantry_areas')){
+      return Promise.resolve(Response.json([{id:'test-area',...JSON.parse(options.body)}]));
+     }
+     return Promise.resolve(Response.json(url.includes('/pantry_lots?')?lots:[]));
+    };
+    window.familyPantryConnect('test-home',async()=> 'test-token');
    });
+   await page.locator('#pantryList .pantry-group:not(.pantry-priority) .pantry-lot-card').first().waitFor({state:'attached'});
+   await page.evaluate(()=>document.querySelector('#pantryList .pantry-lot-card').closest('details').open=true);
    await page.locator('#pantryAddDetails input[type="file"]').first().waitFor({state:'visible'});
    for(const fraction of [0,0.5,1]){
     const layout=await page.evaluate(async fraction=>{
-     const scroll=document.scrollingElement;
-     const target=Math.round((scroll.scrollHeight-innerHeight)*fraction);
-     window.scrollTo({left:100,top:target,behavior:'instant'});
+     const native=document.documentElement.dataset.distribution==='app-store';
+     const scroll=native?document.querySelector('.app'):document.scrollingElement;
+     const target=Math.round((scroll.scrollHeight-scroll.clientHeight)*fraction);
+     scroll.scrollTo({left:100,top:target,behavior:'instant'});
      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
      const nav=document.querySelector('body>nav');
      const {left,right,bottom}=nav.getBoundingClientRect();
      const lastTab=nav.querySelector('button[data-page="pantry"]').getBoundingClientRect();
-     return {target,x:scrollX,y:scrollY,left,right,bottom,lastTabRight:lastTab.right};
+     return {target,x:scroll.scrollLeft,y:scroll.scrollTop,left,right,bottom,lastTabRight:lastTab.right,documentMoved:native&&(scrollX!==0||scrollY!==0)};
     },fraction);
     assert.equal(layout.x,0,`${width}: the open pantry form permits horizontal scrolling`);
+    assert.equal(layout.documentMoved,false,`${width}: iOS document must stay still`);
     assert.ok(Math.abs(layout.y-layout.target)<2,`${width}: vertical pantry scrolling failed`);
     assert.ok(Math.abs(layout.left)<2 && Math.abs(layout.right-width)<2 && Math.abs(layout.bottom-height)<2,
      `${width}: the pantry navigation left the viewport edges`);
     assert.ok(layout.lastTabRight<=width,`${width}: the pantry tab is clipped`);
    }
    if(width===390){
-    await page.evaluate(()=>{
-     const fetchOriginal=window.fetch.bind(window);
-     let rejectNextFood=true;
-     window.fetch=(url,options={})=>{
-      if(typeof url!=='string'||!url.includes('/rest/v1/'))return fetchOriginal(url,options);
-      if(options.method==='POST'&&url.endsWith('/pantry_lots')&&rejectNextFood){
-       rejectNextFood=false;
-       return Promise.resolve(Response.json({message:'Errore di prova'},{status:400}));
-      }
-      if(options.method==='POST'&&url.endsWith('/pantry_areas')){
-       return Promise.resolve(Response.json([{id:'test-area',...JSON.parse(options.body)}]));
-      }
-      return Promise.resolve(Response.json([]));
-     };
-     window.familyPantryConnect('test-home',async()=> 'test-token');
-    });
     await page.waitForFunction(()=>document.querySelector('#pantryStatus').textContent.includes('Dispensa condivisa aggiornata'));
     const foodName=page.locator('#pantryName');
     await foodName.fill('Pasta di prova');
@@ -96,12 +100,22 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
      const form=page.locator(selector);
      await form.evaluate(el=>{el.closest('details').open=true});
      await page.locator(name).fill(value);
+     if(selector==='#pantryForm'){
+      await form.locator('button[type="submit"]').scrollIntoViewIfNeeded();
+     }
      await form.evaluate(el=>el.requestSubmit());
      await page.waitForFunction(id=>!document.querySelector(id).closest('details').open,selector);
      assert.equal(await page.locator(name).inputValue(),'');
      assert.ok((await page.locator('#toast').textContent()).includes(message));
+     if(selector==='#pantryForm'){
+      const summary=await page.locator('#pantryAddDetails > summary').boundingBox();
+      const nav=await page.locator('body > nav').boundingBox();
+      assert.ok(summary.y>=0 && summary.y+summary.height<=nav.y,'The closed food form must remain visible after saving');
+     }
     }
    }
+   await page.evaluate(()=>window.page('home'));
+   assert.equal(await page.evaluate(()=>document.querySelector('.app').scrollTop+scrollY),0,'Changing sections must return to the top');
    assert.deepEqual(errors,[]);
    console.log(`PASS WebKit ${width}x${height}: seven sections, navigation, clearance, form text and pantry scrolling`);
    await context.close();
