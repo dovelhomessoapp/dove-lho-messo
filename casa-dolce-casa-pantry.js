@@ -500,7 +500,7 @@ $('pantryOverview').addEventListener('click',e=>{
 $('pantryList').addEventListener('click',e=>{if(e.target.closest('#pantryClearOverview')){overviewFilter='';render();$('pantryOverview').scrollIntoView({behavior:'smooth',block:'start'})}});
 function pantryFoodPhotoMarkup(photo){
  if(!photo)return '';
- return '<img src="'+escape(photo)+'" alt="Foto del prodotto" loading="lazy" width="72" height="72" style="display:block;object-fit:contain;border-radius:10px;margin:8px 0">';
+ return '<img src="'+escape(photo)+'" alt="Foto del prodotto" loading="lazy" width="72" height="72" style="display:block;object-fit:contain;border-radius:10px;margin:8px auto">';
 }
 async function readPantryFoodPhoto(file){
  const url=URL.createObjectURL(file);
