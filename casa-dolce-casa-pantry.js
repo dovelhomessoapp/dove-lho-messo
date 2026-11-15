@@ -38,6 +38,13 @@ if(pantryContainer&&shoppingSection&&addSection&&pantryList&&pantryRefreshButton
  shopTitle.after(shoppingSection);
 }
 const status=$('pantryStatus'),online=$('pantryOnline');
+function closeSavedPantryForm(section,message){
+ if(section.open&&section.contains(document.activeElement)){
+  section.querySelector(':scope > summary').focus({preventScroll:true});
+ }
+ section.open=false;
+ toast(message);
+}
 const pantryOverviewStyle=document.createElement('style');
 pantryOverviewStyle.textContent='.pantry-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:14px 0}.pantry-overview-card{min-width:0;text-align:center;background:linear-gradient(145deg,#fff9ff,#f2e5fb);border-radius:17px;padding:10px 3px;box-shadow:0 3px 10px #8652a31a}.pantry-overview-card span{display:block;font-size:22px}.pantry-overview-card strong{display:block;color:#6c3099;font-size:23px;line-height:1.2;margin:4px 0}.pantry-overview-card small{font-size:10px;color:#866c9b;line-height:1.2;display:block}.pantry-overview-warning{background:#fff0e8}.pantry-overview-warning strong{color:#b44347}@media(max-width:355px){.pantry-overview{grid-template-columns:repeat(2,minmax(0,1fr))}}';
 pantryOverviewStyle.textContent += '.pantry-stat-icon{width:34px;height:34px;object-fit:contain;display:inline-block;vertical-align:middle}.pantry-overview-card span:has(.pantry-stat-icon){height:35px}';pantryOverviewStyle.textContent += '.pantry-overview-card[data-overview-filter]{cursor:pointer;border:1px solid transparent;font:inherit;color:inherit;appearance:none;-webkit-appearance:none}.pantry-overview-card[data-overview-filter]:focus-visible{outline:3px solid #8d51b6;outline-offset:2px}.pantry-overview-card[aria-pressed="true"]{border:2px solid #8d51b6;box-shadow:0 0 0 2px #e7d5f8}.pantry-filter-note{padding:10px 13px;border-radius:13px;background:#f4eafa;color:#69368c;margin:12px 0}.pantry-filter-note button{margin-left:8px;border:0;background:transparent;color:#69368c;text-decoration:underline;font-weight:700}';pantryOverviewStyle.textContent += ".pantry-lot-quantity{margin:14px 0 10px;color:#543268;font-size:15px}.pantry-lot-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:100%}.pantry-lot-actions button.secondary{box-sizing:border-box;width:100%;min-width:0;min-height:45px;margin:0;padding:10px 7px!important;white-space:normal;overflow-wrap:normal;word-break:normal;line-height:1.25;font-size:14px;text-align:center;border-radius:15px}.pantry-lot-actions .pantry-lot-delete{grid-column:1/-1;background:#fff2f7!important}@media(min-width:600px){.pantry-lot-actions{grid-template-columns:repeat(3,minmax(0,1fr))}.pantry-lot-actions .pantry-lot-delete{grid-column:auto}}";pantryOverviewStyle.textContent += ".pantry-shopping-card{display:flex;flex-direction:column;align-items:stretch;gap:12px;margin:10px 0!important;padding:15px!important;min-width:0}.pantry-shopping-name{display:block;overflow-wrap:anywhere;line-height:1.4}.pantry-shopping-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0}.pantry-shopping-actions button.secondary{min-width:0;width:100%;box-sizing:border-box;margin:0;padding:12px 8px!important;min-height:46px;white-space:normal;word-break:normal;overflow-wrap:normal;font-size:14px;line-height:1.3;border-radius:15px}";document.head.appendChild(pantryOverviewStyle);
@@ -143,6 +150,7 @@ areaEditor.onsubmit=async e=>{
   redrawAreas();
   render();
   areaMessage.textContent='💜 Ambiente condiviso salvato';
+  closeSavedPantryForm(areaUI,areaMessage.textContent);
  }catch(err){
   if(access!==currentAccess)return;
   if(err.code==='23505'&&err.message.includes('pantry_areas_home_name_unique')){
@@ -153,6 +161,7 @@ areaEditor.onsubmit=async e=>{
       (existing.photo||null)===payload.photo&&JSON.stringify(existing.shelves||[])===JSON.stringify(payload.shelves)){
     resetArea();
     areaMessage.textContent='💜 Questo ambiente è già salvato.';
+    closeSavedPantryForm(areaUI,areaMessage.textContent);
    }else{
     areaMessage.textContent='Esiste già un ambiente con questo nome. Scegli un altro nome o modifica quello esistente.';
    }
@@ -735,7 +744,12 @@ async function addToShopping(name,quantity=1){
 }
 $('shoppingForm').onsubmit=async e=>{
  e.preventDefault();if(busy)return;busy=true;
- try{await addToShopping($('shoppingName').value,Number($('shoppingQty').value));$('shoppingForm').reset();$('shoppingStatus').textContent='💜 Aggiunto alla lista condivisa'}
+ try{
+  await addToShopping($('shoppingName').value,Number($('shoppingQty').value));
+  $('shoppingForm').reset();
+  $('shoppingStatus').textContent='💜 Aggiunto alla lista condivisa';
+  closeSavedPantryForm($('shoppingBox'),$('shoppingStatus').textContent);
+ }
  catch(err){$('shoppingStatus').textContent='Non salvato: '+err.message}finally{busy=false}
 };
 $('shoppingRefresh').onclick=refreshShopping;
@@ -752,7 +766,17 @@ const stockPanel=document.createElement('details');stockPanel.style.cssText='mar
 stockPanel.innerHTML='<summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px"><img class="pantry-real-3d-icon" src="assets/scorte.png" alt=""> Scorte minime della famiglia</summary><p class="hint">Imposta quante confezioni vuoi avere sempre in casa. Sommiamo frigo, freezer e dispensa.</p><form id="pantryStockForm"><label>Nome alimento<input id="pantryStockName" required maxlength="120" placeholder="Es. Latte · Parmalat"></label><label>Quantità minima<input id="pantryStockQty" type="number" min="1" max="99999" value="2" required></label><button class="secondary" type="submit">💜 Salva scorta minima</button></form><p id="pantryStockStatus" class="hint"></p><div id="pantryStockList"></div>';
 $('pantryList').before(stockPanel);
 const stockAlert=document.createElement('div');stockAlert.id='pantryStockAlerts';$('pantryAlerts').after(stockAlert);
-$('pantryStockForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;try{await saveMinimumStock($('pantryStockName').value,Number($('pantryStockQty').value));$('pantryStockStatus').textContent='💜 Scorta minima salvata per la famiglia'}catch(err){$('pantryStockStatus').textContent='Non salvato: '+err.message}finally{busy=false}};
+$('pantryStockForm').onsubmit=async e=>{
+ e.preventDefault();
+ if(busy)return;
+ busy=true;
+ try{
+  await saveMinimumStock($('pantryStockName').value,Number($('pantryStockQty').value));
+  $('pantryStockForm').reset();
+  $('pantryStockStatus').textContent='💜 Scorta minima salvata per la famiglia';
+  closeSavedPantryForm(stockPanel,$('pantryStockStatus').textContent);
+ }catch(err){$('pantryStockStatus').textContent='Non salvato: '+err.message}finally{busy=false}
+};
 $('pantryStockList').onclick=async e=>{
  const b=e.target.closest('button[data-stock-buy],button[data-stock-edit],button[data-stock-delete]');if(!b||busy)return;
  const id=b.dataset.stockBuy||b.dataset.stockEdit||b.dataset.stockDelete,m=minimumStocks.find(x=>x.id===id);if(!m)return;
@@ -858,6 +882,7 @@ if (match) {
   console.warn('Archivio prodotti:', err);
 }
  $('pantryForm').reset();await refresh();pantryPopulateShelf($('pantryShelf'),$('pantryZone').value);status.textContent='💜 Alimento salvato per tutta la famiglia';
+ closeSavedPantryForm(addSection,status.textContent);
  }catch(err){error.textContent='Salvataggio non riuscito: '+err.message}finally{busy=false}};
 $('pantrySearch').addEventListener('input',()=>{
  overviewFilter='';

@@ -63,6 +63,45 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
      `${width}: the pantry navigation left the viewport edges`);
     assert.ok(layout.lastTabRight<=width,`${width}: the pantry tab is clipped`);
    }
+   if(width===390){
+    await page.evaluate(()=>{
+     const fetchOriginal=window.fetch.bind(window);
+     let rejectNextFood=true;
+     window.fetch=(url,options={})=>{
+      if(typeof url!=='string'||!url.includes('/rest/v1/'))return fetchOriginal(url,options);
+      if(options.method==='POST'&&url.endsWith('/pantry_lots')&&rejectNextFood){
+       rejectNextFood=false;
+       return Promise.resolve(Response.json({message:'Errore di prova'},{status:400}));
+      }
+      if(options.method==='POST'&&url.endsWith('/pantry_areas')){
+       return Promise.resolve(Response.json([{id:'test-area',...JSON.parse(options.body)}]));
+      }
+      return Promise.resolve(Response.json([]));
+     };
+     window.familyPantryConnect('test-home',async()=> 'test-token');
+    });
+    await page.waitForFunction(()=>document.querySelector('#pantryStatus').textContent.includes('Dispensa condivisa aggiornata'));
+    const foodName=page.locator('#pantryName');
+    await foodName.fill('Pasta di prova');
+    await page.locator('#pantryForm').evaluate(form=>form.requestSubmit());
+    await page.waitForFunction(()=>document.querySelector('#pantrySaveError').textContent.includes('Errore di prova'));
+    assert.equal(await foodName.inputValue(),'Pasta di prova','A failed save must preserve the food form');
+    const forms=[
+     ['#pantryForm','#pantryName','Pasta di prova','Alimento salvato'],
+     ['#pantryAreaEditor','#pantryAreaName','Frigo di prova','Ambiente condiviso salvato'],
+     ['#pantryStockForm','#pantryStockName','Latte di prova','Scorta minima salvata'],
+     ['#shoppingForm','#shoppingName','Pane di prova','Aggiunto alla lista condivisa']
+    ];
+    for(const [selector,name,value,message] of forms){
+     const form=page.locator(selector);
+     await form.evaluate(el=>{el.closest('details').open=true});
+     await page.locator(name).fill(value);
+     await form.evaluate(el=>el.requestSubmit());
+     await page.waitForFunction(id=>!document.querySelector(id).closest('details').open,selector);
+     assert.equal(await page.locator(name).inputValue(),'');
+     assert.ok((await page.locator('#toast').textContent()).includes(message));
+    }
+   }
    assert.deepEqual(errors,[]);
    console.log(`PASS WebKit ${width}x${height}: seven sections, navigation, clearance, form text and pantry scrolling`);
    await context.close();
