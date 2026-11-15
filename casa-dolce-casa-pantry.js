@@ -61,22 +61,33 @@ const fillAreas=(select,value)=>{select.replaceChildren();for(const [v,t] of are
 const areaUI=document.createElement('details');areaUI.id='pantryCustomAreas';areaUI.style.cssText='margin:15px 0;padding:14px;background:#f7eeff;border:1px solid #e3cdf2;border-radius:19px';
 areaUI.innerHTML='<summary style="cursor:pointer;font-weight:750;color:#6d328e">🏠 ＋ Aggiungi o gestisci ambienti</summary><p class="hint">Crea un secondo freezer, un frigo o una dispensa con nome, icona 3D oppure foto. Tutti i familiari vedranno gli stessi ambienti.</p><div id="pantryAreaRows"></div><form id="pantryAreaEditor"><label>Nome ambiente<input id="pantryAreaName" required maxlength="60" placeholder="Es. Freezer garage"></label><label>Tipo<select id="pantryAreaKind"><option value="freezer">🧊 Freezer</option><option value="frigo">🥬 Frigo</option><option value="dispensa">🥫 Dispensa</option></select></label><label>Scegli l’icona<select id="pantryAreaIcon"><option value="default">Icona del tipo scelto</option><option value="freezer">🧊 Freezer 3D</option><option value="frigo">🥬 Frigo 3D</option><option value="dispensa">🥫 Dispensa 3D</option></select></label><label>Oppure carica una foto<input id="pantryAreaPhoto" type="file" accept="image/*"></label><label>Ripiani o cassetti, uno per riga<textarea id="pantryAreaShelves" rows="3" placeholder="Ripiano 1&#10;Ripiano 2"></textarea></label><p class="hint" id="pantryAreaMessage"></p><button class="primary full" type="submit">💜 Salva ambiente</button><button class="secondary full" id="pantryAreaCancel" type="button" hidden>Annulla modifica</button></form>';
 $('pantryAddDetails').before(areaUI);
-let editArea=null,photoArea=null;
+const areaEditor=$('pantryAreaEditor');
+const areaMessage=$('pantryAreaMessage');
+areaMessage.setAttribute('role','status');
+let editArea=null,photoArea=null,savingArea=false,areaReadVersion=0;
 const areaPhoto=a=>a.photo||areaIcon[a.icon==='default'?a.kind:a.icon]||areaIcon[a.kind];
 function redrawAreas(){
  $('pantryAreaRows').innerHTML=areas.map(a=>'<div style="display:flex;align-items:center;gap:8px;margin:9px 0;min-width:0"><img src="'+escape(areaPhoto(a))+'" style="width:44px;height:44px;border-radius:12px;object-fit:cover"><strong style="flex:1;min-width:0;overflow-wrap:anywhere">'+escape(a.name)+'</strong><button class="secondary" type="button" data-aedit="'+a.id+'">✏️</button><button class="secondary" type="button" data-adel="'+a.id+'">✕</button></div>').join('');
  const selected=$('pantryZone').value;fillAreas($('pantryZone'),selected);
  pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);
 }
-function resetArea(){editArea=null;photoArea=null;$('pantryAreaEditor').reset();$('pantryAreaCancel').hidden=true}
+function resetArea(){
+ editArea=null;
+ photoArea=null;
+ areaEditor.reset();
+ $('pantryAreaCancel').hidden=true;
+ areaMessage.textContent='';
+ showAreaIcon();
+}
 const preview=document.createElement('div');preview.id='pantryAreaIconPreview';preview.style.cssText='display:flex;gap:9px;align-items:center;padding:9px;border-radius:14px;background:#fff';$('pantryAreaIcon').closest('label').after(preview);
 function showAreaIcon(){const kind=$('pantryAreaKind').value,choice=$('pantryAreaIcon').value;preview.innerHTML='<img src="'+areaIcon[choice==='default'?kind:choice]+'" alt="Icona selezionata" style="width:54px;height:54px;object-fit:contain"><span>Anteprima icona 3D</span>'}
 $('pantryAreaKind').addEventListener('change',showAreaIcon);$('pantryAreaIcon').addEventListener('change',showAreaIcon);showAreaIcon();
-$('pantryAreaCancel').onclick=resetArea;
+$('pantryAreaCancel').onclick=()=>{if(!savingArea)resetArea()};
 $('pantryAreaRows').onclick=async e=>{
+ if(savingArea||!access)return;
  const id=e.target.closest('[data-aedit],[data-adel]')?.dataset.aedit||e.target.closest('[data-adel]')?.dataset.adel;
  const a=areas.find(x=>x.id===id);if(!a)return;
- if(e.target.closest('[data-aedit]')){editArea=id;photoArea=a.photo;$('pantryAreaName').value=a.name;$('pantryAreaKind').value=a.kind;$('pantryAreaIcon').value=a.icon;$('pantryAreaShelves').value=(a.shelves||[]).join('\n');$('pantryAreaCancel').hidden=false;return}
+ if(e.target.closest('[data-aedit]')){resetArea();editArea=id;photoArea=a.photo;$('pantryAreaName').value=a.name;$('pantryAreaKind').value=a.kind;$('pantryAreaIcon').value=a.icon;$('pantryAreaShelves').value=(a.shelves||[]).join('\n');$('pantryAreaCancel').hidden=false;showAreaIcon();return}
  if(lots.some(l=>l.area_id===id)){alert('Sposta prima gli alimenti presenti in questo ambiente.');return}
  if(!confirm('Eliminare '+a.name+'?'))return;
  try{await request('pantry_areas?id=eq.'+id+'&home_id=eq.'+access.homeId,{method:'DELETE'});await refresh()}catch(err){$('pantryAreaMessage').textContent=err.message}
@@ -85,11 +96,73 @@ $('pantryAreaPhoto').onchange=async e=>{
  const file=e.target.files?.[0];if(!file)return;
  try{const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),scale=Math.min(1,380/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();photoArea=canvas.toDataURL('image/jpeg',.6);if(photoArea.length>170000)throw Error('Foto troppo grande');$('pantryAreaMessage').textContent='📷 Foto pronta'}catch(err){photoArea=null;$('pantryAreaMessage').textContent='Foto non caricata: '+err.message}
 };
-$('pantryAreaEditor').onsubmit=async e=>{
- e.preventDefault();if(!access)return;
- const payload={name:$('pantryAreaName').value.trim(),kind:$('pantryAreaKind').value,icon:$('pantryAreaIcon').value,photo:photoArea,shelves:[...new Set($('pantryAreaShelves').value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean))].slice(0,30)};
- if(areas.some(a=>a.id!==editArea&&a.name.toLowerCase()===payload.name.toLowerCase())){$('pantryAreaMessage').textContent='Nome già utilizzato';return}
- try{if(editArea&&lots.some(l=>l.area_id===editArea)&&areas.find(a=>a.id===editArea)?.kind!==payload.kind)throw Error('Per cambiare tipo, sposta prima gli alimenti di questo ambiente.');if(editArea)await request('pantry_areas?id=eq.'+editArea+'&home_id=eq.'+access.homeId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});else await request('pantry_areas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,home_id:access.homeId})});resetArea();await refresh();$('pantryAreaMessage').textContent='💜 Ambiente condiviso salvato'}catch(err){$('pantryAreaMessage').textContent='Errore: '+err.message}
+async function refreshAreas(){
+ const currentAccess=access;
+ const readVersion=++areaReadVersion;
+ const refreshed=await request('pantry_areas?select=id,name,kind,icon,photo,shelves&home_id=eq.'+encodeURIComponent(currentAccess.homeId)+'&order=name.asc',{cache:'no-store'});
+ if(access!==currentAccess||readVersion!==areaReadVersion)return;
+ areas=refreshed;
+ redrawAreas();
+}
+areaEditor.onsubmit=async e=>{
+ e.preventDefault();
+ if(!access||savingArea)return;
+ const currentAccess=access;
+ const areaBeingEdited=editArea;
+ const name=$('pantryAreaName').value.trim();
+ if(!name){areaMessage.textContent='Inserisci un nome per l’ambiente.';return}
+ const payload={
+  name,
+  kind:$('pantryAreaKind').value,
+  icon:$('pantryAreaIcon').value,
+  photo:photoArea,
+  shelves:[...new Set($('pantryAreaShelves').value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean))].slice(0,30)
+ };
+ if(areaBeingEdited&&lots.some(l=>l.area_id===areaBeingEdited)&&areas.find(a=>a.id===areaBeingEdited)?.kind!==payload.kind){
+  areaMessage.textContent='Per cambiare tipo, sposta prima gli alimenti di questo ambiente.';
+  return;
+ }
+ savingArea=true;
+ const controls=[...areaEditor.elements].filter(control=>!control.disabled);
+ controls.forEach(control=>{control.disabled=true});
+ areaMessage.textContent='Salvataggio in corso…';
+ try{
+  const homeFilter='home_id=eq.'+encodeURIComponent(currentAccess.homeId);
+  const path=areaBeingEdited?'pantry_areas?id=eq.'+encodeURIComponent(areaBeingEdited)+'&'+homeFilter:'pantry_areas';
+  const [saved]=await request(path,{
+   method:areaBeingEdited?'PATCH':'POST',
+   headers:{'Content-Type':'application/json',Prefer:'return=representation'},
+   body:JSON.stringify(areaBeingEdited?payload:{...payload,home_id:currentAccess.homeId})
+  })||[];
+  if(access!==currentAccess)return;
+  if(!saved)throw Error('Ambiente non trovato. Aggiorna la dispensa e riprova.');
+  // Discard any area read that started before the save was confirmed.
+  areaReadVersion++;
+  areas=[...areas.filter(a=>a.id!==saved.id),saved].sort((a,b)=>a.name.localeCompare(b.name,'it'));
+  resetArea();
+  redrawAreas();
+  render();
+  areaMessage.textContent='💜 Ambiente condiviso salvato';
+ }catch(err){
+  if(access!==currentAccess)return;
+  if(err.code==='23505'&&err.message.includes('pantry_areas_home_name_unique')){
+   try{await refreshAreas();if(access===currentAccess)render()}catch{}
+   if(access!==currentAccess)return;
+   const existing=areas.find(a=>a.id!==areaBeingEdited&&a.name.trim().toLowerCase()===name.toLowerCase());
+   if(!areaBeingEdited&&existing&&existing.kind===payload.kind&&existing.icon===payload.icon&&
+      (existing.photo||null)===payload.photo&&JSON.stringify(existing.shelves||[])===JSON.stringify(payload.shelves)){
+    resetArea();
+    areaMessage.textContent='💜 Questo ambiente è già salvato.';
+   }else{
+    areaMessage.textContent='Esiste già un ambiente con questo nome. Scegli un altro nome o modifica quello esistente.';
+   }
+  }else{
+   areaMessage.textContent='Salvataggio non riuscito: '+err.message;
+  }
+ }finally{
+  savingArea=false;
+  controls.forEach(control=>{control.disabled=false});
+ }
 };
 const areaCSS=document.createElement('style');areaCSS.textContent='#pantryCustomAreas label{display:block;margin:10px 0}#pantryCustomAreas input,#pantryCustomAreas select,#pantryCustomAreas textarea{display:block;box-sizing:border-box;width:100%;margin-top:5px}#pantryCustomAreas [data-aedit],#pantryCustomAreas [data-adel]{min-width:38px;padding:8px}';document.head.append(areaCSS);
 
@@ -452,7 +525,7 @@ async function request(path,opts={}){
  if(!access)throw Error('Accedi prima alla tua casa');
  const token=await access.token();
  const response=await fetch(base+'/rest/v1/'+path,{...opts,headers:{apikey,Authorization:'Bearer '+token,...opts.headers}});
- if(!response.ok){const d=await response.json().catch(()=>({}));throw Error(d.message||'Errore '+response.status)}
+ if(!response.ok){const d=await response.json().catch(()=>({}));throw Object.assign(Error(d.message||'Errore '+response.status),{code:d.code})}
  if(response.status===204)return null;const t=await response.text();return t?JSON.parse(t):null;
 }
 async function rememberPantryPosition(l){
@@ -616,7 +689,7 @@ $('pantryStockList').onclick=async e=>{
 };
 async function refresh(){
  if(!access)return;
- try{status.textContent='Aggiorno la dispensa…';areas=await request('pantry_areas?select=id,name,kind,icon,photo,shelves&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=name.asc');redrawAreas();lots=await request('pantry_lots?select=id,name,zone,area_id,quantity,expires_on,opened_on,opened_until,shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);await refreshMinimumStocks();render();await refreshShopping()}
+ try{status.textContent='Aggiorno la dispensa…';await refreshAreas();lots=await request('pantry_lots?select=id,name,zone,area_id,quantity,expires_on,opened_on,opened_until,shelf&home_id=eq.'+encodeURIComponent(access.homeId)+'&order=expires_on.asc.nullslast');status.textContent='💜 Dispensa condivisa aggiornata';pantryPopulateShelf($('pantryShelf'),$('pantryZone').value,$('pantryShelf').value);await refreshMinimumStocks();render();await refreshShopping()}
  catch(e){status.textContent='Per attivare la dispensa condivisa, esegui prima pantry-setup.sql in Supabase. Dettaglio: '+e.message}
 }
 window.familyPantryConnect=(homeId,getToken)=>{access={homeId,token:getToken};online.hidden=false;refresh()};
