@@ -103,15 +103,16 @@ let token=null,house=null,sending=false;
 let refreshToken=null;
 let familyNicknames=new Map();
 function currentFamilyUserId(){try{return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).sub||null}catch{return null}}
+window.dlmCategoryOwnerId=currentFamilyUserId;
 function showFamilyCreator(item){return item?.createdByName||familyNicknames.get(item?.createdBy)||'Non identificato'}
 const SESSION_KEY='dlm-casa-dolce-casa-family-refresh-v1';
 
-// Conserva la categoria del libro nella descrizione cloud finché la tabella items non ha una colonna dedicata.
+// Conserva la categoria nella descrizione cloud con il marcatore già supportato dalle versioni precedenti.
 // Il marcatore è rimosso dalla descrizione mostrata all'utente.
 const DLM_BOOK_CATEGORY_TAG='[DLM_BOOK_CATEGORY:';
-function dlmCloudDescription(description,category,kind){
+function dlmCloudDescription(description,category){
  const cleaned=dlmReadCloudDescription(description).desc;
- if(kind!=='book'||!String(category||'').trim())return cleaned||null;
+ if(!String(category||'').trim())return cleaned||null;
  return (cleaned?cleaned+'\n':'')+DLM_BOOK_CATEGORY_TAG+encodeURIComponent(String(category).trim())+']';
 }
 function dlmReadCloudDescription(description){
@@ -803,7 +804,7 @@ async function uploadNew(){
    let imagePath=null;
    if(i.photo){try{imagePath=await uploadPhoto(i)}catch(e){notice('Foto ancora sul telefono: '+e.message);continue}}
    if(i.place&&!cloudPlaceIds.has(i.place)){notice('Posizione locale da sincronizzare prima dell’oggetto.');continue}
-   const row={id:i.id,home_id:house.id,title:i.name,kind:i.kind==='book'?'book':'object',author:i.kind==='book'?(i.author||null):null,isbn:i.kind==='book'?(i.barcode||null):null,barcode:i.kind==='book'?null:(i.barcode||null),description:dlmCloudDescription(i.desc,i.category,i.kind),location_id:i.place||null,estimated_value:i.value===''?null:Number(i.value),created_by:i.createdBy||currentFamilyUserId(),image_url:imagePath};
+   const row={id:i.id,home_id:house.id,title:i.name,kind:i.kind==='book'?'book':'object',author:i.kind==='book'?(i.author||null):null,isbn:i.kind==='book'?(i.barcode||null):null,barcode:i.kind==='book'?null:(i.barcode||null),description:dlmCloudDescription(i.desc,i.category),location_id:i.place||null,estimated_value:i.value===''?null:Number(i.value),created_by:i.createdBy||currentFamilyUserId(),image_url:imagePath};
    const res=await familyFetch(base+'/rest/v1/items?on_conflict=id',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(row)});
    if(!res.ok){const err=await res.json().catch(()=>({}));if(err.message==='FREE_PLAN_ITEM_LIMIT_REACHED'){notice('Hai raggiunto il limite gratuito di 30 elementi. Attiva Premium per aggiungerne altri. 💜');window.dlmRefreshLimits?.();throw Error('Limite gratuito raggiunto')}throw Error(err.message||'Errore salvataggio')}
    cloudIds.add(i.id);seenIds.add(i.id);saveSeen();pendingCreates.delete(i.id);saveCreates();
@@ -818,7 +819,7 @@ async function syncEdits(){
  if(!token||!house||!navigator.onLine)return;
  for(const [id,edit] of pendingEdits){
   try{
-   const r=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({title:edit.name,kind:edit.kind==='book'?'book':'object',author:edit.kind==='book'?(edit.author||null):null,isbn:edit.kind==='book'?(edit.barcode||null):null,barcode:edit.kind==='book'?null:(edit.barcode||null),description:dlmCloudDescription(edit.desc,edit.category,edit.kind),location_id:edit.place||null,estimated_value:edit.value===''?null:Number(edit.value),updated_by:edit.updatedBy||null})});
+   const r=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({title:edit.name,kind:edit.kind==='book'?'book':'object',author:edit.kind==='book'?(edit.author||null):null,isbn:edit.kind==='book'?(edit.barcode||null):null,barcode:edit.kind==='book'?null:(edit.barcode||null),description:dlmCloudDescription(edit.desc,edit.category),location_id:edit.place||null,estimated_value:edit.value===''?null:Number(edit.value),updated_by:edit.updatedBy||null})});
    const rows=await r.json();
    if(!r.ok||!Array.isArray(rows)||rows.length!==1)throw Error(rows?.message||'Aggiornamento non confermato');
    pendingEdits.delete(id);saveEdits();notice('Modifica offline sincronizzata.');
@@ -836,7 +837,7 @@ window.familyUpdateItem=async item=>{
  try{
   const res=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(item.id)+'&home_id=eq.'+encodeURIComponent(house.id),{
    method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},
-   body:JSON.stringify({title:item.name,kind:item.kind==='book'?'book':'object',author:item.kind==='book'?(item.author||null):null,isbn:item.kind==='book'?(item.barcode||null):null,barcode:item.kind==='book'?null:(item.barcode||null),description:dlmCloudDescription(item.desc,item.category,item.kind),location_id:item.place&&cloudPlaceIds.has(item.place)?item.place:null,estimated_value:item.value===''?null:Number(item.value),updated_by:editorId})
+   body:JSON.stringify({title:item.name,kind:item.kind==='book'?'book':'object',author:item.kind==='book'?(item.author||null):null,isbn:item.kind==='book'?(item.barcode||null):null,barcode:item.kind==='book'?null:(item.barcode||null),description:dlmCloudDescription(item.desc,item.category),location_id:item.place&&cloudPlaceIds.has(item.place)?item.place:null,estimated_value:item.value===''?null:Number(item.value),updated_by:editorId})
   });
   const result=await res.json().catch(()=>null);
   if(!res.ok||!Array.isArray(result)||result.length!==1)throw Error(result?.message||'Conferma server non ricevuta');

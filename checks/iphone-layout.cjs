@@ -116,6 +116,25 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
    }
    await page.evaluate(()=>window.page('home'));
    assert.equal(await page.evaluate(()=>document.querySelector('.app').scrollTop+scrollY),0,'Changing sections must return to the top');
+   if(width===390){
+    await page.evaluate(()=>{resetForm();updateKind();window.page('add')});
+    const categories=page.locator('#dlmObjectCategorySelect');
+    page.once('dialog',dialog=>dialog.accept('Accessori per dolci'));
+    await page.locator('#dlmAddObjectCategory').click();
+    assert.equal(await categories.inputValue(),'Accessori per dolci');
+    await page.reload();
+    await page.evaluate(()=>{resetForm();updateKind();window.page('add')});
+    await categories.selectOption('Accessori per dolci');
+    await page.locator('#itemName').fill('Stampo di prova');
+    await page.locator('#itemForm').evaluate(form=>form.requestSubmit());
+    await page.waitForFunction(()=>document.querySelector('#items').classList.contains('active'));
+    await page.evaluate(()=>{
+     const archive=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-v1'));
+     window.editItem(archive.items.find(item=>item.name==='Stampo di prova').id);
+    });
+    assert.equal(await categories.inputValue(),'Accessori per dolci');
+    assert.equal(await page.locator('#dlmBookCategorySelect option[value="Accessori per dolci"]').count(),0);
+   }
    assert.deepEqual(errors,[]);
    console.log(`PASS WebKit ${width}x${height}: seven sections, navigation, clearance, form text and pantry scrolling`);
    await context.close();

@@ -1139,31 +1139,63 @@ $('#scanImageFile').addEventListener('change',async e=>{
  }finally{if(url)URL.revokeObjectURL(url);e.target.value=''}
 });
 $('#startScan').onclick=startCamera;$('#stopScan').onclick=stopCamera;if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});const dlmBookCategoryDefaults=['Narrativa','Romanzi','Gialli e thriller','Fantasy e fantascienza','Libri di cucina','Bambini e ragazzi','Fumetti e manga','Storia','Scienza e natura','Manuali e hobby','Viaggi','Biografie','Saggi','Poesia','Scuola e studio','Arte e fotografia','Sport','Religione e spiritualità','Salute e benessere','Economia e lavoro','Lingue straniere','Dizionari ed enciclopedie','Altro'];
-const dlmBookCategoryStorage='dlm-custom-book-categories-v1';
-function dlmBookCategoryOptions(){
- let custom=[];try{custom=JSON.parse(localStorage.getItem(dlmBookCategoryStorage)||'[]')}catch{}
- const fromBooks=db.items.filter(i=>i.kind==='book').map(i=>i.category).filter(Boolean);
- return [...new Set([...dlmBookCategoryDefaults,...custom,...fromBooks].map(x=>String(x||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'it',{sensitivity:'base'}));
+const dlmCategoryPickers=[
+ {kind:'book',select:'dlmBookCategorySelect',add:'dlmAddBookCategory',defaults:dlmBookCategoryDefaults,
+  storageKey:()=> 'dlm-custom-book-categories-v1'},
+ {kind:'object',select:'dlmObjectCategorySelect',add:'dlmAddObjectCategory',
+  defaults:['Abbigliamento e accessori','Altro','Attrezzi e fai da te','Bellezza e cura personale','Casa e arredamento','Cucina','Documenti','Elettronica e tecnologia','Giocattoli e hobby','Libri'],
+  storageKey:()=> 'dlm-custom-object-categories-v1:'+ (window.dlmCategoryOwnerId?.()||'guest')}
+];
+function readCustomCategories(storageKey){
+ try{
+  const categories=JSON.parse(localStorage.getItem(storageKey)||'[]');
+  return Array.isArray(categories)?categories:[];
+ }catch{return []}
 }
-function dlmSyncBookCategory(){
- const picker=document.getElementById('dlmBookCategorySelect');if(!picker)return;
+function categoryOptions({kind,defaults},custom){
+ const used=db.items.filter(i=>(i.kind==='book'?'book':'object')===kind).map(i=>i.category);
+ const distinct=new Map();
+ for(const value of [...defaults,...custom,...used]){
+  const name=String(value||'').trim();
+  const key=name.toLocaleLowerCase('it');
+  if(name&&!distinct.has(key))distinct.set(key,name);
+ }
+ return [...distinct.values()].sort((a,b)=>a.localeCompare(b,'it',{sensitivity:'base'}));
+}
+function syncItemCategory(){
+ const config=dlmCategoryPickers.find(picker=>picker.kind===$('#kind').value);
+ const select=config&&document.getElementById(config.select);
+ if(!select)return;
  const current=$('#itemCategory').value.trim();
- picker.replaceChildren(new Option('Seleziona una categoria…',''),...dlmBookCategoryOptions().map(v=>new Option(v,v)));
- if(current&&!Array.from(picker.options).some(o=>o.value===current))picker.add(new Option(current,current));
- picker.value=current;
+ const options=categoryOptions(config,readCustomCategories(config.storageKey()));
+ select.replaceChildren(new Option('Seleziona una categoria…',''),...options.map(name=>new Option(name,name)));
+ const existing=options.find(name=>name.toLocaleLowerCase('it')===current.toLocaleLowerCase('it'));
+ if(current&&!existing)select.add(new Option(current,current));
+ select.value=existing||current;
 }
-document.getElementById('dlmBookCategorySelect')?.addEventListener('change',e=>{$('#itemCategory').value=e.target.value;saveDraft()});
-document.getElementById('dlmAddBookCategory')?.addEventListener('click',()=>{
- const name=prompt('Come vuoi chiamare la nuova categoria di libri?')?.trim();
- if(!name)return;
- if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
- let custom=[];try{custom=JSON.parse(localStorage.getItem(dlmBookCategoryStorage)||'[]')}catch{}
- const existing=dlmBookCategoryOptions().find(x=>x.toLocaleLowerCase()===name.toLocaleLowerCase());
- const chosen=existing||name;
- if(!existing){custom.push(chosen);try{localStorage.setItem(dlmBookCategoryStorage,JSON.stringify(custom))}catch{}}
- $('#itemCategory').value=chosen;dlmSyncBookCategory();saveDraft();toast('Categoria disponibile nella tendina 💜');
-});
-function updateKind(){const isBook=$('#kind').value==='book';const bookPicker=document.getElementById('dlmBookCategoryPicker');if(bookPicker)bookPicker.hidden=!isBook;const objectCategory=document.getElementById('dlmObjectCategoryLabel');if(objectCategory)objectCategory.hidden=isBook;if(isBook)dlmSyncBookCategory();const photoAiDropdown=document.getElementById('photoAiDropdown');if(photoAiDropdown){photoAiDropdown.hidden=isBook;if(isBook)photoAiDropdown.open=false;}$('#authorWrap').hidden=!isBook;$('#lookupBook').hidden=!isBook;['bookIsbnTools','sbnDirectBox','bookCoverTools'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook});['googleCoverSearchBtn','pasteBookCoverBtn','pasteCoverHelp'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook})}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,category:$('#itemCategory').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemCategory','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=isEAN(code)&&!/^97[89]/.test(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
+for(const config of dlmCategoryPickers){
+ document.getElementById(config.select)?.addEventListener('change',e=>{
+  $('#itemCategory').value=e.target.value;
+  saveDraft();
+ });
+ document.getElementById(config.add)?.addEventListener('click',()=>{
+  const name=prompt('Come vuoi chiamare la nuova categoria?')?.trim();
+  if(!name)return;
+  if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
+  const storageKey=config.storageKey();
+  const custom=readCustomCategories(storageKey);
+  const existing=categoryOptions(config,custom).find(value=>value.toLocaleLowerCase('it')===name.toLocaleLowerCase('it'));
+  if(!existing){
+   try{localStorage.setItem(storageKey,JSON.stringify([...custom,name]))}
+   catch{toast('Impossibile salvare la categoria sul dispositivo');return}
+  }
+  $('#itemCategory').value=existing||name;
+  syncItemCategory();
+  saveDraft();
+  toast('Categoria disponibile nella tendina 💜');
+ });
+}
+function updateKind(){const isBook=$('#kind').value==='book';const bookPicker=document.getElementById('dlmBookCategoryPicker');if(bookPicker)bookPicker.hidden=!isBook;const objectCategory=document.getElementById('dlmObjectCategoryLabel');if(objectCategory)objectCategory.hidden=isBook;syncItemCategory();const photoAiDropdown=document.getElementById('photoAiDropdown');if(photoAiDropdown){photoAiDropdown.hidden=isBook;if(isBook)photoAiDropdown.open=false;}$('#authorWrap').hidden=!isBook;$('#lookupBook').hidden=!isBook;['bookIsbnTools','sbnDirectBox','bookCoverTools'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook});['googleCoverSearchBtn','pasteBookCoverBtn','pasteCoverHelp'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook})}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,category:$('#itemCategory').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];$('#itemCategory').value=d.category??d.itemCategory??'';photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=isEAN(code)&&!/^97[89]/.test(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
 $('#barcode').addEventListener('input',updateCodeLookupLabel);
 $('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
 
