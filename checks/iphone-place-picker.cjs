@@ -9,7 +9,11 @@ const places = [{id:'room', name:'Camera matrimoniale', parentId:''},
  {id:'wardrobe', name:'Armadio bianco con ante scorrevoli', parentId:'room'},
  ...Array.from({length:24}, (_,i)=>({id:'shelf-'+i,
   name:i===23?'Scatola verde dei ricordi e degli oggetti da conservare con attenzione':'Ripiano '+(i+1),
-  parentId:'wardrobe', photo:i%2?photo:''}))];
+  parentId:'wardrobe', photo:i%2?photo:''})),
+ {id:'kitchen',name:'Cucina',parentId:''},
+ {id:'cupboard',name:'armadietto sotto finestra',parentId:'kitchen'},
+ {id:'inside-shelf',name:'Ripiano 1',parentId:'cupboard'},
+ {id:'direct-shelf',name:'Ripiano 1',parentId:'kitchen'}];
 (async()=>{
  const root=process.cwd();
  const server=http.createServer((req,res)=>{
@@ -45,6 +49,15 @@ const places = [{id:'room', name:'Camera matrimoniale', parentId:''},
    assert.equal(measurements.rows.length,places.length+1,'All locations and unassigned must be listed');
    assert.ok(measurements.scrollHeight>measurements.clientHeight,'Long list must scroll');
    assert.ok(measurements.clientHeight<=391,'List must stay bounded');
+   const choices=page.locator('#dlmItemPlaceOptions button');
+   const choiceIds=await choices.evaluateAll(buttons=>buttons.map(button=>button.dataset.placeChoice));
+   assert.deepEqual(choiceIds.slice(-4),['kitchen','cupboard','inside-shelf','direct-shelf']);
+   const cupboard=await page.locator('[data-place-choice="cupboard"]').boundingBox();
+   const inside=await page.locator('[data-place-choice="inside-shelf"]').boundingBox();
+   const direct=await page.locator('[data-place-choice="direct-shelf"]').boundingBox();
+   assert.ok(inside.x>direct.x && direct.x===cupboard.x,'Indentation must distinguish the two shelves');
+   assert.equal(await page.locator('[data-place-choice="inside-shelf"] small').textContent(),'In Cucina › armadietto sotto finestra');
+   assert.equal(await page.locator('[data-place-choice="direct-shelf"] small').textContent(),'In Cucina');
    measurements.rows.forEach(({row,parts},i)=>{
     assert.ok(row.height>=63,`${width}: row ${i} collapsed to ${row.height}px`);
     for(const p of parts){
@@ -63,7 +76,7 @@ const places = [{id:'room', name:'Camera matrimoniale', parentId:''},
    assert.equal(await page.locator('#dlmItemPlaceOptions button').count(),2,'Search includes match and unassigned');
    await page.locator('[data-place-choice=""]').click();
    assert.equal(await page.locator('#itemPlace').inputValue(),'');
-   console.log(`PASS WebKit ${width}x${height}: 26 nested locations, wrapping, scrolling, selection and search`);
+   console.log(`PASS WebKit ${width}x${height}: location hierarchy, duplicate names, wrapping, scrolling, selection and search`);
    await context.close();
   }
  }finally{
