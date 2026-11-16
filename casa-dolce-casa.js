@@ -1143,7 +1143,7 @@ const dlmCategoryPickers=[
  {kind:'book',select:'dlmBookCategorySelect',add:'dlmAddBookCategory',defaults:dlmBookCategoryDefaults,
   storageKey:()=> 'dlm-custom-book-categories-v1'},
  {kind:'object',select:'dlmObjectCategorySelect',add:'dlmAddObjectCategory',
-  defaults:['Abbigliamento e accessori','Altro','Attrezzi e fai da te','Bellezza e cura personale','Casa e arredamento','Cucina','Documenti','Elettronica e tecnologia','Giocattoli e hobby','Libri'],
+  defaults:[],
   storageKey:()=> 'dlm-custom-object-categories-v1:'+ (window.dlmCategoryOwnerId?.()||'guest')}
 ];
 function readCustomCategories(storageKey){
@@ -1153,7 +1153,8 @@ function readCustomCategories(storageKey){
  }catch{return []}
 }
 function categoryOptions({kind,defaults},custom){
- const used=db.items.filter(i=>(i.kind==='book'?'book':'object')===kind).map(i=>i.category);
+ const used=db.items.filter(i=>(i.kind==='book'?'book':'object')===kind).map(i=>i.category)
+  .filter(name=>kind==='book'||String(name||'').trim().toLocaleLowerCase('it')!=='libri');
  const distinct=new Map();
  for(const value of [...defaults,...custom,...used]){
   const name=String(value||'').trim();
@@ -1169,12 +1170,22 @@ function syncItemCategory(){
  const current=$('#itemCategory').value.trim();
  const options=categoryOptions(config,readCustomCategories(config.storageKey()));
  select.replaceChildren(new Option('Seleziona una categoria…',''),...options.map(name=>new Option(name,name)));
+ if(config.kind==='object'){
+  const create=new Option('＋ Crea nuova categoria','');
+  create.dataset.createCategory='';
+  select.add(create,1);
+ }
  const existing=options.find(name=>name.toLocaleLowerCase('it')===current.toLocaleLowerCase('it'));
  if(current&&!existing)select.add(new Option(current,current));
  select.value=existing||current;
 }
 for(const config of dlmCategoryPickers){
  document.getElementById(config.select)?.addEventListener('change',e=>{
+  if(e.target.selectedOptions[0]?.hasAttribute('data-create-category')){
+   syncItemCategory();
+   document.getElementById(config.add)?.click();
+   return;
+  }
   $('#itemCategory').value=e.target.value;
   saveDraft();
  });

@@ -119,8 +119,12 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
    if(width===390){
     await page.evaluate(()=>{resetForm();updateKind();window.page('add')});
     const categories=page.locator('#dlmObjectCategorySelect');
+    assert.deepEqual(await categories.locator('option').allTextContents(),['Seleziona una categoria…','＋ Crea nuova categoria']);
     page.once('dialog',dialog=>dialog.accept('Accessori per dolci'));
-    await page.locator('#dlmAddObjectCategory').click();
+    await categories.selectOption({label:'＋ Crea nuova categoria'});
+    assert.equal(await categories.inputValue(),'Accessori per dolci');
+    page.once('dialog',dialog=>dialog.dismiss());
+    await categories.selectOption({label:'＋ Crea nuova categoria'});
     assert.equal(await categories.inputValue(),'Accessori per dolci');
     await page.reload();
     await page.evaluate(()=>{resetForm();updateKind();window.page('add')});
