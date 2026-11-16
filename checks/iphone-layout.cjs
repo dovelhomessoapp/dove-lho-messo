@@ -156,6 +156,25 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
     const archive=await page.evaluate(()=>JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-v1')));
     assert.equal(archive.items.find(item=>item.name==='Stampo di prova').category,'');
     assert.deepEqual(await categories.locator('option').allTextContents(),['Seleziona una categoria…','＋ Crea nuova categoria']);
+    await page.evaluate(()=>{
+     db.items.push(
+      {id:'b',kind:'object',name:'Teglia',category:'Da forno'},
+      {id:'a',kind:'object',name:'Stampino',category:'da forno'},
+      {id:'c',kind:'object',name:'Vassoio',category:'Da tavola'},
+      {id:'d',kind:'book',name:'Ricettario',category:'Da forno'}
+     );
+     window.page('items');
+    });
+    const filter=page.locator('#objectCategoryFilter');
+    const objectNames=page.locator('#itemList .entry strong');
+    await filter.selectOption({label:'Da forno'});
+    assert.deepEqual(await objectNames.allTextContents(),['Stampino','Teglia']);
+    assert.equal(await page.locator('#itemList [role="status"]').textContent(),'2 oggetti in «Da forno»');
+    await page.locator('#itemFilter').fill('Teglia');
+    assert.deepEqual(await objectNames.allTextContents(),['Teglia']);
+    await page.locator('#itemFilter').fill('');
+    await filter.selectOption('');
+    assert.equal(await objectNames.count(),4,'All objects return and the book stays in the library');
    }
    assert.deepEqual(errors,[]);
    console.log(`PASS WebKit ${width}x${height}: seven sections, navigation, clearance, form text and pantry scrolling`);
