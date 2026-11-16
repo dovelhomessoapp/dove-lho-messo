@@ -138,6 +138,24 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
     });
     assert.equal(await categories.inputValue(),'Accessori per dolci');
     assert.equal(await page.locator('#dlmBookCategorySelect option[value="Accessori per dolci"]').count(),0);
+    await page.evaluate(()=>{
+     document.querySelector('#dlmGuideOverlay')?.style.setProperty('display','none');
+     window.familyUpdateObjectCategories=items=>{window.categoryChanges=items.map(({name,category})=>({name,category}));};
+    });
+    await page.locator('#dlmObjectCategoryManager summary').click();
+    page.once('dialog',dialog=>dialog.accept('Stampi e teglie'));
+    await page.locator('#dlmRenameObjectCategory').click();
+    assert.equal(await categories.inputValue(),'Stampi e teglie');
+    assert.deepEqual(await page.evaluate(()=>window.categoryChanges),[{name:'Stampo di prova',category:'Stampi e teglie'}]);
+    page.once('dialog',dialog=>dialog.dismiss());
+    await page.locator('#dlmDeleteObjectCategory').click();
+    assert.equal(await categories.inputValue(),'Stampi e teglie');
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#dlmDeleteObjectCategory').click();
+    assert.equal(await categories.inputValue(),'');
+    const archive=await page.evaluate(()=>JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-v1')));
+    assert.equal(archive.items.find(item=>item.name==='Stampo di prova').category,'');
+    assert.deepEqual(await categories.locator('option').allTextContents(),['Seleziona una categoria…','＋ Crea nuova categoria']);
    }
    assert.deepEqual(errors,[]);
    console.log(`PASS WebKit ${width}x${height}: seven sections, navigation, clearance, form text and pantry scrolling`);

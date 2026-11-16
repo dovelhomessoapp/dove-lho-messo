@@ -815,19 +815,44 @@ async function uploadNew(){
  }catch(e){notice('Sincronizzazione da riprovare: '+e.message)}
  finally{sending=false}
 }
-async function syncEdits(){
+let activeEditSync=null;
+function syncEdits(){
+ if(!activeEditSync)activeEditSync=flushEdits().finally(()=>{activeEditSync=null});
+ return activeEditSync;
+}
+async function flushEdits(){
  if(!token||!house||!navigator.onLine)return;
- for(const [id,edit] of pendingEdits){
+ while(pendingEdits.size){
+  const [id,edit]=pendingEdits.entries().next().value;
   try{
-   const r=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({title:edit.name,kind:edit.kind==='book'?'book':'object',author:edit.kind==='book'?(edit.author||null):null,isbn:edit.kind==='book'?(edit.barcode||null):null,barcode:edit.kind==='book'?null:(edit.barcode||null),description:dlmCloudDescription(edit.desc,edit.category),location_id:edit.place||null,estimated_value:edit.value===''?null:Number(edit.value),updated_by:edit.updatedBy||null})});
+   const payload=edit.categoryOnly
+    ? {description:dlmCloudDescription(edit.desc,edit.category),updated_by:edit.updatedBy||null}
+    : {title:edit.name,kind:edit.kind==='book'?'book':'object',author:edit.kind==='book'?(edit.author||null):null,isbn:edit.kind==='book'?(edit.barcode||null):null,barcode:edit.kind==='book'?null:(edit.barcode||null),description:dlmCloudDescription(edit.desc,edit.category),location_id:edit.place||null,estimated_value:edit.value===''?null:Number(edit.value),updated_by:edit.updatedBy||null};
+   const r=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload)});
    const rows=await r.json();
    if(!r.ok||!Array.isArray(rows)||rows.length!==1)throw Error(rows?.message||'Aggiornamento non confermato');
-   pendingEdits.delete(id);saveEdits();notice('Modifica offline sincronizzata.');
+   if(pendingEdits.get(id)===edit){pendingEdits.delete(id);saveEdits();}
+   notice('Modifica sincronizzata.');
   }catch(e){notice('Modifica in attesa: '+e.message);break}
  }
 }
 window.familySyncQueue=id=>{if(id&&!cloudIds.has(id)&&!pendingCreates.has(id)){pendingCreates.add(id);saveCreates()}if(token&&house){if(navigator.onLine)void syncEdits().then(uploadNew);else notice('Oggetto salvato sul telefono: sarà sincronizzato quando torni online.')}};
 window.addEventListener('online',()=>{if(token&&house){void syncEdits().then(uploadNew)}});
+window.familyUpdateObjectCategories=items=>{
+ if(!token||!house)return;
+ const editorId=currentFamilyUserId();
+ let queued=false;
+ for(const item of items){
+  if(!cloudIds.has(item.id)&&!seenIds.has(item.id))continue;
+  const pending=pendingEdits.get(item.id)||{categoryOnly:true,desc:item.desc};
+  pendingEdits.set(item.id,{...pending,category:item.category,updatedBy:editorId});
+  queued=true;
+ }
+ if(!queued)return;
+ saveEdits();
+ if(navigator.onLine)void syncEdits();
+ else notice('Categorie salvate sul telefono: saranno sincronizzate quando torni online.');
+};
 window.familyUpdateItem=async item=>{
  const editorId=currentFamilyUserId();
  if(editorId){item.updatedBy=editorId;item.updatedByName=familyNicknames.get(editorId)||null;}

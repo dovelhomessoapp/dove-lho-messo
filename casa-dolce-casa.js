@@ -1152,13 +1152,14 @@ function readCustomCategories(storageKey){
   return Array.isArray(categories)?categories:[];
  }catch{return []}
 }
+const categoryKey=value=>String(value||'').trim().toLocaleLowerCase('it');
 function categoryOptions({kind,defaults},custom){
  const used=db.items.filter(i=>(i.kind==='book'?'book':'object')===kind).map(i=>i.category)
-  .filter(name=>kind==='book'||String(name||'').trim().toLocaleLowerCase('it')!=='libri');
+  .filter(name=>kind==='book'||categoryKey(name)!=='libri');
  const distinct=new Map();
  for(const value of [...defaults,...custom,...used]){
   const name=String(value||'').trim();
-  const key=name.toLocaleLowerCase('it');
+  const key=categoryKey(name);
   if(name&&!distinct.has(key))distinct.set(key,name);
  }
  return [...distinct.values()].sort((a,b)=>a.localeCompare(b,'it',{sensitivity:'base'}));
@@ -1175,10 +1176,65 @@ function syncItemCategory(){
   create.dataset.createCategory='';
   select.add(create,1);
  }
- const existing=options.find(name=>name.toLocaleLowerCase('it')===current.toLocaleLowerCase('it'));
+ const existing=options.find(name=>categoryKey(name)===categoryKey(current));
  if(current&&!existing)select.add(new Option(current,current));
  select.value=existing||current;
+ if(config.kind==='object')refreshObjectCategoryManager(options);
 }
+function refreshObjectCategoryManager(options){
+ const select=$('#dlmManagedObjectCategory');
+ const current=select.value;
+ select.replaceChildren(...options.map(name=>new Option(name,name)));
+ if(!options.length)select.add(new Option('Nessuna categoria da gestire',''));
+ select.value=options.includes(current)?current:options[0]||'';
+ select.disabled=$('#dlmRenameObjectCategory').disabled=$('#dlmDeleteObjectCategory').disabled=!options.length;
+}
+function manageObjectCategory(remove){
+ const oldName=$('#dlmManagedObjectCategory').value;
+ if(!oldName)return;
+ const oldKey=categoryKey(oldName);
+ const items=db.items.filter(item=>item.kind!=='book'&&categoryKey(item.category)===oldKey);
+ const count=items.length===1?'1 oggetto':items.length+' oggetti';
+ const config=dlmCategoryPickers.find(picker=>picker.kind==='object');
+ const storageKey=config.storageKey();
+ const custom=readCustomCategories(storageKey);
+ let name='';
+ if(remove){
+  const message=items.length?' La categoria sarà rimossa da '+count+'. Gli oggetti resteranno nell’inventario.':'';
+  if(!confirm('Eliminare la categoria «'+oldName+'»?'+message))return;
+ }else{
+  name=prompt('Nuovo nome per «'+oldName+'»'+(items.length?' (aggiorna '+count+')':'')+'?',oldName)?.trim();
+  if(!name||name===oldName)return;
+  if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
+  const newKey=categoryKey(name);
+  if(newKey!==oldKey&&categoryOptions(config,custom).some(value=>categoryKey(value)===newKey)){
+   toast('Esiste già una categoria con questo nome');
+   return;
+  }
+ }
+ const next=custom.filter(value=>categoryKey(value)!==oldKey);
+ if(name)next.push(name);
+ try{localStorage.setItem(storageKey,JSON.stringify(next))}
+ catch{toast('Impossibile salvare le categorie sul dispositivo');return}
+ const previous=items.map(item=>item.category);
+ for(const item of items)item.category=name;
+ if(items.length&&!save()){
+  items.forEach((item,index)=>{item.category=previous[index]});
+  localStorage.setItem(storageKey,JSON.stringify(custom));
+  return;
+ }
+ if(categoryKey($('#itemCategory').value)===oldKey){
+  $('#itemCategory').value=name;
+  saveDraft();
+ }
+ syncItemCategory();
+ if(name)$('#dlmManagedObjectCategory').value=name;
+ renderItems();
+ toast(remove?'Categoria eliminata':'Categoria rinominata');
+ window.familyUpdateObjectCategories?.(items);
+}
+$('#dlmRenameObjectCategory').onclick=()=>manageObjectCategory(false);
+$('#dlmDeleteObjectCategory').onclick=()=>manageObjectCategory(true);
 for(const config of dlmCategoryPickers){
  document.getElementById(config.select)?.addEventListener('change',e=>{
   if(e.target.selectedOptions[0]?.hasAttribute('data-create-category')){
@@ -1195,7 +1251,7 @@ for(const config of dlmCategoryPickers){
   if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
   const storageKey=config.storageKey();
   const custom=readCustomCategories(storageKey);
-  const existing=categoryOptions(config,custom).find(value=>value.toLocaleLowerCase('it')===name.toLocaleLowerCase('it'));
+  const existing=categoryOptions(config,custom).find(value=>categoryKey(value)===categoryKey(name));
   if(!existing){
    try{localStorage.setItem(storageKey,JSON.stringify([...custom,name]))}
    catch{toast('Impossibile salvare la categoria sul dispositivo');return}
