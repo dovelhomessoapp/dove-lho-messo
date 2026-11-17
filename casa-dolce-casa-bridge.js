@@ -471,8 +471,9 @@ function adminDate(value){
  return new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);
 }
 async function refreshAdminPanel(){
- if(!token)return;
- let rows,summary;
+ const adminId=currentFamilyUserId();
+ if(!adminId)return;
+ let rows,summary,deletions;
  try{
   const r=await familyFetch(base+'/rest/v1/rpc/admin_dashboard',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
   if(!r.ok){const e=await r.json().catch(()=>({}));if(String(e.message||'').includes('ADMIN_ONLY'))return;throw Error(e.message||'Pannello admin non disponibile')}
@@ -480,6 +481,9 @@ async function refreshAdminPanel(){
   const s=await familyFetch(base+'/rest/v1/rpc/admin_summary',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
   summary=s.ok?await s.json():{};
  }catch(e){console.warn('Pannello amministratore:',e);return}
+ if(adminId!==currentFamilyUserId())return;
+ try{deletions=await familyRpc('dlm_admin_account_deletion_requests',{})}catch{}
+ if(adminId!==currentFamilyUserId())return;
 
  const anchor=el('familyMembersList')?.parentElement||el('familyOnline');
  if(!anchor)return;
@@ -510,6 +514,25 @@ async function refreshAdminPanel(){
  '<div style="padding:11px;border-radius:14px;background:#f5eaff"><strong style="font-size:1.35em">'+Number(sum.premium_homes||0)+'</strong><br><small>Case Premium</small></div></div>'+
  '<p class="hint">“Installata” significa aperta in modalità PWA/standalone da quando questo registro è attivo. Gli utenti che la usano solo da Safari risultano come browser.</p>'+
  '<div style="overflow:auto;-webkit-overflow-scrolling:touch"><table style="width:100%;border-collapse:collapse;font-size:.86rem"><thead><tr><th style="text-align:left;padding:9px">Utente</th><th style="text-align:left;padding:9px">Piano</th><th style="padding:9px">Installata / dispositivi</th><th style="text-align:left;padding:9px">Ultimo utilizzo</th><th style="text-align:left;padding:9px">Iscritto</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+ const requests=document.createElement('section');
+ requests.style.margin='14px 0';
+ requests.innerHTML='<h4>Richieste di eliminazione account</h4>';
+ if(!Array.isArray(deletions)||!deletions.length){
+  const status=document.createElement('p');
+  status.className='hint';
+  status.textContent=Array.isArray(deletions)?'Nessuna richiesta da gestire.':'Impossibile caricare le richieste. Tocca Aggiorna per riprovare.';
+  requests.append(status);
+ }else{
+  const list=document.createElement('ul');
+  for(const request of deletions){
+   const item=document.createElement('li');
+   item.textContent=(request.email||request.user_id)+' · '+adminDate(request.requested_at);
+   item.style.overflowWrap='anywhere';
+   list.append(item);
+  }
+  requests.append(list);
+ }
+ panel.firstElementChild.after(requests);
  panel.querySelector('#dlmAdminRefresh')?.addEventListener('click',()=>void refreshAdminPanel());
 }
 
@@ -659,6 +682,85 @@ async function familyRpc(name,args){
  if(!response.ok)throw Error(data?.message||'Funzione non ancora attiva su Supabase');
  return data;
 }
+const accountSettings=document.createElement('details');
+accountSettings.hidden=true;
+accountSettings.style.margin='12px 0';
+accountSettings.innerHTML=`
+ <summary>Gestisci account</summary>
+ <p class="hint">Puoi chiedere qui l’eliminazione definitiva del tuo account e dei dati personali associati.</p>
+ <button type="button" class="secondary" id="familyDeleteAccount">Elimina account</button>
+ <section id="familyDeleteConfirm" hidden aria-labelledby="familyDeleteTitle">
+  <h4 id="familyDeleteTitle">Eliminare definitivamente l’account?</h4>
+  <p>La richiesta avvia l’eliminazione dell’account e dei dati personali associati. Gli archivi condivisi verranno verificati per tutelare i dati degli altri membri.</p>
+  <p>La cancellazione viene gestita di norma entro un mese. Riceverai una conferma all’indirizzo email dell’account quando sarà completata.</p>
+  <p class="hint">Se hai attivato il rinnovo di Premium sul sito, puoi gestirlo dalla sezione Premium del sito.</p>
+  <button type="button" class="secondary" id="familyDeleteCancel">Annulla</button>
+  <button type="button" class="primary" id="familyDeleteSubmit">Conferma richiesta di eliminazione</button>
+ </section>
+ <p class="hint" id="familyDeleteStatus" role="status"></p>`;
+el('familyOnline').after(accountSettings);
+
+const deleteAccount=el('familyDeleteAccount');
+const deleteConfirm=el('familyDeleteConfirm');
+const deleteCancel=el('familyDeleteCancel');
+const deleteSubmit=el('familyDeleteSubmit');
+const deleteStatus=el('familyDeleteStatus');
+
+function showDeletionReceipt(){
+ deleteAccount.hidden=true;
+ deleteConfirm.hidden=true;
+ deleteStatus.textContent='Richiesta di eliminazione ricevuta. La cancellazione viene gestita di norma entro un mese. Ti avviseremo via email quando sarà completata.';
+}
+
+function updateAccountSettings(){
+ accountSettings.hidden=!token;
+ accountSettings.open=false;
+ deleteConfirm.hidden=true;
+ deleteAccount.hidden=false;
+ deleteStatus.textContent='';
+}
+
+accountSettings.addEventListener('toggle',async()=>{
+ if(!accountSettings.open||!token||deleteAccount.hidden)return;
+ const userId=currentFamilyUserId();
+ try{
+  const rows=await get('/rest/v1/dlm_account_deletion_requests?select=requested_at&user_id=eq.'+encodeURIComponent(userId),token);
+  if(userId===currentFamilyUserId()&&rows.length)showDeletionReceipt();
+ }catch{
+  // Submission returns the existing receipt if the status could not be loaded.
+ }
+});
+
+deleteAccount.onclick=()=>{
+ deleteConfirm.hidden=false;
+ deleteStatus.textContent='';
+ deleteCancel.focus();
+};
+deleteCancel.onclick=()=>{
+ deleteConfirm.hidden=true;
+ deleteStatus.textContent='';
+ deleteAccount.focus();
+};
+deleteSubmit.onclick=async()=>{
+ const userId=currentFamilyUserId();
+ if(!userId||deleteSubmit.disabled)return;
+ deleteSubmit.disabled=true;
+ deleteCancel.disabled=true;
+ deleteStatus.textContent='Invio della richiesta…';
+ try{
+  const receipt=await familyRpc('dlm_request_account_deletion',{});
+  if(typeof receipt!=='string'||!Number.isFinite(Date.parse(receipt)))throw Error('Missing receipt');
+  if(userId===currentFamilyUserId())showDeletionReceipt();
+ }catch{
+  if(userId===currentFamilyUserId()){
+   deleteStatus.textContent='Non siamo riusciti a confermare la richiesta. Controlla la connessione e riprova.';
+  }
+ }finally{
+  deleteSubmit.disabled=false;
+  deleteCancel.disabled=false;
+ }
+};
+
 const INVITE_KEY='dlm-pending-family-invite';
 const initialInvite=new URLSearchParams(location.hash.slice(1)).get('family_invite');
 if(initialInvite)sessionStorage.setItem(INVITE_KEY,initialInvite);
@@ -779,7 +881,7 @@ el('familyForm').onsubmit=async e=>{
  try{
  const r=await fetch(base+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({email:el('familyEmail').value.trim(),password:el('familyPass').value})});
  const d=await r.json();if(!r.ok)throw Error(d.error_description||d.msg||d.message||d.error||'Accesso non riuscito');el('familyPass').value='';
- token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);
+ token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);updateAccountSettings();
  const houses=await get('/rest/v1/homes?select=id,name',d.access_token);
  if(houses.length!==1){
   if(houses.length===0){
@@ -953,7 +1055,7 @@ window.familyDeleteItem=async id=>{
  finally{setTimeout(()=>deletingIds.delete(id),1500)}
 };
 el('familyReload').onclick=()=>syncEdits().then(load).then(loadPremiumStatus).then(uploadNew).then(loadPremiumStatus).catch(err=>notice(err.message));
-el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);localStorage.setItem('dlm-premium-enabled-v1','false');document.documentElement.dataset.premium='false';window.dlmRefreshLimits?.();refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;firstObjectGuide.hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano disponibili su questo dispositivo.')};
+el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);localStorage.setItem('dlm-premium-enabled-v1','false');document.documentElement.dataset.premium='false';window.dlmRefreshLimits?.();refreshToken=null;token=null;house=null;updateAccountSettings();el('dlmAdminPanel')?.remove();el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;firstObjectGuide.hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano disponibili su questo dispositivo.')};
 async function restoreSession(){
  const saved=localStorage.getItem(SESSION_KEY);
  if(!saved)return;
@@ -961,6 +1063,7 @@ async function restoreSession(){
  if(!navigator.onLine){notice('Sei offline: puoi consultare gli oggetti già salvati. L’accesso familiare riprenderà quando torna Internet.');return}
  try{
   await renew();
+  updateAccountSettings();
   const houses=await get('/rest/v1/homes?select=id,name',token);
   if(houses.length!==1){
    if(houses.length===0){
