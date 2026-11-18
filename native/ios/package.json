@@ -1,0 +1,18 @@
+{
+  "name": "dove-lho-messo-ios",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "stage": "node scripts/stage-web.cjs",
+    "prepare:ios": "npm run stage && cap add ios && python3 scripts/configure-ios.py && cap sync ios",
+    "check": "node scripts/check-staging.cjs"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0",
+    "@zxing/library": "0.21.3",
+    "jsqr": "1.4.0"
+  },
+  "devDependencies": { "@capacitor/cli": "8.6.0" }
+}
