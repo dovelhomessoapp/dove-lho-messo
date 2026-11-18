@@ -114,6 +114,56 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
      }
     }
    }
+   await page.evaluate(()=>{
+    window.pantryWrites=[];window.rejectOpened=true;
+    const closed={id:'closed-milk',name:'Latte di prova',zone:'dispensa',area_id:null,shelf:null,quantity:2,expires_on:null,opened_on:null};
+    window.pantryTestLots=[closed];
+    const original=window.fetch;
+    window.fetch=(url,opts={})=>{
+     if(typeof url!=='string'||!url.includes('/rest/v1/pantry_lots'))return original(url,opts);
+     if(opts.method==='POST'||opts.method==='PATCH'){
+      const body=JSON.parse(opts.body);window.pantryWrites.push({method:opts.method,body});
+      if(body.opened_on&&window.rejectOpened){window.rejectOpened=false;return Promise.resolve(Response.json({message:'Prova rete'},{status:400}))}
+      if(opts.method==='POST')window.pantryTestLots.push({id:'opened-milk',...body});
+      return Promise.resolve(new Response(null,{status:204}));
+     }
+     return Promise.resolve(Response.json(window.pantryTestLots));
+    };
+    document.querySelector('#pantryRefresh').click();
+   });
+   await page.waitForFunction(()=>document.querySelector('#pantryOverview').textContent.includes('2'));
+   await page.evaluate(()=>document.querySelector('#pantryAddDetails').open=true);
+   await page.locator('#pantryName').fill('Da annullare');
+   await page.locator('#pantryAlreadyOpen').check();
+   assert.ok(await page.locator('#pantryOpenedOn').inputValue(),'Opening date defaults to today');
+   await page.locator('[data-cancel-pantry]').last().click();
+   assert.equal(await page.locator('#pantryAddDetails').evaluate(el=>el.open),false);
+   assert.equal(await page.locator('#pantryName').inputValue(),'');
+   assert.equal(await page.locator('#pantryAlreadyOpen').isChecked(),false);
+   assert.equal(await page.locator('#pantryOpeningFields').isVisible(),false);
+   assert.equal(await page.evaluate(()=>window.pantryWrites.length),0,'Cancel sends no pantry write');
+   await page.evaluate(()=>document.querySelector('#pantryAddDetails').open=true);
+   await page.locator('#pantryName').fill('Latte di prova');
+   await page.locator('#pantryQty').fill('3');
+   await page.locator('#pantryAlreadyOpen').check();
+   await page.locator('#pantryOpenedOn').fill('2020-01-02');
+   await page.locator('#pantryOpenedUntil').fill('2020-01-06');
+   await page.locator('#pantryForm').evaluate(el=>el.requestSubmit());
+   await page.waitForFunction(()=>document.querySelector('#pantrySaveError').textContent.includes('Prova rete'));
+   assert.equal(await page.locator('#pantryAlreadyOpen').isChecked(),true,'Failure preserves opening details');
+   await page.locator('#pantryForm').evaluate(el=>el.requestSubmit());
+   await page.waitForFunction(()=>!document.querySelector('#pantryAddDetails').open);
+   const writes=await page.evaluate(()=>window.pantryWrites);
+   assert.equal(writes.length,2,'One rejected and one accepted request');
+   for(const write of writes){
+    assert.equal(write.method,'POST','Opened product must not merge into unopened stock');
+    assert.equal(write.body.quantity,3);
+    assert.equal(write.body.opened_on,'2020-01-02');
+    assert.equal(write.body.opened_until,'2020-01-06');
+   }
+   assert.equal(await page.locator('#pantryAlreadyOpen').isChecked(),false,'Successful save resets opening status');
+   assert.equal(await page.locator('#pantryOpenedOn').inputValue(),'');
+   assert.ok((await page.locator('#pantryList').textContent()).includes('APERTO'),'Saved product appears as open');
    await page.evaluate(()=>window.page('home'));
    assert.equal(await page.evaluate(()=>document.querySelector('.app').scrollTop+scrollY),0,'Changing sections must return to the top');
    if(width===390){

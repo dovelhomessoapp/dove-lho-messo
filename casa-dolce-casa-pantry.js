@@ -1,9 +1,9 @@
 (()=>{
 const root=document.getElementById('pantry');if(!root)return;
 const base='https://ephdnunjudbwlgbxdadm.supabase.co',apikey='sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT';
-let lots=[],areas=[],access=null,zone='tutte',busy=false,overviewFilter='';
+let lots=[],areas=[],access=null,zone='tutte',busy=false,overviewFilter='',pantryEntryVersion=0;
 const $=id=>document.getElementById(id),escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-root.innerHTML='<div class="panel"><h2><img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> La mia dispensa</h2><p class="hint">Inventario condiviso della famiglia · avvisi 5 giorni prima della scadenza</p><p id="pantryStatus" role="status">Accedi alla tua Casa dolce casa per vedere la dispensa.</p><div id="pantryOnline" hidden><div style="margin:14px 0"><label>🔎 Cerca un alimento<input id="pantrySearch" type="search" placeholder="Es. latte, pasta, marca o ripiano" autocomplete="off"></label><div id="pantrySearchResults" hidden></div></div><div id="pantryOverview" class="pantry-overview" aria-label="Riepilogo dispensa"></div><div id="pantryAlerts"></div><details id="pantryAddDetails" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px">➕ Aggiungi alimento</summary><form id="pantryForm" style="margin-top:12px"><div class="panel" style="margin:12px 0;background:#faf5ff"><strong>📷 Riconosci dal codice a barre</strong><p class="hint">Cerca automaticamente nome, marca e formato. La scadenza va inserita dalla confezione.</p><label>Codice a barre<input id="pantryBarcode" inputmode="numeric" placeholder="Es. 8001234567890"></label><div class="row"><button type="button" class="secondary" id="pantryCamera">📷 Scansiona</button><button type="button" class="secondary" id="pantryLookup">🔎 Cerca prodotto</button></div><video id="pantryVideo" playsinline muted hidden style="width:100%;max-height:280px;border-radius:14px;margin-top:8px"></video><button type="button" class="secondary full" id="pantryStop" hidden>Chiudi fotocamera</button><label style="display:block;margin-top:10px">🖼️ Leggi il codice da una foto<input id="pantryBarcodePhoto" type="file" accept="image/*" style="margin-top:6px"></label><p class="hint" id="pantryProductInfo" role="status"></p></div><label>Nome alimento<input id="pantryName" required maxlength="120" placeholder="Es. Yogurt alla fragola"></label><label>📷 Foto del prodotto (facoltativa)<input id="pantryFoodPhoto" type="file" accept="image/*"></label><label>Marca<input id="pantryBrand" maxlength="80" placeholder="Es. Granarolo"></label><label>Formato<input id="pantryFormat" maxlength="50" placeholder="Es. 1 litro"></label><label>Dove si trova?<select id="pantryZone"><option value="dispensa">🥫 Dispensa</option><option value="frigo">🥬 Frigo</option><option value="freezer">🧊 Freezer</option></select></label><label>Ripiano o cassetto (facoltativo)<select id="pantryShelf"></select></label><button type="button" class="secondary full" id="pantryManageShelves">⚙️ Gestisci ripiani e cassetti</button><label>Quantità<input id="pantryQty" type="number" min="1" max="99999" value="1" required></label><label>Data di scadenza (facoltativa)<input id="pantryExpiry" type="date"></label><p class="hint">Se lo stesso prodotto ha scadenze diverse, aggiungilo una volta per ciascuna scadenza.</p><p id="pantrySaveError" class="hint" role="alert"></p><button class="primary full" type="submit">💜 Salva alimento</button></form></details><details id="shoppingBox" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px"><img class="pantry-real-3d-icon" src="assets/carrello-rosa-3d-corretto.png" alt=""> La mia lista della spesa <span id="shoppingCount"></span></summary><form id="shoppingForm" style="margin:12px 0"><label>Prodotto da comprare<input id="shoppingName" maxlength="120" required placeholder="Es. Latte · Parmalat · 1 litro"></label><label>Quantità<input id="shoppingQty" type="number" min="1" max="99999" value="1" required></label><button type="submit" class="primary full">➕ Aggiungi alla lista</button></form><p id="shoppingStatus" class="hint"></p><div id="shoppingList"></div><button type="button" class="secondary full" id="shoppingRefresh">↻ Aggiorna lista</button></details><h3><img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> Alimenti in casa</h3><div id="pantryList"></div><button type="button" class="secondary full" id="pantryRefresh">↻ Aggiorna dispensa</button></div></div>';
+root.innerHTML='<div class="panel"><h2><img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> La mia dispensa</h2><p class="hint">Inventario condiviso della famiglia · avvisi 5 giorni prima della scadenza</p><p id="pantryStatus" role="status">Accedi alla tua Casa dolce casa per vedere la dispensa.</p><div id="pantryOnline" hidden><div style="margin:14px 0"><label>🔎 Cerca un alimento<input id="pantrySearch" type="search" placeholder="Es. latte, pasta, marca o ripiano" autocomplete="off"></label><div id="pantrySearchResults" hidden></div></div><div id="pantryOverview" class="pantry-overview" aria-label="Riepilogo dispensa"></div><div id="pantryAlerts"></div><details id="pantryAddDetails" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px">➕ Aggiungi alimento</summary><form id="pantryForm" style="margin-top:12px"><button type="button" class="secondary full" data-cancel-pantry>← Annulla inserimento</button><div class="panel" style="margin:12px 0;background:#faf5ff"><strong>📷 Riconosci dal codice a barre</strong><p class="hint">Cerca automaticamente nome, marca e formato. La scadenza va inserita dalla confezione.</p><label>Codice a barre<input id="pantryBarcode" inputmode="numeric" placeholder="Es. 8001234567890"></label><div class="row"><button type="button" class="secondary" id="pantryCamera">📷 Scansiona</button><button type="button" class="secondary" id="pantryLookup">🔎 Cerca prodotto</button></div><video id="pantryVideo" playsinline muted hidden style="width:100%;max-height:280px;border-radius:14px;margin-top:8px"></video><button type="button" class="secondary full" id="pantryStop" hidden>Chiudi fotocamera</button><label style="display:block;margin-top:10px">🖼️ Leggi il codice da una foto<input id="pantryBarcodePhoto" type="file" accept="image/*" style="margin-top:6px"></label><p class="hint" id="pantryProductInfo" role="status"></p></div><label>Nome alimento<input id="pantryName" required maxlength="120" placeholder="Es. Yogurt alla fragola"></label><label>📷 Foto del prodotto (facoltativa)<input id="pantryFoodPhoto" type="file" accept="image/*"></label><label>Marca<input id="pantryBrand" maxlength="80" placeholder="Es. Granarolo"></label><label>Formato<input id="pantryFormat" maxlength="50" placeholder="Es. 1 litro"></label><label>Dove si trova?<select id="pantryZone"><option value="dispensa">🥫 Dispensa</option><option value="frigo">🥬 Frigo</option><option value="freezer">🧊 Freezer</option></select></label><label>Ripiano o cassetto (facoltativo)<select id="pantryShelf"></select></label><button type="button" class="secondary full" id="pantryManageShelves">⚙️ Gestisci ripiani e cassetti</button><label>Quantità<input id="pantryQty" type="number" min="1" max="99999" value="1" required></label><label>Data di scadenza (facoltativa)<input id="pantryExpiry" type="date"></label><label style="display:flex;align-items:center;gap:10px"><input id="pantryAlreadyOpen" type="checkbox" style="width:22px;height:22px;flex:0 0 22px;margin:0">📦 Già aperto</label><div id="pantryOpeningFields" hidden><p class="hint">Le confezioni indicate nella quantità saranno tutte contrassegnate come aperte. Inserisci separatamente quelle ancora chiuse.</p><label>Data di apertura<input id="pantryOpenedOn" type="date"></label><label>Da consumare entro dopo apertura (facoltativo)<input id="pantryOpenedUntil" type="date"></label></div><p class="hint">Se lo stesso prodotto ha scadenze diverse, aggiungilo una volta per ciascuna scadenza.</p><p id="pantrySaveError" class="hint" role="alert"></p><button class="primary full" type="submit">💜 Salva alimento</button><button type="button" class="secondary full" data-cancel-pantry>Annulla</button></form></details><details id="shoppingBox" style="margin:14px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:8px 2px"><img class="pantry-real-3d-icon" src="assets/carrello-rosa-3d-corretto.png" alt=""> La mia lista della spesa <span id="shoppingCount"></span></summary><form id="shoppingForm" style="margin:12px 0"><label>Prodotto da comprare<input id="shoppingName" maxlength="120" required placeholder="Es. Latte · Parmalat · 1 litro"></label><label>Quantità<input id="shoppingQty" type="number" min="1" max="99999" value="1" required></label><button type="submit" class="primary full">➕ Aggiungi alla lista</button></form><p id="shoppingStatus" class="hint"></p><div id="shoppingList"></div><button type="button" class="secondary full" id="shoppingRefresh">↻ Aggiorna lista</button></details><h3><img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> Alimenti in casa</h3><div id="pantryList"></div><button type="button" class="secondary full" id="pantryRefresh">↻ Aggiorna dispensa</button></div></div>';
 // Compact pantry layout: existing controls and IDs are retained.
 const pantryJumpStyle=document.createElement('style');
 pantryJumpStyle.textContent=
@@ -45,6 +45,32 @@ function closeSavedPantryForm(section,message){
  section.open=false;
  toast(message);
 }
+function pantryToday(){const d=new Date(),pad=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function updatePantryOpening(){
+ const opened=$('pantryAlreadyOpen').checked;
+ $('pantryOpeningFields').hidden=!opened;
+ $('pantryOpenedOn').required=opened;
+ $('pantryOpenedOn').disabled=$('pantryOpenedUntil').disabled=!opened;
+ $('pantryOpenedOn').max=pantryToday();
+ if(opened&&!$('pantryOpenedOn').value)$('pantryOpenedOn').value=pantryToday();
+ $('pantryOpenedUntil').min=opened?$('pantryOpenedOn').value:'';
+}
+$('pantryAlreadyOpen').addEventListener('change',updatePantryOpening);
+$('pantryOpenedOn').addEventListener('change',updatePantryOpening);
+updatePantryOpening();
+function resetPantryEntry(){
+ pantryEntryVersion++;
+ stopPantryCamera();
+ $('pantryForm').reset();updatePantryOpening();
+ $('pantryProductInfo').textContent='';$('pantrySaveError').textContent='';
+ pantryPopulateShelf($('pantryShelf'),$('pantryZone').value);
+}
+root.querySelectorAll('[data-cancel-pantry]').forEach(button=>button.addEventListener('click',()=>{
+ if(busy)return;
+ document.activeElement?.blur();resetPantryEntry();
+ closeSavedPantryForm(addSection,'Inserimento annullato');
+ addSection.querySelector(':scope > summary').scrollIntoView({block:'center',behavior:'instant'});
+}));
 const pantryOverviewStyle=document.createElement('style');
 pantryOverviewStyle.textContent='.pantry-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:14px 0}.pantry-overview-card{min-width:0;text-align:center;background:linear-gradient(145deg,#fff9ff,#f2e5fb);border-radius:17px;padding:10px 3px;box-shadow:0 3px 10px #8652a31a}.pantry-overview-card span{display:block;font-size:22px}.pantry-overview-card strong{display:block;color:#6c3099;font-size:23px;line-height:1.2;margin:4px 0}.pantry-overview-card small{font-size:10px;color:#866c9b;line-height:1.2;display:block}.pantry-overview-warning{background:#fff0e8}.pantry-overview-warning strong{color:#b44347}@media(max-width:355px){.pantry-overview{grid-template-columns:repeat(2,minmax(0,1fr))}}';
 pantryOverviewStyle.textContent += '.pantry-stat-icon{width:34px;height:34px;object-fit:contain;display:inline-block;vertical-align:middle}.pantry-overview-card span:has(.pantry-stat-icon){height:35px}';pantryOverviewStyle.textContent += '.pantry-overview-card[data-overview-filter]{cursor:pointer;border:1px solid transparent;font:inherit;color:inherit;appearance:none;-webkit-appearance:none}.pantry-overview-card[data-overview-filter]:focus-visible{outline:3px solid #8d51b6;outline-offset:2px}.pantry-overview-card[aria-pressed="true"]{border:2px solid #8d51b6;box-shadow:0 0 0 2px #e7d5f8}.pantry-filter-note{padding:10px 13px;border-radius:13px;background:#f4eafa;color:#69368c;margin:12px 0}.pantry-filter-note button{margin-left:8px;border:0;background:transparent;color:#69368c;text-decoration:underline;font-weight:700}';pantryOverviewStyle.textContent += ".pantry-lot-quantity{margin:14px 0 10px;color:#543268;font-size:15px}.pantry-lot-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:100%}.pantry-lot-actions button.secondary{box-sizing:border-box;width:100%;min-width:0;min-height:45px;margin:0;padding:10px 7px!important;white-space:normal;overflow-wrap:normal;word-break:normal;line-height:1.25;font-size:14px;text-align:center;border-radius:15px}.pantry-lot-actions .pantry-lot-delete{grid-column:1/-1;background:#fff2f7!important}@media(min-width:600px){.pantry-lot-actions{grid-template-columns:repeat(3,minmax(0,1fr))}.pantry-lot-actions .pantry-lot-delete{grid-column:auto}}";pantryOverviewStyle.textContent += ".pantry-shopping-card{display:flex;flex-direction:column;align-items:stretch;gap:12px;margin:10px 0!important;padding:15px!important;min-width:0}.pantry-shopping-name{display:block;overflow-wrap:anywhere;line-height:1.4}.pantry-shopping-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0}.pantry-shopping-actions button.secondary{min-width:0;width:100%;box-sizing:border-box;margin:0;padding:12px 8px!important;min-height:46px;white-space:normal;word-break:normal;overflow-wrap:normal;font-size:14px;line-height:1.3;border-radius:15px}";document.head.appendChild(pantryOverviewStyle);
@@ -218,6 +244,7 @@ function stopPantryCamera(){
  const v=$('pantryVideo');v.pause();v.srcObject=null;v.hidden=true;$('pantryStop').hidden=true;
 }
 async function lookupFoodBarcode(){
+ const version=pantryEntryVersion;
  const code=$('pantryBarcode').value.trim().replace(/\s/g,'');
  const info=$('pantryProductInfo');
  if(!/^\d{8,14}$/.test(code)){info.textContent='Inserisci un codice a barre numerico da 8 a 14 cifre.';return}
@@ -228,6 +255,7 @@ async function lookupFoodBarcode(){
     encodeURIComponent(access.homeId) +
     '&barcode=eq.' + encodeURIComponent(code) + '&limit=1'
   );
+  if(version!==pantryEntryVersion)return;
   if (saved.length) {
     const p = saved[0];
     const parts = (p.name || '').split(' · ');
@@ -241,22 +269,25 @@ async function lookupFoodBarcode(){
 } catch (e) {
   console.warn('Archivio familiare non disponibile', e);
 }
+ if(version!==pantryEntryVersion)return;
  try{
  const response=await fetch('https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(code)+'.json?fields=product_name,product_name_it,brands,quantity,image_front_small_url',{headers:{Accept:'application/json'}});
  if(!response.ok)throw Error('Ricerca temporaneamente non disponibile');
  const data=await response.json(),p=data.product;
+ if(version!==pantryEntryVersion)return;
  if(data.status!==1||!p){info.textContent='Prodotto non trovato. Puoi inserire il nome manualmente.';return}
  const name=(p.product_name_it||p.product_name||'').trim(),brand=(p.brands||'').split(',')[0].trim(),qty=(p.quantity||'').trim();
  if(!name){info.textContent='Codice trovato, ma nome mancante: inseriscilo manualmente.';return}
  $('pantryName').value=name.slice(0,120);$('pantryBrand').value=brand;$('pantryFormat').value=qty;
  info.textContent='💜 Prodotto riconosciuto! Controlla il nome, poi scegli posizione, quantità e scadenza.';
- }catch(e){info.textContent='Non riesco a cercare il prodotto: '+e.message+'. Puoi inserirlo manualmente.'}
+ }catch(e){if(version!==pantryEntryVersion)return;info.textContent='Non riesco a cercare il prodotto: '+e.message+'. Puoi inserirlo manualmente.'}
 }
 
 $('pantryLookup').onclick=lookupFoodBarcode;
 $('pantryBarcode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();lookupFoodBarcode()}});
 $('pantryStop').onclick=stopPantryCamera;
 $('pantryBarcodePhoto').addEventListener('change',async e=>{
+ const version=pantryEntryVersion;
  const file=e.target.files?.[0],info=$('pantryProductInfo');if(!file)return;
  stopPantryCamera();info.textContent='🔎 Analizzo la foto del codice a barre…';
  let url;
@@ -299,10 +330,11 @@ $('pantryBarcodePhoto').addEventListener('change',async e=>{
    }
    if(!result)throw firstError;
   }
+  if(version!==pantryEntryVersion)return;
   const code=String(result.getText()).replace(/\s/g,'');
   if(!/^\d{8,14}$/.test(code))throw Error('Codice non valido');
   $('pantryBarcode').value=code;info.textContent='💜 Codice letto dalla foto!';await lookupFoodBarcode();
- }catch{info.textContent='Codice a barre non leggibile. Prova una foto più nitida o inserisci il codice a mano.'}
+ }catch{if(version!==pantryEntryVersion)return;info.textContent='Codice a barre non leggibile. Prova una foto più nitida o inserisci il codice a mano.'}
  finally{if(url)URL.revokeObjectURL(url);e.target.value=''}
 });
 
@@ -797,9 +829,15 @@ window.familyPantryDisconnect=()=>{access=null;lots=[];areas=[];shopping=[];mini
 root.querySelectorAll('[data-zone]').forEach(b=>b.addEventListener('click',()=>{zone=b.dataset.zone;render()}));
 $('pantryRefresh').onclick=refresh;
 $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy||!access)return;busy=true;
+ $('pantryForm').querySelectorAll('button').forEach(b=>b.disabled=true);
  const error=$('pantrySaveError');error.textContent='';
  try{
  const payload={home_id:access.homeId,name:[$('pantryName').value.trim(),$('pantryBrand').value.trim(),$('pantryFormat').value.trim()].filter(Boolean).join(' · ').slice(0,120),zone:areaType($('pantryZone').value),area_id:areaId($('pantryZone').value),shelf:$('pantryShelf').value.trim()||null,quantity:Number($('pantryQty').value),expires_on:$('pantryExpiry').value||null};
+ if($('pantryAlreadyOpen').checked){
+  payload.opened_on=$('pantryOpenedOn').value;payload.opened_until=$('pantryOpenedUntil').value||null;
+  if(!payload.opened_on||payload.opened_on>pantryToday())throw Error('Controlla la data di apertura');
+  if(payload.opened_until&&payload.opened_until<payload.opened_on)throw Error('Il termine dopo apertura non può precedere la data di apertura');
+ }
  if(!payload.name||!Number.isInteger(payload.quantity)||payload.quantity<1)throw Error('Controlla nome e quantità');
  const file=$('pantryFoodPhoto').files?.[0];
  if(file)payload.photo=await readPantryFoodPhoto(file);
@@ -811,7 +849,7 @@ const same = lots.filter(l =>
   (l.format || '').trim().toLowerCase() === (payload.format || '').trim().toLowerCase() &&
   l.zone === payload.zone && (l.area_id||null)===(payload.area_id||null) &&
   (l.expires_on || null) === (payload.expires_on || null) &&
-  !l.opened_on
+  !payload.opened_on && !l.opened_on
 );
 
 let match = same.find(l =>
@@ -881,12 +919,12 @@ if (match) {
 } catch (err) {
   console.warn('Archivio prodotti:', err);
 }
- $('pantryForm').reset();await refresh();pantryPopulateShelf($('pantryShelf'),$('pantryZone').value);status.textContent='💜 Alimento salvato per tutta la famiglia';
+ resetPantryEntry();await refresh();status.textContent='💜 Alimento salvato per tutta la famiglia';
  closeSavedPantryForm(addSection,status.textContent);
  if(root.classList.contains('active')){
   addSection.querySelector(':scope > summary').scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
  }
- }catch(err){error.textContent='Salvataggio non riuscito: '+err.message}finally{busy=false}};
+ }catch(err){error.textContent='Salvataggio non riuscito: '+err.message}finally{busy=false;$('pantryForm').querySelectorAll('button').forEach(b=>b.disabled=false)}};
 $('pantrySearch').addEventListener('input',()=>{
  overviewFilter='';
  render();
