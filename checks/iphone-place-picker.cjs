@@ -41,42 +41,64 @@ const places = [{id:'room', name:'Camera matrimoniale', parentId:''},
     window.page('add');
     document.querySelector('#dlmItemPlaceButton').click();
    });
-   const measurements=await page.locator('#dlmItemPlaceOptions').evaluate(list=>{
-    const box=el=>{const r=el.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,height:r.height};};
-    return {clientHeight:list.clientHeight,scrollHeight:list.scrollHeight,
-     rows:[...list.children].map(row=>({row:box(row),parts:[...row.querySelectorAll('.dlm-place-option-icon,.dlm-place-option-label,strong,small')].map(box)}))};
-   });
-   assert.equal(measurements.rows.length,places.length+1,'All locations and unassigned must be listed');
-   assert.ok(measurements.scrollHeight>measurements.clientHeight,'Long list must scroll');
-   assert.ok(measurements.clientHeight<=391,'List must stay bounded');
-   const choices=page.locator('#dlmItemPlaceOptions button');
-   const choiceIds=await choices.evaluateAll(buttons=>buttons.map(button=>button.dataset.placeChoice));
-   assert.deepEqual(choiceIds.slice(-4),['kitchen','cupboard','inside-shelf','direct-shelf']);
-   const cupboard=await page.locator('[data-place-choice="cupboard"]').boundingBox();
-   const inside=await page.locator('[data-place-choice="inside-shelf"]').boundingBox();
-   const direct=await page.locator('[data-place-choice="direct-shelf"]').boundingBox();
-   assert.ok(inside.x>direct.x && direct.x===cupboard.x,'Indentation must distinguish the two shelves');
-   assert.equal(await page.locator('[data-place-choice="inside-shelf"] small').textContent(),'In Cucina › armadietto sotto finestra');
-   assert.equal(await page.locator('[data-place-choice="direct-shelf"] small').textContent(),'In Cucina');
-   measurements.rows.forEach(({row,parts},i)=>{
-    assert.ok(row.height>=63,`${width}: row ${i} collapsed to ${row.height}px`);
-    for(const p of parts){
-     assert.ok(p.top>=row.top-1 && p.bottom<=row.bottom+1,`${width}: row ${i} text/icon exceeds row height`);
-     assert.ok(p.left>=row.left-1 && p.right<=row.right+1,`${width}: row ${i} exceeds row width`);
-    }
-    if(i)assert.ok(row.top>=measurements.rows[i-1].row.bottom+7,`${width}: overlapping rows`);
-   });
-   // Select the last result through a real click after scrolling the list.
+   assert.equal(await page.locator('#dlmItemPlaceOptions>details').count(),2,'Initially show two closed rooms');
+   assert.equal(await page.locator('#dlmItemPlaceOptions details[open]').count(),0);
+   assert.equal(await page.locator('[data-place-choice="shelf-23"]').isVisible(),false);
+   await page.locator('[data-branch="room"]>summary>.dlm-branch-arrow').click();
+   assert.equal(await page.locator('[data-place-choice="wardrobe"]').isVisible(),true);
+   assert.equal(await page.locator('[data-place-choice="shelf-23"]').isVisible(),false);
+   await page.locator('[data-branch="wardrobe"]>summary>.dlm-branch-arrow').click();
+   assert.equal(await page.locator('[data-place-choice="shelf-23"]').isVisible(),true);
    await page.locator('[data-place-choice="shelf-23"]').click();
    assert.equal(await page.locator('#itemPlace').inputValue(),'shelf-23');
    assert.equal(await page.locator('#dlmItemPlacePanel').evaluate(el=>el.hidden),true);
    assert.ok((await page.locator('#dlmItemPlaceSelected').innerText()).includes('Camera matrimoniale'));
    await page.locator('#dlmItemPlaceButton').click();
-   await page.locator('#dlmItemPlaceSearch').fill('Scatola verde');
-   assert.equal(await page.locator('#dlmItemPlaceOptions button').count(),2,'Search includes match and unassigned');
-   await page.locator('[data-place-choice=""]').click();
-   assert.equal(await page.locator('#itemPlace').inputValue(),'');
-   console.log(`PASS WebKit ${width}x${height}: location hierarchy, duplicate names, wrapping, scrolling, selection and search`);
+   await page.locator('#dlmItemPlaceSearch').fill('Cucina');
+   assert.equal(await page.locator('#dlmItemPlaceOptions button').count(),5,'Search finds hidden descendants');
+   assert.equal(await page.locator('[data-place-choice="inside-shelf"] small').textContent(),'In Cucina › armadietto sotto finestra');
+   assert.equal(await page.locator('[data-place-choice="direct-shelf"] small').textContent(),'In Cucina');
+   const rows=await page.locator('#dlmItemPlaceOptions').evaluate(list=>[...list.querySelectorAll('button')].map(row=>{
+    const r=row.getBoundingClientRect();
+    return {height:r.height,ok:[...row.querySelectorAll('strong,small,img')].every(el=>{const b=el.getBoundingClientRect();return b.top>=r.top-1&&b.bottom<=r.bottom+1&&b.left>=r.left-1&&b.right<=r.right+1})};
+   }));
+   assert.ok(rows.every(row=>row.height>=63&&row.ok),'Choice text and images fit narrow rows');
+   await page.locator('[data-place-choice="cupboard"]').click();
+   assert.equal(await page.locator('#itemPlace').inputValue(),'cupboard','Parent rooms and cupboards remain selectable');
+   await page.evaluate(()=>{
+    document.querySelector('#itemName').value='Bozza da annullare';
+    document.querySelector('#desc').value='Non salvare';
+    document.querySelector('#itemForm').dispatchEvent(new Event('input',{bubbles:true}));
+    document.querySelector('[data-cancel-item]').click();
+   });
+   assert.equal(await page.evaluate(()=>localStorage.getItem('dlm-casa-dolce-casa-draft-v1')),null);
+   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-v1')).items.length),0);
+   await page.evaluate(()=>{
+    window.page('add');
+    document.querySelector('#itemName').value='Oggetto di prova';
+    document.querySelector('#itemPlace').value='room';
+    document.querySelector('#itemForm').requestSubmit();
+   });
+   assert.equal(await page.locator('#items').evaluate(el=>el.classList.contains('active')),true);
+   assert.equal(await page.locator('#itemList details[open]').count(),0,'Even the only room stays closed after saving');
+   assert.equal(await page.evaluate(()=>localStorage.getItem('dlm-casa-dolce-casa-draft-v1')),null,'Save must not recreate draft');
+   await page.evaluate(()=>{
+    document.querySelector('#itemList details').open=true;
+    window.editItem(JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-v1')).items[0].id);
+    document.querySelector('#itemName').value='Modifica da annullare';
+    document.querySelectorAll('[data-cancel-item]')[1].click();
+    window.renderItems();
+   });
+   assert.equal(await page.locator('#itemList details[open]').count(),0,'Refresh preserves collapsed rooms');
+   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-v1')).items[0].name),'Oggetto di prova','Cancel edit preserves saved item');
+   // A focused iPhone field must not have its downward touch cancelled by the Android guard.
+   const touchAllowed=await page.evaluate(()=>{
+    window.page('add');window.scrollTo(0,0);document.querySelector('#itemName').focus();
+    const send=(type,y)=>{const event=new Event(type,{bubbles:true,cancelable:true});Object.defineProperty(event,'touches',{value:[{clientX:100,clientY:y}]});document.querySelector('#itemName').dispatchEvent(event);return !event.defaultPrevented};
+    send('touchstart',100);return send('touchmove',160);
+   });
+   assert.ok(touchAllowed,'iPhone upward-page gesture must remain available with a focused input');
+   console.log(`PASS WebKit ${width}x${height}: collapsed hierarchy, nested choices, search, wrapping, cancel, save and iPhone touch`);
    await context.close();
   }
  }finally{

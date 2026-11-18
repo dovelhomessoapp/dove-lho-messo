@@ -78,11 +78,21 @@ function dlmItemPlaceRefresh(){
  const current=ordered.find(({p})=>p.id===id);
  selected.innerHTML=current?'<span class="dlm-selected-place-icon">'+dlmItemPlacePicture(current.p)+'</span><span class="dlm-selected-place-label">'+dlmItemPlaceLabel(current.p,current.depth)+'</span>':'<span class="dlm-selected-place-label">Da assegnare</span>';
  const query=(document.getElementById('dlmItemPlaceSearch')?.value||'').trim().toLocaleLowerCase('it');
- list.innerHTML='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon" aria-hidden="true">🏡</span><span class="dlm-place-option-label"><strong>Da assegnare</strong></span></span></button>'+
- ordered.filter(({p})=>!query||fullPlacePath(p.id).toLocaleLowerCase('it').includes(query)).map(({p,depth})=>
-  '<button type="button" class="dlm-item-place-option" data-place-choice="'+safe(p.id)+'" aria-pressed="'+(id===p.id)+'" style="--dlm-place-indent:'+Math.min(depth,3)*12+'px">'+
-  '<span class="dlm-place-option-layout"><span class="dlm-place-option-icon">'+dlmItemPlacePicture(p)+'</span><span class="dlm-place-option-label">'+dlmItemPlaceLabel(p,depth)+'</span></span></button>'
- ).join('');
+ const openBranches=new Set([...list.querySelectorAll('details[open]')].map(el=>el.dataset.branch));
+ const choice=({p,depth})=>'<button type="button" class="dlm-item-place-option" data-place-choice="'+safe(p.id)+'" aria-pressed="'+(id===p.id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon">'+dlmItemPlacePicture(p)+'</span><span class="dlm-place-option-label">'+dlmItemPlaceLabel(p,depth)+'</span></span></button>';
+ const unassigned='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon" aria-hidden="true">🏡</span><span class="dlm-place-option-label"><strong>Da assegnare</strong></span></span></button>';
+ if(query){
+  list.innerHTML=unassigned+ordered.filter(({p})=>fullPlacePath(p.id).toLocaleLowerCase('it').includes(query)).map(choice).join('');
+ }else{
+  const renderBranch=(entry,visited)=>{
+   if(visited.has(entry.p.id))return '';
+   const next=new Set(visited);next.add(entry.p.id);
+   const children=ordered.filter(({p})=>p.parentId===entry.p.id&&!next.has(p.id));
+   if(!children.length)return choice(entry);
+   return '<details class="dlm-place-branch" data-branch="'+safe(entry.p.id)+'"'+(openBranches.has(entry.p.id)?' open':'')+'><summary>'+choice(entry)+'<span class="dlm-branch-arrow" aria-hidden="true">›</span><span class="sr-only">Apri o chiudi le sottoposizioni di '+safe(entry.p.name)+'</span></summary><div class="dlm-place-children">'+children.map(child=>renderBranch(child,next)).join('')+'</div></details>';
+  };
+  list.innerHTML=unassigned+ordered.filter(({depth})=>depth===0).map(entry=>renderBranch(entry,new Set())).join('');
+ }
 }
 function dlmItemPlacePicture(p){
  let photos={};try{photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
@@ -93,10 +103,20 @@ function dlmItemPlaceInit(){
  const button=document.getElementById('dlmItemPlaceButton');
  const panel=document.getElementById('dlmItemPlacePanel');
  if(!button||!panel)return;
- button.addEventListener('click',()=>{const opening=panel.hidden;panel.hidden=!opening;button.setAttribute('aria-expanded',String(opening));if(opening)dlmItemPlaceRefresh()});
+ button.addEventListener('click',()=>{
+  const opening=panel.hidden;
+  document.activeElement?.blur();
+  panel.hidden=!opening;button.setAttribute('aria-expanded',String(opening));
+  if(opening){
+   dlmItemPlaceRefresh();
+   // Wait for the iPhone keyboard to retract before revealing the choices.
+   setTimeout(()=>{if(!panel.hidden&&document.getElementById('add').classList.contains('active'))button.scrollIntoView({behavior:'smooth',block:'start'})},300);
+  }
+ });
  document.getElementById('dlmItemPlaceSearch').addEventListener('input',dlmItemPlaceRefresh);
  document.getElementById('dlmItemPlaceOptions').addEventListener('click',e=>{
   const choice=e.target.closest('button[data-place-choice]');if(!choice)return;
+  e.preventDefault();
   document.getElementById('itemPlace').value=choice.dataset.placeChoice;
   document.getElementById('itemPlace').dispatchEvent(new Event('change',{bubbles:true}));
   panel.hidden=true;button.setAttribute('aria-expanded','false');dlmItemPlaceRefresh();
@@ -589,7 +609,7 @@ function renderItems(){
   const palettes=['lavender','rose','peach','mint','sky'];
   const groupHtml=Array.from(groups.values()).sort((a,b)=>(a.root?.name||'Posizione non assegnata').localeCompare(b.root?.name||'Posizione non assegnata','it',{sensitivity:'base'})).map(({root,records},index)=>{
    const category=root?.id||'__unassigned__';
-   const open=terms.length||previouslyOpen.has(category)||groups.size===1?' open':'';
+   const open=terms.length||previouslyOpen.has(category)?' open':'';
    const image=root&&(locationPhotos[root.id]||root.photo);
    const label=root?.name||'Posizione non assegnata';
    const subtitle=root?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
@@ -602,7 +622,21 @@ function renderItems(){
  const books=db.items.filter(i=>i.kind==='book');
  $('#bookList').innerHTML=books.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')||'<div class="empty">Nessun libro per ora. 💜</div>';
 }
-dlmItemPlaceInit();$('#itemFilter').addEventListener('input',renderItems);$('#objectCategoryFilter').addEventListener('change',renderItems);$('#quickSearch').addEventListener('input',e=>{$('#itemFilter').value=e.target.value;$('#objectCategoryFilter').value='';page('items')});function resetForm(){if(document.getElementById('coverChoices'))document.getElementById('coverChoices').innerHTML='';document.querySelector('#bookTitleSearchPanel')?.remove();$('#itemForm').reset();$('#editId').value='';$('#photoPreview').hidden=true;$('#photoPreview').removeAttribute('src');photoData='';for(const id of ['itemName','author','barcode','desc','itemCategory','value'])$('#'+id).value='';$('#itemPlace').value='';dlmItemPlaceRefresh();$('#formHeading').textContent='Aggiungi oggetto ✨';renderPlaces()}$('#photoCameraBtn').onclick=()=>$('#photoCamera').click();$('#photoGalleryBtn').onclick=()=>$('#photo').click();async function onPhoto(e){let f=e.target.files[0];if(!f)return;try{let img=new Image(),url=URL.createObjectURL(f);await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});let max=720,scale=Math.min(1,max/Math.max(img.width,img.height));let c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);photoData=c.toDataURL('image/jpeg',.68);lastAutoBookCover='';URL.revokeObjectURL(url);$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}catch{toast('Impossibile leggere la foto')}finally{saveDraft()}}['photo','photoCamera'].forEach(id=>$('#'+id).addEventListener('change',onPhoto));$('#itemForm').addEventListener('submit',e=>{e.preventDefault();let old=db.items.find(x=>x.id===$('#editId').value);if(!old&&freeLimitReached()){showFreeLimitModal();return}let i={id:old?.id||crypto.randomUUID(),kind:$('#kind').value,name:$('#itemName').value.trim(),author:$('#author').value.trim(),barcode:$('#barcode').value.trim(),desc:$('#desc').value.trim(),category:$('#itemCategory').value.trim(),place:$('#itemPlace').value,value:$('#value').value,photo:photoData||old?.photo||'',created:old?.created||Date.now()};if(!i.name)return; if(old) Object.assign(old,i);else db.items.unshift(i);if(save()){editing=null;localStorage.removeItem(DRAFT_KEY);renderItems();page(i.kind==='book'?'books':'items');toast('Salvato! 💜');if(old&&window.familyUpdateItem)window.familyUpdateItem(i);else if(!old&&window.familySyncQueue)window.familySyncQueue(i.id)}});window.showItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;$('#detailBody').innerHTML=`<h2>${safe(i.name)}</h2>${i.photo?`<img class="detail-photo" src="${safe(i.photo)}" alt="Foto dell'oggetto">`:'<div class="scan-box">📦</div>'}<div class="panel"><p class="pill">${i.kind==='book'?'📚 Libro':'📦 Oggetto'}</p>${i.author?`<p><b>Autore:</b> ${safe(i.author)}</p>`:''}${i.category?`<p><b>Categoria:</b> ${safe(i.category)}</p>`:''}<p>${safe(i.desc)||'Nessuna descrizione'}</p><p><b>📍 Posizione:</b> ${safe(placeName(i.place))}</p>${i.barcode?`<p><b>Codice:</b> ${safe(i.barcode)}</p>`:''}${i.value?`<p><b>Valore inserito:</b> ${safe(i.value)} €</p>`:''}<div class="row"><button class="secondary" onclick="editItem('${i.id}')">✏️ Modifica</button><button class="secondary" onclick="deleteItem('${i.id}')">🗑️ Elimina</button></div></div>`;page('detail')};window.editItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;editing=id;resetForm();editing=id;$('#editId').value=id;for(let [k,v] of [['kind',i.kind],['itemName',i.name],['author',i.author],['barcode',i.barcode],['desc',i.desc],['itemCategory',i.category],['itemPlace',i.place],['value',i.value]])$('#'+k).value=v||'';photoData=i.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}$('#formHeading').textContent='Modifica oggetto ✏️';dlmItemPlaceRefresh();updateKind();page('add');saveDraft()};window.deleteItem=async id=>{if(!confirm('Eliminare definitivamente questo elemento?'))return;if(window.familyDeleteItem){const ok=await window.familyDeleteItem(id);if(!ok)return}db.items=db.items.filter(i=>i.id!==id);save();page('items');toast('Elemento eliminato')};
+function dlmFinishItemForm(kind){
+ document.activeElement?.blur();
+ editing=null;
+ $('#itemFilter').value='';$('#objectCategoryFilter').value='';
+ document.querySelectorAll('#itemList details[open],#bookList details[open]').forEach(el=>el.open=false);
+ resetForm();
+ page(kind==='book'?'books':'items');
+ document.querySelectorAll('#itemList details[open],#bookList details[open]').forEach(el=>el.open=false);
+ localStorage.removeItem(DRAFT_KEY);
+}
+document.querySelectorAll('[data-cancel-item]').forEach(button=>button.addEventListener('click',()=>{
+ const kind=$('#kind').value;
+ dlmFinishItemForm(kind);
+}));
+dlmItemPlaceInit();$('#itemFilter').addEventListener('input',renderItems);$('#objectCategoryFilter').addEventListener('change',renderItems);$('#quickSearch').addEventListener('input',e=>{$('#itemFilter').value=e.target.value;$('#objectCategoryFilter').value='';page('items')});function resetForm(){if(document.getElementById('coverChoices'))document.getElementById('coverChoices').innerHTML='';document.querySelector('#bookTitleSearchPanel')?.remove();$('#itemForm').reset();$('#itemForm').style.display='';$('#dlmInlinePlaceCreator').hidden=true;$('#dlmItemPlacePanel').hidden=true;$('#dlmItemPlaceButton').setAttribute('aria-expanded','false');$('#dlmItemPlaceSearch').value='';$('#dlmItemPlaceOptions').replaceChildren();$('#itemForm').querySelectorAll('details[open]').forEach(el=>el.open=false);$('#editId').value='';$('#photoPreview').hidden=true;$('#photoPreview').removeAttribute('src');photoData='';for(const id of ['itemName','author','barcode','desc','itemCategory','value'])$('#'+id).value='';$('#itemPlace').value='';dlmItemPlaceRefresh();$('#formHeading').textContent='Aggiungi oggetto ✨';renderPlaces()}$('#photoCameraBtn').onclick=()=>$('#photoCamera').click();$('#photoGalleryBtn').onclick=()=>$('#photo').click();async function onPhoto(e){let f=e.target.files[0];if(!f)return;try{let img=new Image(),url=URL.createObjectURL(f);await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});let max=720,scale=Math.min(1,max/Math.max(img.width,img.height));let c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);photoData=c.toDataURL('image/jpeg',.68);lastAutoBookCover='';URL.revokeObjectURL(url);$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}catch{toast('Impossibile leggere la foto')}finally{saveDraft()}}['photo','photoCamera'].forEach(id=>$('#'+id).addEventListener('change',onPhoto));$('#itemForm').addEventListener('submit',e=>{e.preventDefault();let old=db.items.find(x=>x.id===$('#editId').value);if(!old&&freeLimitReached()){showFreeLimitModal();return}let i={id:old?.id||crypto.randomUUID(),kind:$('#kind').value,name:$('#itemName').value.trim(),author:$('#author').value.trim(),barcode:$('#barcode').value.trim(),desc:$('#desc').value.trim(),category:$('#itemCategory').value.trim(),place:$('#itemPlace').value,value:$('#value').value,photo:photoData||old?.photo||'',created:old?.created||Date.now()};if(!i.name)return; if(old) Object.assign(old,i);else db.items.unshift(i);if(save()){dlmFinishItemForm(i.kind);toast('Salvato! 💜');if(old&&window.familyUpdateItem)window.familyUpdateItem(i);else if(!old&&window.familySyncQueue)window.familySyncQueue(i.id)}});window.showItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;$('#detailBody').innerHTML=`<h2>${safe(i.name)}</h2>${i.photo?`<img class="detail-photo" src="${safe(i.photo)}" alt="Foto dell'oggetto">`:'<div class="scan-box">📦</div>'}<div class="panel"><p class="pill">${i.kind==='book'?'📚 Libro':'📦 Oggetto'}</p>${i.author?`<p><b>Autore:</b> ${safe(i.author)}</p>`:''}${i.category?`<p><b>Categoria:</b> ${safe(i.category)}</p>`:''}<p>${safe(i.desc)||'Nessuna descrizione'}</p><p><b>📍 Posizione:</b> ${safe(placeName(i.place))}</p>${i.barcode?`<p><b>Codice:</b> ${safe(i.barcode)}</p>`:''}${i.value?`<p><b>Valore inserito:</b> ${safe(i.value)} €</p>`:''}<div class="row"><button class="secondary" onclick="editItem('${i.id}')">✏️ Modifica</button><button class="secondary" onclick="deleteItem('${i.id}')">🗑️ Elimina</button></div></div>`;page('detail')};window.editItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;editing=id;resetForm();editing=id;$('#editId').value=id;for(let [k,v] of [['kind',i.kind],['itemName',i.name],['author',i.author],['barcode',i.barcode],['desc',i.desc],['itemCategory',i.category],['itemPlace',i.place],['value',i.value]])$('#'+k).value=v||'';photoData=i.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}$('#formHeading').textContent='Modifica oggetto ✏️';dlmItemPlaceRefresh();updateKind();page('add');saveDraft()};window.deleteItem=async id=>{if(!confirm('Eliminare definitivamente questo elemento?'))return;if(window.familyDeleteItem){const ok=await window.familyDeleteItem(id);if(!ok)return}db.items=db.items.filter(i=>i.id!==id);save();page('items');toast('Elemento eliminato')};
 
 // Ricerca ISBN: cataloghi in parallelo; nessuna copertina di opere generiche viene accettata automaticamente.
 const isbnLookupBtn=$('#lookupBook');
