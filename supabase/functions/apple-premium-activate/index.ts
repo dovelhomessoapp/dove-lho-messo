@@ -1,7 +1,6 @@
-import { Buffer } from "node:buffer";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Environment } from "npm:@apple/app-store-server-library@2";
-import { createPremiumVerifier } from "../_shared/apple-premium-verification.ts";
+import { createPremiumVerifier, loadAppleRootCertificates } from "../_shared/apple-premium-verification.ts";
 
 function required(name: string): string {
   const value = Deno.env.get(name);
@@ -9,8 +8,7 @@ function required(name: string): string {
   return value;
 }
 
-const roots = required("APPLE_ROOT_CERTIFICATES_BASE64").split(",")
-  .map((value) => Buffer.from(value.trim(), "base64"));
+const roots = await loadAppleRootCertificates();
 const production = createPremiumVerifier(roots, Environment.PRODUCTION);
 const sandbox = createPremiumVerifier(roots, Environment.SANDBOX);
 const sandboxUsers = new Set(
