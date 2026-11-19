@@ -6,7 +6,10 @@ import {
 
 const bundleID = "it.dovelhomesso.casadolcecasa";
 const appAppleID = 6832913103;
-const annualProductID = bundleID + ".premium.annuale";
+const premiumProductIDs = new Set([
+  bundleID + ".premium.annuale",
+  bundleID + ".premium.mensile",
+]);
 
 export function createPremiumVerifier(
   rootCertificates: readonly Uint8Array[],
@@ -27,13 +30,13 @@ export function createPremiumVerifier(
   async function verifyTransaction(signedTransaction: string) {
     const transaction = await verifier.verifyAndDecodeTransaction(signedTransaction);
     if (
-      transaction.productId !== annualProductID ||
+      (!transaction.productId || !premiumProductIDs.has(transaction.productId)) ||
       !transaction.originalTransactionId ||
       !transaction.appAccountToken ||
       !transaction.expiresDate ||
       !transaction.signedDate
     ) {
-      throw new Error("Invalid annual Premium transaction");
+      throw new Error("Invalid Premium transaction");
     }
     return {
       environment,
@@ -53,7 +56,7 @@ export function createPremiumVerifier(
     if (!signedTransaction) return null;
 
     const transaction = await verifier.verifyAndDecodeTransaction(signedTransaction);
-    if (transaction.productId !== annualProductID || !transaction.appAccountToken) return null;
+    if ((!transaction.productId || !premiumProductIDs.has(transaction.productId)) || !transaction.appAccountToken) return null;
     return verifyTransaction(signedTransaction);
   }
 
