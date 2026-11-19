@@ -59,3 +59,19 @@ export function createPremiumVerifier(
 
   return { verifyTransaction, verifyNotification };
 }
+
+export async function loadAppleRootCertificates(): Promise<Uint8Array[]> {
+  const configured = Deno.env.get("APPLE_ROOT_CERTIFICATES_BASE64");
+  if (configured) return configured.split(",").map((value) => Buffer.from(value.trim(), "base64"));
+  const response = await fetch("https://www.apple.com/certificateauthority/AppleRootCA-G3.cer", {
+    signal: AbortSignal.timeout(8000),
+    redirect: "error",
+  });
+  if (!response.ok) throw new Error("Apple root certificate unavailable");
+  const certificate = await response.arrayBuffer();
+  const digest = Buffer.from(await crypto.subtle.digest("SHA-256", certificate)).toString("hex");
+  if (digest !== "bdb1b93cd5978d45c6261455f8db8c75a090292f1d8776352f4349d07d570285") {
+    throw new Error("Unexpected Apple root certificate fingerprint");
+  }
+  return [new Uint8Array(certificate)];
+}
