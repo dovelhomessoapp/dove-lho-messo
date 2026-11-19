@@ -18,6 +18,20 @@ const sandboxUsers = new Set(
 const db = createClient(required("SUPABASE_URL"), required("SUPABASE_SERVICE_ROLE_KEY"), {
   auth: { persistSession: false, autoRefreshToken: false },
 });
+function logVerificationFailure(stage: string, error: unknown) {
+  const e = error as { name?: string; status?: number; code?: string; cause?: { name?: string; code?: string }; message?: string };
+  const field = (value: unknown) => typeof value === "string" && /^[a-z0-9_]{1,48}$/i.test(value) ? value : undefined;
+  console.warn("Apple verification failed", {
+    stage,
+    name: field(e?.name),
+    status: typeof e?.status === "number" ? e.status : undefined,
+    code: field(e?.code),
+    cause: field(e?.cause?.name),
+    causeCode: field(e?.cause?.code),
+    invalidProductFields: e?.message === "Invalid Premium transaction",
+  });
+}
+
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (request) => {
@@ -50,9 +64,13 @@ Deno.serve(async (request) => {
       .select("user_id").eq("user_id", accountToken).maybeSingle();
     if (error) return Response.json({ error: "Activation unavailable" }, { status: 503 });
     if (allowed || sandboxUsers.has(accountToken)) {
-      verified = await sandbox.verifyTransaction(body.signedTransaction).catch(() => null);
+      verified = await sandbox.verifyTransaction(body.signedTransaction).catch((error) => {
+        logVerificationFailure("sandbox-transaction", error);
+        return null;
+      });
     }
   }
+  if (verified && verified.accountToken !== accountToken) console.warn("Apple transaction account mismatch");
   if (!verified || verified.accountToken !== accountToken) {
     return Response.json({ error: "Invalid purchase" }, { status: 422 });
   }
