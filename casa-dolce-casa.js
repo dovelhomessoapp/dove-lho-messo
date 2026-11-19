@@ -596,27 +596,49 @@ function renderItems(){
   list.innerHTML='<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto':'oggetti')+' in «'+safe(name)+'»</p>'+
    (items.map(entry).join('')||'<div class="empty">Nessun oggetto trovato. 💜</div>');
  }else{
+  const placesById=new Map(db.places.map(place=>[place.id,place]));
   const groups=new Map();
-  function itemRootPlace(id){
-   let place=db.places.find(p=>p.id===id);const seen=new Set();
-   while(place?.parentId&&!seen.has(place.id)){seen.add(place.id);const parent=db.places.find(p=>p.id===place.parentId);if(!parent)break;place=parent}
-   return place||null;
+  for(const item of items){
+   const path=[];
+   const seen=new Set();
+   let place=placesById.get(item.place);
+   while(place&&!seen.has(place.id)){
+    seen.add(place.id);
+    path.push(place);
+    place=placesById.get(place.parentId);
+   }
+   // Missing locations and cycles must still leave the item accessible.
+   const ancestry=place||!path.length?[null]:path.reverse();
+   let children=groups;
+   let group;
+   for(const location of ancestry){
+    const key=location?.id||'__unassigned__';
+    if(!children.has(key))children.set(key,{key,location,children:new Map(),records:[],count:0});
+    group=children.get(key);
+    group.count++;
+    children=group.children;
+   }
+   group.records.push(item);
   }
-  items.forEach(i=>{const root=itemRootPlace(i.place);const key=root?.id||'__unassigned__';if(!groups.has(key))groups.set(key,{root,records:[]});groups.get(key).records.push(i)});
-  const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(d=>d.dataset.category));
+  const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(details=>details.dataset.category));
   let locationPhotos={};
-  try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
+  try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')||{}}catch{}
   const palettes=['lavender','rose','peach','mint','sky'];
-  const groupHtml=Array.from(groups.values()).sort((a,b)=>(a.root?.name||'Posizione non assegnata').localeCompare(b.root?.name||'Posizione non assegnata','it',{sensitivity:'base'})).map(({root,records},index)=>{
-   const category=root?.id||'__unassigned__';
-   const open=terms.length||previouslyOpen.has(category)?' open':'';
-   const image=root&&(locationPhotos[root.id]||root.photo);
-   const label=root?.name||'Posizione non assegnata';
-   const subtitle=root?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
-   const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">`:dlmPlaceIconHtml(root?.name||label,root?.parentId);
-   const sortedRecords=records.sort((a,b)=>fullPlacePath(a.place).localeCompare(fullPlacePath(b.place),'it',{sensitivity:'base'})||String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
-   return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${sortedRecords.map(entry).join('')}</div></details>`;
-  }).join('');
+  const groupLabel=group=>group.location?.name||'Posizione non assegnata';
+  const sortGroups=groups=>[...groups.values()].sort((a,b)=>groupLabel(a).localeCompare(groupLabel(b),'it',{sensitivity:'base'}));
+  function renderGroup(group,palette,depth=0){
+   const {key,location,children,records,count}=group;
+   const open=terms.length||previouslyOpen.has(key)?' open':'';
+   const image=location&&(locationPhotos[location.id]||location.photo);
+   const label=groupLabel(group);
+   const subtitle=depth?'':location?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
+   const picture=image?`<img src="${safe(image)}" alt="" loading="lazy">`:dlmPlaceIconHtml(location?.name||label,location?.parentId);
+   const nested=sortGroups(children).map(child=>renderGroup(child,palette,depth+1)).join('');
+   const direct=records.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('');
+   const cardClass=depth?' dlm-location-subcard':'';
+   return `<details class="dlm-item-group dlm-location-card dlm-location-${palette}${cardClass}" data-category="${safe(key)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong>${subtitle?`<small>${safe(subtitle)}</small>`:''}<span class="dlm-location-total">${count} ${count===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${nested}${direct}</div></details>`;
+  }
+  const groupHtml=sortGroups(groups).map((group,index)=>renderGroup(group,palettes[index%palettes.length])).join('');
   list.innerHTML=(terms.length?'<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto trovato':'oggetti trovati')+' per la ricerca</p>':'')+(groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>');
  }
  const books=db.items.filter(i=>i.kind==='book');
