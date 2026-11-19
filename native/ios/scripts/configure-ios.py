@@ -36,6 +36,7 @@ project_text = project.read_text()
 for name, file_id, build_id in [
     ('QRPDF.swift', 'D1A400000000000000000001', 'D1A400000000000000000002'),
     ('PantryBarcode.swift', 'D1A400000000000000000003', 'D1A400000000000000000004'),
+    ('PremiumStore.swift', 'D1A400000000000000000005', 'D1A400000000000000000006'),
 ]:
     shutil.copyfile(root / 'scripts' / name, app / name)
     additions = {
