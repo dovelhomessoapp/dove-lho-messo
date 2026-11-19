@@ -202,8 +202,8 @@ document.getElementById('placePhotoPicker').addEventListener('change',async e=>{
  }catch{toast('Non riesco a leggere questa fotografia')}
 });
 
-window.openQRSelection=()=>{
- const all=[
+window.openQRSelection=(pantryOnly=false)=>{
+ const all=pantryOnly?(window.pantryPositionQRLabels?.()||[]):[
   ...db.places.map(p=>({id:'P:'+p.id,name:placePath(p.id),kind:'Posizioni'})),
   ...db.items.map(i=>({id:'I:'+i.id,name:i.name,kind:i.kind==='book'?'Libri':'Oggetti'}))
  ];
@@ -214,7 +214,7 @@ window.openQRSelection=()=>{
  overlay.innerHTML='<section role="dialog" aria-modal="true" aria-label="Seleziona QR da stampare" style="background:#fffafa;color:#51336c;border-radius:23px;width:min(100%,540px);max-height:90dvh;display:flex;flex-direction:column;padding:19px;box-sizing:border-box;box-shadow:0 12px 35px #3b225344"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h2 style="margin:0;font-size:1.24rem">🖨️ Seleziona i QR</h2><button type="button" id="dlmQRClose" class="secondary" style="width:auto;padding:8px 13px">✕</button></div><p class="hint" style="margin:8px 0">Spunta soltanto le etichette che vuoi stampare.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin:5px 0 12px"><button type="button" class="secondary" id="dlmQRAll" style="width:auto">Seleziona tutti</button><button type="button" class="secondary" id="dlmQRNone" style="width:auto">Deseleziona tutti</button></div><div id="dlmQRChoices" style="overflow:auto;flex:1;min-height:0;padding:3px"></div><p id="dlmQRCount" style="margin:12px 0;font-weight:750">0 selezionati</p><button type="button" id="dlmQRGenerate" class="primary full">📄 Crea PDF A4</button></section>';
  document.body.appendChild(overlay);
  const list=overlay.querySelector('#dlmQRChoices');
- for(const group of ['Posizioni','Oggetti','Libri']){
+ for(const group of ['Posizioni','Oggetti','Libri','Dispensa']){
   const members=all.filter(x=>x.kind===group);if(!members.length)continue;
   const heading=document.createElement('h3');heading.textContent=group;heading.style.cssText='font-size:1rem;margin:14px 0 8px';list.appendChild(heading);
   for(const item of members){
@@ -243,6 +243,7 @@ window.openQRSelection=()=>{
 };
 window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
  const labels=[
+  ...(selectedIds?(window.pantryPositionQRLabels?.()||[]).filter(label=>selectedIds.has(label.id)):[]),
   ...db.places.filter(p=>!selectedIds||selectedIds.has('P:'+p.id)).map(p=>({name:placePath(p.id),code:qrData(p.id),kind:'POSIZIONE'})),
   ...db.items.filter(i=>!selectedIds||selectedIds.has('I:'+i.id)).map(i=>({name:i.name,code:'DLM-I-'+i.id,kind:i.kind==='book'?'LIBRO':'OGGETTO'}))
  ];
@@ -251,6 +252,7 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
   const plain=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7e]/g,'?');
   const esc=v=>plain(v).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
   const imageSources=labels.map(item=>{
+   if(item.kind==='Dispensa')return '';
    const id=item.code.slice(6);
    const p=db.places.find(x=>x.id===id);
    const i=db.items.find(x=>x.id===id);
@@ -1029,6 +1031,7 @@ isbnLookupBtn.addEventListener('click',lookupCode);
 
 let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;$('#scanBack').hidden=false;page('scan');void startCamera()};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){
  code=String(code||'').trim();if(!code)return;stopCamera();
+ if(code.startsWith('DLM-D-')){void window.openPantryPositionQR?.(code);return}
  if(code.startsWith('DLM-I-')){const item=db.items.find(i=>i.id===code.slice(6));if(item)showItem(item.id);else $('#scanResult').innerHTML='<div class="panel">Oggetto o libro non presente in questo archivio.</div>';return}
  if(code.startsWith('DLM-P-')){
   const p=db.places.find(x=>x.id===code.slice(6));

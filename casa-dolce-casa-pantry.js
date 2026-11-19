@@ -489,7 +489,37 @@ function pantryShelfResolver(places,area){
   return path.length===1?(paths.get(key(path[0]))||path):path;
  };
 }
-function pantryByShelf(group,shelves,cards,resolveShelf){
+let pantryQRLabels=[];
+function pantryPositionCode(area,path){
+ return 'DLM-D-'+encodeURIComponent(JSON.stringify([access.homeId,area,path.map(name=>name.toLocaleLowerCase('it'))]));
+}
+window.pantryPositionQRLabels=()=>access?pantryQRLabels:[];
+window.openPantryPositionQR=async code=>{
+ if(!access){toast('Accedi alla tua Casa dolce casa per aprire la posizione');return}
+ if(!pantryQRLabels.some(label=>label.code===code))await refresh();
+ if(!pantryQRLabels.some(label=>label.code===code)){
+  toast('Posizione della dispensa non disponibile in questa casa');return;
+ }
+ overviewFilter='';
+ $('pantrySearch').value='';
+ page('pantry');
+ // Let the entry observer close the accordions before opening the scanned path.
+ await Promise.resolve();
+ render();
+ const list=$('pantryList');
+ const position=[...list.querySelectorAll('[data-pantry-position]')].find(details=>details.dataset.pantryPosition===code);
+ if(!position){toast('Posizione della dispensa non disponibile');return}
+ openPantryPath(position);
+ const summary=position.querySelector('summary');
+ summary.focus({preventScroll:true});
+ summary.scrollIntoView({block:'start',behavior:'auto'});
+};
+function openPantryPath(position){
+ for(let details=position;details&&$('pantryList').contains(details);details=details.parentElement.closest('details')){
+  details.open=true;
+ }
+}
+function pantryByShelf(group,shelves,cards,resolveShelf,codeForPath){
  const inventory={children:new Map(),lots:[],count:0};
  function addPath(shelf,lot){
   let node=inventory;
@@ -504,9 +534,13 @@ function pantryByShelf(group,shelves,cards,resolveShelf){
  }
  shelves.forEach(shelf=>addPath(shelf));
  group.forEach(lot=>addPath(lot.shelf,lot));
- function renderContents(node){
+ function renderContents(node,path=[]){
   const children=[...node.children.values()].sort((a,b)=>a.name.localeCompare(b.name,'it',{sensitivity:'base',numeric:true}));
-  const locations=children.map(child=>'<details class="pantry-shelf"><summary>📍 '+escape(child.name)+' · '+child.count+(child.count===1?' confezione':' confezioni')+'</summary><div>'+renderContents(child)+'</div></details>').join('');
+  const locations=children.map(child=>{
+   const childPath=[...path,child.name];
+   const code=codeForPath(childPath);
+   return '<details class="pantry-shelf" data-pantry-position="'+escape(code)+'"><summary>📍 '+escape(child.name)+' · '+child.count+(child.count===1?' confezione':' confezioni')+'</summary><div>'+renderContents(child,childPath)+'</div></details>';
+  }).join('');
   return locations+cards(node.lots)||'<p class="hint">Nessun alimento in questa posizione.</p>';
  }
  return renderContents(inventory);
@@ -563,14 +597,36 @@ function render(){
    if(sectionKeys.has(lot.zone))return lot.zone;
    return 'senza-posizione';
  };
+ const qrButton=$('pantryPrintPositionQR');
+ qrButton.hidden=!access;
+ pantryQRLabels=[];
+ if(access){
+  for(const [key] of sections){
+   const name=areaName({area_id:key,zone:key});
+   const resolve=resolverFor(name);
+   const labels=new Map();
+   function addLabel(path){
+    const code=pantryPositionCode(key,path);
+    if(!labels.has(code))labels.set(code,{id:code,code,name:[name,...path].join(' / '),kind:'Dispensa'});
+   }
+   addLabel([]);
+   pantryShelfOptions(key).forEach(shelf=>{
+    const path=resolve(shelf);
+    for(let depth=1;depth<=path.length;depth++)addLabel(path.slice(0,depth));
+   });
+   pantryQRLabels.push(...labels.values());
+  }
+ }
  if(inventory.some(lot=>sectionFor(lot)==='senza-posizione')){
    sections.push(['senza-posizione','Senza posizione']);
  }
  const accordions=sections.map(([key,label])=>{
    const locationName=areaName({area_id:key,zone:key});
+   const codeForPath=path=>access&&sectionKeys.has(key)?pantryPositionCode(key,path):'';
+   const areaCode=codeForPath([]);
    const group=inventory.filter(l=>sectionFor(l)===key).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base',numeric:true})||String(a.brand||'').localeCompare(String(b.brand||''),'it',{sensitivity:'base'}));
    const packages=countPackages(group);
-   return '<details class="pantry-group pantry-zone-'+key+'" style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">'+label+' · '+packages+(packages===1?' confezione':' confezioni')+'</summary><div style="margin-top:10px">'+pantryByShelf(group,q?[]:pantryShelfOptions(key),cards,resolverFor(locationName))+'</div></details>';
+   return '<details class="pantry-group pantry-zone-'+escape(key)+'" data-pantry-position="'+escape(areaCode)+'" style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">'+label+' · '+packages+(packages===1?' confezione':' confezioni')+'</summary><div style="margin-top:10px">'+pantryByShelf(group,q?[]:pantryShelfOptions(key),cards,resolverFor(locationName),codeForPath)+'</div></details>';
  }).join('');
  $('pantryList').innerHTML=(overviewFilter==='all'?'<div class="pantry-filter-note">📦 Tutte le confezioni, suddivise per posizione. Scorri per vedere gli alimenti e le quantità.</div>':'')+(overviewFilter&&overviewFilter!=='all'?'<div class="pantry-filter-note">Filtro: '+({open:'Aperte',soon:'Entro 5 giorni',expired:'Scadute'}[overviewFilter]||'Tutte')+' <button type="button" id="pantryClearOverview">Mostra tutto</button></div>':'')+(q?'<p class="hint">🔎 '+filtered.length+' risultati per «'+escape(q)+'»</p>':'')+
  '<details class="pantry-group pantry-priority" style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0"><img class="pantry-real-3d-icon" src="assets/cibi-in-scadenza-3d.png" alt=""> Aperti e da consumare prima ('+priority.length+')</summary><div style="margin-top:10px">'+(priority.length?cards(priority):'<p class="hint">Nessun alimento aperto o in scadenza'+(q?' tra i risultati':'')+'.</p>')+'</div></details>'+
@@ -593,9 +649,7 @@ function jumpToPantryLot(event){
   card=findCard();
  }
  if(!card)return;
- for(let details=card.closest('details');details&&$('pantryList').contains(details);details=details.parentElement.closest('details')){
-  details.open=true;
- }
+ openPantryPath(card.closest('details'));
  if(document.activeElement===$('pantrySearch'))document.activeElement.blur();
  card.focus({preventScroll:true});
  card.scrollIntoView({block:'start',behavior:'auto'});
@@ -899,9 +953,17 @@ async function refresh(){
  catch(e){status.textContent='Per attivare la dispensa condivisa, esegui prima pantry-setup.sql in Supabase. Dettaglio: '+e.message}
 }
 window.familyPantryConnect=(homeId,getToken)=>{access={homeId,token:getToken};online.hidden=false;refresh()};
-window.familyPantryDisconnect=()=>{access=null;lots=[];areas=[];shopping=[];minimumStocks=[];online.hidden=true;status.textContent='Accedi alla tua Casa dolce casa per vedere la dispensa.'};
+window.familyPantryDisconnect=()=>{access=null;pantryQRLabels=[];lots=[];areas=[];shopping=[];minimumStocks=[];online.hidden=true;status.textContent='Accedi alla tua Casa dolce casa per vedere la dispensa.'};
 root.querySelectorAll('[data-zone]').forEach(b=>b.addEventListener('click',()=>{zone=b.dataset.zone;render()}));
 $('pantryRefresh').onclick=refresh;
+const printPositionQR=document.createElement('button');
+printPositionQR.id='pantryPrintPositionQR';
+printPositionQR.type='button';
+printPositionQR.className='secondary full';
+printPositionQR.textContent='🖨️ Stampa QR delle posizioni';
+printPositionQR.hidden=true;
+printPositionQR.onclick=()=>window.openQRSelection(true);
+$('pantryList').before(printPositionQR);
 $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy||!access)return;busy=true;
  $('pantryForm').querySelectorAll('button').forEach(b=>b.disabled=true);
  const error=$('pantrySaveError');error.textContent='';
