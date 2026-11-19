@@ -44,18 +44,55 @@ function dlmPlaceIconHtml(name,parentId){
  const src='assets/icone-posizioni/'+encodeURIComponent(preset[0])+'.png';
  return '<img class="dlm-place-preset-image" src="'+src+'" alt="" loading="lazy" onerror="this.onerror=null;this.replaceWith(document.createTextNode('+JSON.stringify('🏡')+'))">';
 }
+function orderedPlaceEntries(){
+ const ordered=[],seen=new Set();
+ const sorted=[...db.places].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+ const children=new Map();
+ const ids=new Set(sorted.map(p=>p.id));
+ for(const p of sorted){
+  const parent=ids.has(p.parentId)?p.parentId:'';
+  if(!children.has(parent))children.set(parent,[]);
+  children.get(parent).push(p);
+ }
+ function visit(p,depth){
+  if(seen.has(p.id))return;
+  seen.add(p.id);
+  ordered.push({p,depth});
+  for(const child of children.get(p.id)||[])visit(child,depth+1);
+ }
+ for(const root of children.get('')||[])visit(root,0);
+ for(const p of sorted)visit(p,0);
+ return ordered;
+}
+function dlmItemPlaceLabel(p,depth){
+ const parent=depth>0?placePath(p.parentId):'';
+ return '<strong>'+safe(p.name)+'</strong>'+(parent?'<small>In '+safe(parent.replaceAll(' → ',' › '))+'</small>':'');
+}
 function dlmItemPlaceRefresh(){
  const native=document.getElementById('itemPlace');
  const selected=document.getElementById('dlmItemPlaceSelected');
  const list=document.getElementById('dlmItemPlaceOptions');
  if(!native||!selected||!list)return;
  const id=native.value;
- const place=db.places.find(p=>p.id===id);
- selected.innerHTML=place?'<span class="dlm-selected-place-icon">'+dlmItemPlacePicture(place)+'</span><span class="dlm-selected-place-label">'+safe(fullPlacePath(place.id))+'</span>':'<span class="dlm-selected-place-label">Da assegnare</span>';
+ const ordered=orderedPlaceEntries();
+ const current=ordered.find(({p})=>p.id===id);
+ selected.innerHTML=current?'<span class="dlm-selected-place-icon">'+dlmItemPlacePicture(current.p)+'</span><span class="dlm-selected-place-label">'+dlmItemPlaceLabel(current.p,current.depth)+'</span>':'<span class="dlm-selected-place-label">Da assegnare</span>';
  const query=(document.getElementById('dlmItemPlaceSearch')?.value||'').trim().toLocaleLowerCase('it');
- const sorted=[...db.places].sort((a,b)=>fullPlacePath(a.id).localeCompare(fullPlacePath(b.id),'it',{sensitivity:'base'}));
- list.innerHTML='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon" aria-hidden="true">🏡</span><span class="dlm-place-option-label"><strong>Da assegnare</strong></span></span></button>'+
- sorted.filter(p=>!query||fullPlacePath(p.id).toLocaleLowerCase('it').includes(query)).map(p=>'<button type="button" class="dlm-item-place-option" data-place-choice="'+safe(p.id)+'" aria-pressed="'+(id===p.id)+'">'+'<span class="dlm-place-option-layout"><span class="dlm-place-option-icon">'+dlmItemPlacePicture(p)+'</span><span class="dlm-place-option-label"><strong>'+safe(p.name)+'</strong><small>'+safe(fullPlacePath(p.id))+'</small></span></span></button>').join('');
+ const openBranches=new Set([...list.querySelectorAll('details[open]')].map(el=>el.dataset.branch));
+ const choice=({p,depth})=>'<button type="button" class="dlm-item-place-option" data-place-choice="'+safe(p.id)+'" aria-pressed="'+(id===p.id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon">'+dlmItemPlacePicture(p)+'</span><span class="dlm-place-option-label">'+dlmItemPlaceLabel(p,depth)+'</span></span></button>';
+ const unassigned='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon" aria-hidden="true">🏡</span><span class="dlm-place-option-label"><strong>Da assegnare</strong></span></span></button>';
+ if(query){
+  list.innerHTML=unassigned+ordered.filter(({p})=>fullPlacePath(p.id).toLocaleLowerCase('it').includes(query)).map(choice).join('');
+ }else{
+  const renderBranch=(entry,visited)=>{
+   if(visited.has(entry.p.id))return '';
+   const next=new Set(visited);next.add(entry.p.id);
+   const children=ordered.filter(({p})=>p.parentId===entry.p.id&&!next.has(p.id));
+   if(!children.length)return choice(entry);
+   return '<details class="dlm-place-branch" data-branch="'+safe(entry.p.id)+'"'+(openBranches.has(entry.p.id)?' open':'')+'><summary>'+choice(entry)+'<span class="dlm-branch-arrow" aria-hidden="true">›</span><span class="sr-only">Apri o chiudi le sottoposizioni di '+safe(entry.p.name)+'</span></summary><div class="dlm-place-children">'+children.map(child=>renderBranch(child,next)).join('')+'</div></details>';
+  };
+  list.innerHTML=unassigned+ordered.filter(({depth})=>depth===0).map(entry=>renderBranch(entry,new Set())).join('');
+ }
 }
 function dlmItemPlacePicture(p){
  let photos={};try{photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
@@ -66,10 +103,20 @@ function dlmItemPlaceInit(){
  const button=document.getElementById('dlmItemPlaceButton');
  const panel=document.getElementById('dlmItemPlacePanel');
  if(!button||!panel)return;
- button.addEventListener('click',()=>{const opening=panel.hidden;panel.hidden=!opening;button.setAttribute('aria-expanded',String(opening));if(opening)dlmItemPlaceRefresh()});
+ button.addEventListener('click',()=>{
+  const opening=panel.hidden;
+  document.activeElement?.blur();
+  panel.hidden=!opening;button.setAttribute('aria-expanded',String(opening));
+  if(opening){
+   dlmItemPlaceRefresh();
+   // Wait for the iPhone keyboard to retract before revealing the choices.
+   setTimeout(()=>{if(!panel.hidden&&document.getElementById('add').classList.contains('active'))button.scrollIntoView({behavior:'smooth',block:'start'})},300);
+  }
+ });
  document.getElementById('dlmItemPlaceSearch').addEventListener('input',dlmItemPlaceRefresh);
  document.getElementById('dlmItemPlaceOptions').addEventListener('click',e=>{
   const choice=e.target.closest('button[data-place-choice]');if(!choice)return;
+  e.preventDefault();
   document.getElementById('itemPlace').value=choice.dataset.placeChoice;
   document.getElementById('itemPlace').dispatchEvent(new Event('change',{bubbles:true}));
   panel.hidden=true;button.setAttribute('aria-expanded','false');dlmItemPlaceRefresh();
@@ -78,7 +125,7 @@ function dlmItemPlaceInit(){
  document.getElementById('itemPlace').addEventListener('change',dlmItemPlaceRefresh);
  dlmItemPlaceRefresh();
 }
-function renderPlaces(){let locationPhotos={};try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{};for(const p of db.places){if(locationPhotos[p.id])p.photo=locationPhotos[p.id]}const ordered=[];const seen=new Set();function visit(parent,depth){for(const p of db.places.filter(x=>(x.parentId||'')===parent).sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''),'it',{sensitivity:'base'}))){if(seen.has(p.id))continue;seen.add(p.id);ordered.push({p,depth});visit(p.id,depth+1)}}visit('',0);for(const p of db.places){if(!seen.has(p.id)){seen.add(p.id);ordered.push({p,depth:0});visit(p.id,1)}}const previousItemPlace=$('#itemPlace').value;const previousParent=$('#placeParent')?.value||'';const openPlaces=new Set([...document.querySelectorAll('#placeList details[data-place-id][open]')].map(el=>el.dataset.placeId));
+function renderPlaces(){let locationPhotos={};try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{};for(const p of db.places){if(locationPhotos[p.id])p.photo=locationPhotos[p.id]}const ordered=orderedPlaceEntries();const previousItemPlace=$('#itemPlace').value;const previousParent=$('#placeParent')?.value||'';const openPlaces=new Set([...document.querySelectorAll('#placeList details[data-place-id][open]')].map(el=>el.dataset.placeId));
 const openDetails=new Set([...document.querySelectorAll('#placeList details[data-info-id][open]')].map(el=>el.dataset.infoId));
 function renderNode(p,level,visited,colorIndex=0){
  if(visited.has(p.id))return '';
@@ -278,6 +325,16 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
   pdf+='trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';
   const pdfBytes=new Uint8Array(pdf.length);for(let j=0;j<pdf.length;j++)pdfBytes[j]=pdf.charCodeAt(j)&255;
   const file=new File([pdfBytes],'etichette-qr-A4.pdf',{type:'application/pdf'});
+  if(window.dlmStoreDistribution==='app-store'){
+   const dataURL=await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error);
+    reader.readAsDataURL(file);
+   });
+   await window.Capacitor.Plugins.QRPDF.preview({base64:dataURL.slice(dataURL.indexOf(',')+1)});
+   return;
+  }
   const isAndroid=/Android/i.test(navigator.userAgent);
   // On Android use the native file share/save sheet instead of opening a PDF
   // inside the installed PWA, where pull-to-refresh can leave a blank viewer.
@@ -518,6 +575,12 @@ $('#placeForm').addEventListener('submit',async e=>{
 }
 function renderItems(){
  const q=String($('#itemFilter')?.value||'').trim();
+ const categoryFilter=$('#objectCategoryFilter');
+ const previousCategory=categoryFilter.value;
+ const categories=categoryOptions({kind:'object',defaults:[]},[]);
+ categoryFilter.replaceChildren(new Option('Tutti gli oggetti',''),...categories.map(name=>new Option(name,categoryKey(name))));
+ categoryFilter.value=categories.some(name=>categoryKey(name)===previousCategory)?previousCategory:'';
+ const selectedCategory=categoryFilter.value;
  const normalize=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').replace(/[^a-z0-9]+/g,' ').trim();
  const terms=normalize(q).split(/\s+/).filter(Boolean);
  const matches=i=>{
@@ -525,34 +588,55 @@ function renderItems(){
   return terms.every(term=>searchable.includes(term));
  };
  const entry=i=>`<article class="entry"><div class="thumb">${i.photo?`<img class="thumb" src="${safe(i.photo)}" alt="">`:i.kind==='book'?'📖':'📦'}</div><div class="info"><strong>${safe(i.name)}</strong><small>📍 ${safe(fullPlacePath(i.place))}</small></div><button type="button" class="dlm-inline-qr" aria-label="Stampa QR di ${safe(i.name)}" onclick="printItemQR('${i.id}')">🖨️ QR</button><button aria-label="Apri" onclick="showItem('${i.id}')">›</button></article>`;
- const items=db.items.filter(i=>i.kind!=='book'&&matches(i));
- const groups=new Map();
- function itemRootPlace(id){
-  let place=db.places.find(p=>p.id===id);const seen=new Set();
-  while(place?.parentId&&!seen.has(place.id)){seen.add(place.id);const parent=db.places.find(p=>p.id===place.parentId);if(!parent)break;place=parent}
-  return place||null;
- }
- items.forEach(i=>{const root=itemRootPlace(i.place);const key=root?.id||'__unassigned__';if(!groups.has(key))groups.set(key,{root,records:[]});groups.get(key).records.push(i)});
+ const items=db.items.filter(i=>i.kind!=='book'&&(!selectedCategory||categoryKey(i.category)===selectedCategory)&&matches(i));
  const list=$('#itemList');
- const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(d=>d.dataset.category));
- let locationPhotos={};
- try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
- const palettes=['lavender','rose','peach','mint','sky'];
- const groupHtml=Array.from(groups.values()).sort((a,b)=>(a.root?.name||'Posizione non assegnata').localeCompare(b.root?.name||'Posizione non assegnata','it',{sensitivity:'base'})).map(({root,records},index)=>{
-  const category=root?.id||'__unassigned__';
-  const open=terms.length||previouslyOpen.has(category)||groups.size===1?' open':'';
-  const image=root&&(locationPhotos[root.id]||root.photo);
-  const label=root?.name||'Posizione non assegnata';
-  const subtitle=root?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
-  const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">`:dlmPlaceIconHtml(root?.name||label,root?.parentId);
-  const sortedRecords=records.sort((a,b)=>fullPlacePath(a.place).localeCompare(fullPlacePath(b.place),'it',{sensitivity:'base'})||String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
-  return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${sortedRecords.map(entry).join('')}</div></details>`;
- }).join('');
- list.innerHTML=(terms.length?'<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto trovato':'oggetti trovati')+' per la ricerca</p>':'')+(groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>');
+ if(selectedCategory){
+  const name=categoryFilter.selectedOptions[0].textContent;
+  items.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+  list.innerHTML='<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto':'oggetti')+' in «'+safe(name)+'»</p>'+
+   (items.map(entry).join('')||'<div class="empty">Nessun oggetto trovato. 💜</div>');
+ }else{
+  const groups=new Map();
+  function itemRootPlace(id){
+   let place=db.places.find(p=>p.id===id);const seen=new Set();
+   while(place?.parentId&&!seen.has(place.id)){seen.add(place.id);const parent=db.places.find(p=>p.id===place.parentId);if(!parent)break;place=parent}
+   return place||null;
+  }
+  items.forEach(i=>{const root=itemRootPlace(i.place);const key=root?.id||'__unassigned__';if(!groups.has(key))groups.set(key,{root,records:[]});groups.get(key).records.push(i)});
+  const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(d=>d.dataset.category));
+  let locationPhotos={};
+  try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
+  const palettes=['lavender','rose','peach','mint','sky'];
+  const groupHtml=Array.from(groups.values()).sort((a,b)=>(a.root?.name||'Posizione non assegnata').localeCompare(b.root?.name||'Posizione non assegnata','it',{sensitivity:'base'})).map(({root,records},index)=>{
+   const category=root?.id||'__unassigned__';
+   const open=terms.length||previouslyOpen.has(category)?' open':'';
+   const image=root&&(locationPhotos[root.id]||root.photo);
+   const label=root?.name||'Posizione non assegnata';
+   const subtitle=root?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
+   const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">`:dlmPlaceIconHtml(root?.name||label,root?.parentId);
+   const sortedRecords=records.sort((a,b)=>fullPlacePath(a.place).localeCompare(fullPlacePath(b.place),'it',{sensitivity:'base'})||String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+   return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${sortedRecords.map(entry).join('')}</div></details>`;
+  }).join('');
+  list.innerHTML=(terms.length?'<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto trovato':'oggetti trovati')+' per la ricerca</p>':'')+(groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>');
+ }
  const books=db.items.filter(i=>i.kind==='book');
  $('#bookList').innerHTML=books.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')||'<div class="empty">Nessun libro per ora. 💜</div>';
 }
-dlmItemPlaceInit();$('#itemFilter').addEventListener('input',renderItems);$('#quickSearch').addEventListener('input',e=>{$('#itemFilter').value=e.target.value;page('items')});function resetForm(){if(document.getElementById('coverChoices'))document.getElementById('coverChoices').innerHTML='';document.querySelector('#bookTitleSearchPanel')?.remove();$('#itemForm').reset();$('#editId').value='';$('#photoPreview').hidden=true;$('#photoPreview').removeAttribute('src');photoData='';for(const id of ['itemName','author','barcode','desc','itemCategory','value'])$('#'+id).value='';$('#itemPlace').value='';dlmItemPlaceRefresh();$('#formHeading').textContent='Aggiungi oggetto ✨';renderPlaces()}$('#photoCameraBtn').onclick=()=>$('#photoCamera').click();$('#photoGalleryBtn').onclick=()=>$('#photo').click();async function onPhoto(e){let f=e.target.files[0];if(!f)return;try{let img=new Image(),url=URL.createObjectURL(f);await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});let max=720,scale=Math.min(1,max/Math.max(img.width,img.height));let c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);photoData=c.toDataURL('image/jpeg',.68);lastAutoBookCover='';URL.revokeObjectURL(url);$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}catch{toast('Impossibile leggere la foto')}finally{saveDraft()}}['photo','photoCamera'].forEach(id=>$('#'+id).addEventListener('change',onPhoto));$('#itemForm').addEventListener('submit',e=>{e.preventDefault();let old=db.items.find(x=>x.id===$('#editId').value);if(!old&&freeLimitReached()){showFreeLimitModal();return}let i={id:old?.id||crypto.randomUUID(),kind:$('#kind').value,name:$('#itemName').value.trim(),author:$('#author').value.trim(),barcode:$('#barcode').value.trim(),desc:$('#desc').value.trim(),category:$('#itemCategory').value.trim(),place:$('#itemPlace').value,value:$('#value').value,photo:photoData||old?.photo||'',created:old?.created||Date.now()};if(!i.name)return; if(old) Object.assign(old,i);else db.items.unshift(i);if(save()){editing=null;localStorage.removeItem(DRAFT_KEY);renderItems();page(i.kind==='book'?'books':'items');toast('Salvato! 💜');if(old&&window.familyUpdateItem)window.familyUpdateItem(i);else if(!old&&window.familySyncQueue)window.familySyncQueue(i.id)}});window.showItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;$('#detailBody').innerHTML=`<h2>${safe(i.name)}</h2>${i.photo?`<img class="detail-photo" src="${safe(i.photo)}" alt="Foto dell'oggetto">`:'<div class="scan-box">📦</div>'}<div class="panel"><p class="pill">${i.kind==='book'?'📚 Libro':'📦 Oggetto'}</p>${i.author?`<p><b>Autore:</b> ${safe(i.author)}</p>`:''}${i.category?`<p><b>Categoria:</b> ${safe(i.category)}</p>`:''}<p>${safe(i.desc)||'Nessuna descrizione'}</p><p><b>📍 Posizione:</b> ${safe(placeName(i.place))}</p>${i.barcode?`<p><b>Codice:</b> ${safe(i.barcode)}</p>`:''}${i.value?`<p><b>Valore inserito:</b> ${safe(i.value)} €</p>`:''}<div class="row"><button class="secondary" onclick="editItem('${i.id}')">✏️ Modifica</button><button class="secondary" onclick="deleteItem('${i.id}')">🗑️ Elimina</button></div></div>`;page('detail')};window.editItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;editing=id;resetForm();editing=id;$('#editId').value=id;for(let [k,v] of [['kind',i.kind],['itemName',i.name],['author',i.author],['barcode',i.barcode],['desc',i.desc],['itemCategory',i.category],['itemPlace',i.place],['value',i.value]])$('#'+k).value=v||'';photoData=i.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}$('#formHeading').textContent='Modifica oggetto ✏️';dlmItemPlaceRefresh();updateKind();page('add');saveDraft()};window.deleteItem=async id=>{if(!confirm('Eliminare definitivamente questo elemento?'))return;if(window.familyDeleteItem){const ok=await window.familyDeleteItem(id);if(!ok)return}db.items=db.items.filter(i=>i.id!==id);save();page('items');toast('Elemento eliminato')};
+function dlmFinishItemForm(kind){
+ document.activeElement?.blur();
+ editing=null;
+ $('#itemFilter').value='';$('#objectCategoryFilter').value='';
+ document.querySelectorAll('#itemList details[open],#bookList details[open]').forEach(el=>el.open=false);
+ resetForm();
+ page(kind==='book'?'books':'items');
+ document.querySelectorAll('#itemList details[open],#bookList details[open]').forEach(el=>el.open=false);
+ localStorage.removeItem(DRAFT_KEY);
+}
+document.querySelectorAll('[data-cancel-item]').forEach(button=>button.addEventListener('click',()=>{
+ const kind=$('#kind').value;
+ dlmFinishItemForm(kind);
+}));
+dlmItemPlaceInit();$('#itemFilter').addEventListener('input',renderItems);$('#objectCategoryFilter').addEventListener('change',renderItems);$('#quickSearch').addEventListener('input',e=>{$('#itemFilter').value=e.target.value;$('#objectCategoryFilter').value='';page('items')});function resetForm(){if(document.getElementById('coverChoices'))document.getElementById('coverChoices').innerHTML='';document.querySelector('#bookTitleSearchPanel')?.remove();$('#itemForm').reset();$('#itemForm').style.display='';$('#dlmInlinePlaceCreator').hidden=true;$('#dlmItemPlacePanel').hidden=true;$('#dlmItemPlaceButton').setAttribute('aria-expanded','false');$('#dlmItemPlaceSearch').value='';$('#dlmItemPlaceOptions').replaceChildren();$('#itemForm').querySelectorAll('details[open]').forEach(el=>el.open=false);$('#editId').value='';$('#photoPreview').hidden=true;$('#photoPreview').removeAttribute('src');photoData='';for(const id of ['itemName','author','barcode','desc','itemCategory','value'])$('#'+id).value='';$('#itemPlace').value='';dlmItemPlaceRefresh();$('#formHeading').textContent='Aggiungi oggetto ✨';renderPlaces()}$('#photoCameraBtn').onclick=()=>$('#photoCamera').click();$('#photoGalleryBtn').onclick=()=>$('#photo').click();async function onPhoto(e){let f=e.target.files[0];if(!f)return;try{let img=new Image(),url=URL.createObjectURL(f);await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});let max=720,scale=Math.min(1,max/Math.max(img.width,img.height));let c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);photoData=c.toDataURL('image/jpeg',.68);lastAutoBookCover='';URL.revokeObjectURL(url);$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}catch{toast('Impossibile leggere la foto')}finally{saveDraft()}}['photo','photoCamera'].forEach(id=>$('#'+id).addEventListener('change',onPhoto));$('#itemForm').addEventListener('submit',e=>{e.preventDefault();let old=db.items.find(x=>x.id===$('#editId').value);if(!old&&freeLimitReached()){showFreeLimitModal();return}let i={id:old?.id||crypto.randomUUID(),kind:$('#kind').value,name:$('#itemName').value.trim(),author:$('#author').value.trim(),barcode:$('#barcode').value.trim(),desc:$('#desc').value.trim(),category:$('#itemCategory').value.trim(),place:$('#itemPlace').value,value:$('#value').value,photo:photoData||old?.photo||'',created:old?.created||Date.now()};if(!i.name)return; if(old) Object.assign(old,i);else db.items.unshift(i);if(save()){dlmFinishItemForm(i.kind);toast('Salvato! 💜');if(old&&window.familyUpdateItem)window.familyUpdateItem(i);else if(!old&&window.familySyncQueue)window.familySyncQueue(i.id)}});window.showItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;$('#detailBody').innerHTML=`<h2>${safe(i.name)}</h2>${i.photo?`<img class="detail-photo" src="${safe(i.photo)}" alt="Foto dell'oggetto">`:'<div class="scan-box">📦</div>'}<div class="panel"><p class="pill">${i.kind==='book'?'📚 Libro':'📦 Oggetto'}</p>${i.author?`<p><b>Autore:</b> ${safe(i.author)}</p>`:''}${i.category?`<p><b>Categoria:</b> ${safe(i.category)}</p>`:''}<p>${safe(i.desc)||'Nessuna descrizione'}</p><p><b>📍 Posizione:</b> ${safe(placeName(i.place))}</p>${i.barcode?`<p><b>Codice:</b> ${safe(i.barcode)}</p>`:''}${i.value?`<p><b>Valore inserito:</b> ${safe(i.value)} €</p>`:''}<div class="row"><button class="secondary" onclick="editItem('${i.id}')">✏️ Modifica</button><button class="secondary" onclick="deleteItem('${i.id}')">🗑️ Elimina</button></div></div>`;page('detail')};window.editItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;editing=id;resetForm();editing=id;$('#editId').value=id;for(let [k,v] of [['kind',i.kind],['itemName',i.name],['author',i.author],['barcode',i.barcode],['desc',i.desc],['itemCategory',i.category],['itemPlace',i.place],['value',i.value]])$('#'+k).value=v||'';photoData=i.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}$('#formHeading').textContent='Modifica oggetto ✏️';dlmItemPlaceRefresh();updateKind();page('add');saveDraft()};window.deleteItem=async id=>{if(!confirm('Eliminare definitivamente questo elemento?'))return;if(window.familyDeleteItem){const ok=await window.familyDeleteItem(id);if(!ok)return}db.items=db.items.filter(i=>i.id!==id);save();page('items');toast('Elemento eliminato')};
 
 // Ricerca ISBN: cataloghi in parallelo; nessuna copertina di opere generiche viene accettata automaticamente.
 const isbnLookupBtn=$('#lookupBook');
@@ -700,6 +784,10 @@ async function lookupISBN(){
  const isbn=normISBN($('#barcode').value);
  if(!checkISBN(isbn)){toast('Controlla il codice ISBN: inserisci un ISBN valido');return}
  if(!navigator.onLine){toast('Per cercare un libro serve Internet');return}
+ const matchesISBN=value=>{
+  const code=normISBN(value);
+  return checkISBN(code)&&(code===isbn||code===isbn10of13(isbn)||isbn10of13(code)===isbn);
+ };
  isbnLookupBtn.disabled=true;isbnLookupBtn.textContent='📚 Cerco libro e copertina…';
  coverChecks=[];
  try{
@@ -709,10 +797,13 @@ async function lookupISBN(){
   if(!verified){
    try{
     const endpoint='https://ephdnunjudbwlgbxdadm.supabase.co/functions/v1/cerca-libro-isbn?isbn='+encodeURIComponent(isbn);
-    const response=await fetch(endpoint,{headers:{'apikey':'sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT'}});
+    const response=await fetch(endpoint,{
+     headers:{apikey:'sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT',Accept:'application/json'},
+     signal:AbortSignal.timeout(8000)
+    });
     if(response.ok){
      const book=await response.json();
-     if(book?.trovato&&book?.titolo){
+     if(book?.trovato&&book?.titolo&&matchesISBN(book.isbn)){
       title=String(book.titolo).trim();
       authors=book.autore?[String(book.autore).trim()]:[];
       publisher=String(book.editore||'').trim();
@@ -798,7 +889,9 @@ async function lookupISBN(){
     try{
      const catalog=await getCatalogJSON('https://opac.sbn.it/opacmobilegw/search.json?isbn='+encodeURIComponent(isbn));
      availableSources.push('SBN');reachable=true;
-     const rec=(catalog?.briefRecords||[]).find(x=>x?.titolo);
+     const records=catalog?.briefRecords||[];
+     const rec=records.find(record=>record?.titolo&&matchesISBN(record.isbn))||
+      (records.length===1&&records[0]?.titolo&&!records[0].isbn?records[0]:null);
      if(rec){
       const raw=String(rec.titolo).replace(/[\x00-\x1f\x7f-\x9f]/g,'');
       const author=String(rec.autorePrincipale||'').trim();
@@ -1102,31 +1195,130 @@ $('#scanImageFile').addEventListener('change',async e=>{
  }finally{if(url)URL.revokeObjectURL(url);e.target.value=''}
 });
 $('#startScan').onclick=startCamera;$('#stopScan').onclick=stopCamera;if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});const dlmBookCategoryDefaults=['Narrativa','Romanzi','Gialli e thriller','Fantasy e fantascienza','Libri di cucina','Bambini e ragazzi','Fumetti e manga','Storia','Scienza e natura','Manuali e hobby','Viaggi','Biografie','Saggi','Poesia','Scuola e studio','Arte e fotografia','Sport','Religione e spiritualità','Salute e benessere','Economia e lavoro','Lingue straniere','Dizionari ed enciclopedie','Altro'];
-const dlmBookCategoryStorage='dlm-custom-book-categories-v1';
-function dlmBookCategoryOptions(){
- let custom=[];try{custom=JSON.parse(localStorage.getItem(dlmBookCategoryStorage)||'[]')}catch{}
- const fromBooks=db.items.filter(i=>i.kind==='book').map(i=>i.category).filter(Boolean);
- return [...new Set([...dlmBookCategoryDefaults,...custom,...fromBooks].map(x=>String(x||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'it',{sensitivity:'base'}));
+const dlmCategoryPickers=[
+ {kind:'book',select:'dlmBookCategorySelect',add:'dlmAddBookCategory',defaults:dlmBookCategoryDefaults,
+  storageKey:()=> 'dlm-custom-book-categories-v1'},
+ {kind:'object',select:'dlmObjectCategorySelect',add:'dlmAddObjectCategory',
+  defaults:[],
+  storageKey:()=> 'dlm-custom-object-categories-v1:'+ (window.dlmCategoryOwnerId?.()||'guest')}
+];
+function readCustomCategories(storageKey){
+ try{
+  const categories=JSON.parse(localStorage.getItem(storageKey)||'[]');
+  return Array.isArray(categories)?categories:[];
+ }catch{return []}
 }
-function dlmSyncBookCategory(){
- const picker=document.getElementById('dlmBookCategorySelect');if(!picker)return;
+function categoryKey(value){return String(value||'').trim().toLocaleLowerCase('it')}
+function categoryOptions({kind,defaults},custom){
+ const used=db.items.filter(i=>(i.kind==='book'?'book':'object')===kind).map(i=>i.category)
+  .filter(name=>kind==='book'||categoryKey(name)!=='libri');
+ const distinct=new Map();
+ for(const value of [...defaults,...custom,...used]){
+  const name=String(value||'').trim();
+  const key=categoryKey(name);
+  if(name&&!distinct.has(key))distinct.set(key,name);
+ }
+ return [...distinct.values()].sort((a,b)=>a.localeCompare(b,'it',{sensitivity:'base'}));
+}
+function syncItemCategory(){
+ const config=dlmCategoryPickers.find(picker=>picker.kind===$('#kind').value);
+ const select=config&&document.getElementById(config.select);
+ if(!select)return;
  const current=$('#itemCategory').value.trim();
- picker.replaceChildren(new Option('Seleziona una categoria…',''),...dlmBookCategoryOptions().map(v=>new Option(v,v)));
- if(current&&!Array.from(picker.options).some(o=>o.value===current))picker.add(new Option(current,current));
- picker.value=current;
+ const options=categoryOptions(config,readCustomCategories(config.storageKey()));
+ select.replaceChildren(new Option('Seleziona una categoria…',''),...options.map(name=>new Option(name,name)));
+ if(config.kind==='object'){
+  const create=new Option('＋ Crea nuova categoria','');
+  create.dataset.createCategory='';
+  select.add(create,1);
+ }
+ const existing=options.find(name=>categoryKey(name)===categoryKey(current));
+ if(current&&!existing)select.add(new Option(current,current));
+ select.value=existing||current;
+ if(config.kind==='object')refreshObjectCategoryManager(options);
 }
-document.getElementById('dlmBookCategorySelect')?.addEventListener('change',e=>{$('#itemCategory').value=e.target.value;saveDraft()});
-document.getElementById('dlmAddBookCategory')?.addEventListener('click',()=>{
- const name=prompt('Come vuoi chiamare la nuova categoria di libri?')?.trim();
- if(!name)return;
- if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
- let custom=[];try{custom=JSON.parse(localStorage.getItem(dlmBookCategoryStorage)||'[]')}catch{}
- const existing=dlmBookCategoryOptions().find(x=>x.toLocaleLowerCase()===name.toLocaleLowerCase());
- const chosen=existing||name;
- if(!existing){custom.push(chosen);try{localStorage.setItem(dlmBookCategoryStorage,JSON.stringify(custom))}catch{}}
- $('#itemCategory').value=chosen;dlmSyncBookCategory();saveDraft();toast('Categoria disponibile nella tendina 💜');
-});
-function updateKind(){const isBook=$('#kind').value==='book';const bookPicker=document.getElementById('dlmBookCategoryPicker');if(bookPicker)bookPicker.hidden=!isBook;const objectCategory=document.getElementById('dlmObjectCategoryLabel');if(objectCategory)objectCategory.hidden=isBook;if(isBook)dlmSyncBookCategory();const photoAiDropdown=document.getElementById('photoAiDropdown');if(photoAiDropdown){photoAiDropdown.hidden=isBook;if(isBook)photoAiDropdown.open=false;}$('#authorWrap').hidden=!isBook;$('#lookupBook').hidden=!isBook;['bookIsbnTools','sbnDirectBox','bookCoverTools'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook});['googleCoverSearchBtn','pasteBookCoverBtn','pasteCoverHelp'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook})}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,category:$('#itemCategory').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemCategory','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=isEAN(code)&&!/^97[89]/.test(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
+function refreshObjectCategoryManager(options){
+ const select=$('#dlmManagedObjectCategory');
+ const current=select.value;
+ select.replaceChildren(...options.map(name=>new Option(name,name)));
+ if(!options.length)select.add(new Option('Nessuna categoria da gestire',''));
+ select.value=options.includes(current)?current:options[0]||'';
+ select.disabled=$('#dlmRenameObjectCategory').disabled=$('#dlmDeleteObjectCategory').disabled=!options.length;
+}
+function manageObjectCategory(remove){
+ const oldName=$('#dlmManagedObjectCategory').value;
+ if(!oldName)return;
+ const oldKey=categoryKey(oldName);
+ const items=db.items.filter(item=>item.kind!=='book'&&categoryKey(item.category)===oldKey);
+ const count=items.length===1?'1 oggetto':items.length+' oggetti';
+ const config=dlmCategoryPickers.find(picker=>picker.kind==='object');
+ const storageKey=config.storageKey();
+ const custom=readCustomCategories(storageKey);
+ let name='';
+ if(remove){
+  const message=items.length?' La categoria sarà rimossa da '+count+'. Gli oggetti resteranno nell’inventario.':'';
+  if(!confirm('Eliminare la categoria «'+oldName+'»?'+message))return;
+ }else{
+  name=prompt('Nuovo nome per «'+oldName+'»'+(items.length?' (aggiorna '+count+')':'')+'?',oldName)?.trim();
+  if(!name||name===oldName)return;
+  if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
+  const newKey=categoryKey(name);
+  if(newKey!==oldKey&&categoryOptions(config,custom).some(value=>categoryKey(value)===newKey)){
+   toast('Esiste già una categoria con questo nome');
+   return;
+  }
+ }
+ const next=custom.filter(value=>categoryKey(value)!==oldKey);
+ if(name)next.push(name);
+ try{localStorage.setItem(storageKey,JSON.stringify(next))}
+ catch{toast('Impossibile salvare le categorie sul dispositivo');return}
+ const previous=items.map(item=>item.category);
+ for(const item of items)item.category=name;
+ if(items.length&&!save()){
+  items.forEach((item,index)=>{item.category=previous[index]});
+  localStorage.setItem(storageKey,JSON.stringify(custom));
+  return;
+ }
+ if(categoryKey($('#itemCategory').value)===oldKey){
+  $('#itemCategory').value=name;
+  saveDraft();
+ }
+ syncItemCategory();
+ if(name)$('#dlmManagedObjectCategory').value=name;
+ renderItems();
+ toast(remove?'Categoria eliminata':'Categoria rinominata');
+ window.familyUpdateObjectCategories?.(items);
+}
+$('#dlmRenameObjectCategory').onclick=()=>manageObjectCategory(false);
+$('#dlmDeleteObjectCategory').onclick=()=>manageObjectCategory(true);
+for(const config of dlmCategoryPickers){
+ document.getElementById(config.select)?.addEventListener('change',e=>{
+  if(e.target.selectedOptions[0]?.hasAttribute('data-create-category')){
+   syncItemCategory();
+   document.getElementById(config.add)?.click();
+   return;
+  }
+  $('#itemCategory').value=e.target.value;
+  saveDraft();
+ });
+ document.getElementById(config.add)?.addEventListener('click',()=>{
+  const name=prompt('Come vuoi chiamare la nuova categoria?')?.trim();
+  if(!name)return;
+  if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
+  const storageKey=config.storageKey();
+  const custom=readCustomCategories(storageKey);
+  const existing=categoryOptions(config,custom).find(value=>categoryKey(value)===categoryKey(name));
+  if(!existing){
+   try{localStorage.setItem(storageKey,JSON.stringify([...custom,name]))}
+   catch{toast('Impossibile salvare la categoria sul dispositivo');return}
+  }
+  $('#itemCategory').value=existing||name;
+  syncItemCategory();
+  saveDraft();
+  toast('Categoria disponibile nella tendina 💜');
+ });
+}
+function updateKind(){const isBook=$('#kind').value==='book';const bookPicker=document.getElementById('dlmBookCategoryPicker');if(bookPicker)bookPicker.hidden=!isBook;const objectCategory=document.getElementById('dlmObjectCategoryLabel');if(objectCategory)objectCategory.hidden=isBook;syncItemCategory();const photoAiDropdown=document.getElementById('photoAiDropdown');if(photoAiDropdown){photoAiDropdown.hidden=isBook;if(isBook)photoAiDropdown.open=false;}$('#authorWrap').hidden=!isBook;$('#lookupBook').hidden=!isBook;['bookIsbnTools','sbnDirectBox','bookCoverTools'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook});['googleCoverSearchBtn','pasteBookCoverBtn','pasteCoverHelp'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook})}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,category:$('#itemCategory').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];$('#itemCategory').value=d.category??d.itemCategory??'';photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=isEAN(code)&&!/^97[89]/.test(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
 $('#barcode').addEventListener('input',updateCodeLookupLabel);
 $('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
 
