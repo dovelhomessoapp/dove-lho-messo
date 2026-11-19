@@ -15,6 +15,20 @@ const db = createClient(required("SUPABASE_URL"), required("SUPABASE_SERVICE_ROL
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+function logVerificationFailure(stage: string, error: unknown) {
+  const e = error as { name?: string; status?: number; code?: string; cause?: { name?: string; code?: string }; message?: string };
+  const field = (value: unknown) => typeof value === "string" && /^[a-z0-9_]{1,48}$/i.test(value) ? value : undefined;
+  console.warn("Apple verification failed", {
+    stage,
+    name: field(e?.name),
+    status: typeof e?.status === "number" ? e.status : undefined,
+    code: field(e?.code),
+    cause: field(e?.cause?.name),
+    causeCode: field(e?.cause?.code),
+    invalidProductFields: e?.message === "Invalid Premium transaction",
+  });
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") return new Response(null, { status: 405 });
 
@@ -27,7 +41,8 @@ Deno.serve(async (request) => {
   try {
     transaction = await production.verifyNotification(body.signedPayload)
       .catch(() => sandbox.verifyNotification(body.signedPayload));
-  } catch {
+  } catch (error) {
+    logVerificationFailure("notification", error);
     return new Response(null, { status: 503 });
   }
   if (!transaction) return new Response(null, { status: 204 });
