@@ -1,0 +1,13 @@
+{
+  "name": "dove-lho-messo-apple-verifier",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@apple/app-store-server-library": "^2.0.0"
+  }
+}
