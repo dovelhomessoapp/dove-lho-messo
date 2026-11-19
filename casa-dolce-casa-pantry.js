@@ -86,7 +86,10 @@ document.head.appendChild(pantryShelfStyle);
 let pantryWasActive=root.classList.contains('active');
 new MutationObserver(()=>{
  const active=root.classList.contains('active');
- if(active&&!pantryWasActive)root.querySelectorAll('details[open]').forEach(details=>{details.open=false});
+ if(active&&!pantryWasActive){
+  root.querySelectorAll('details[open]').forEach(details=>{details.open=false});
+  if(access)render();
+ }
  pantryWasActive=active;
 }).observe(root,{attributes:true,attributeFilter:['class']});
 const pantryBasketStyle=document.createElement('style');pantryBasketStyle.textContent='.pantry-real-3d-icon{width:43px;height:43px;object-fit:contain;vertical-align:middle;margin-right:6px;border-radius:0}.pantry-group>summary .pantry-real-3d-icon{width:52px;height:52px;box-sizing:border-box;object-fit:contain;padding:5px;vertical-align:middle;margin-right:9px;border-radius:0;overflow:visible}.pantry-group>summary{min-height:56px;line-height:1.4}.pantry-basket-icon{display:inline-block;font-size:25px;vertical-align:-3px;margin-right:3px;filter:drop-shadow(0 2px 3px #8e6d8e33)}';document.head.appendChild(pantryBasketStyle);
@@ -458,12 +461,40 @@ function pantryShelfPath(shelf){
  return String(shelf||'').split(/\s*→\s*|\s+[-–—]\s+/).map(name=>name.trim()).filter(Boolean)
   .map(name=>/^\d+$/.test(name)?'Ripiano '+name:name);
 }
-function pantryByShelf(group,shelves,cards){
+function pantryShelfResolver(places,area){
+ const key=name=>String(name??'').trim().toLocaleLowerCase('it');
+ const roots=places.filter(place=>key(place.name)===key(area));
+ const paths=new Map();
+ if(roots.length===1){
+  const children=new Map();
+  for(const place of places){
+   if(!children.has(place.parentId))children.set(place.parentId,[]);
+   children.get(place.parentId).push(place);
+  }
+  const seen=new Set([roots[0].id]);
+  function visit(parent,path){
+   for(const child of children.get(parent.id)||[]){
+    if(seen.has(child.id))continue;
+    seen.add(child.id);
+    const next=[...path,child.name];
+    const name=key(pantryShelfPath(child.name).at(-1));
+    paths.set(name,paths.has(name)?null:next);
+    visit(child,next);
+   }
+  }
+  visit(roots[0],[]);
+ }
+ return shelf=>{
+  const path=pantryShelfPath(shelf);
+  return path.length===1?(paths.get(key(path[0]))||path):path;
+ };
+}
+function pantryByShelf(group,shelves,cards,resolveShelf){
  const inventory={children:new Map(),lots:[],count:0};
  function addPath(shelf,lot){
   let node=inventory;
   if(lot)node.count+=Number(lot.quantity);
-  for(const name of pantryShelfPath(shelf)){
+  for(const name of resolveShelf(shelf)){
    const key=name.toLocaleLowerCase('it');
    if(!node.children.has(key))node.children.set(key,{name,children:new Map(),lots:[],count:0});
    node=node.children.get(key);
@@ -499,8 +530,13 @@ function render(){
  ['soon','assets/cibi-in-scadenza-3d.png',expiringSoon,'Entro 5 giorni'],
  ['expired','assets/cibi-scaduti-3d.png',overdue,'Scadute']
  ].map(([key,img,count,label])=>'<button type="button" class="pantry-overview-card'+(key==='expired'&&overdue?' pantry-overview-warning':'')+'" data-overview-filter="'+key+'" aria-pressed="'+(overviewFilter===key)+'"><span><img class="pantry-stat-icon" src="'+img+'" alt=""></span><strong>'+count+'</strong><small>'+label+'</small></button>').join('');
+ const shelfResolvers=new Map();
+ const resolverFor=area=>{
+  if(!shelfResolvers.has(area))shelfResolvers.set(area,pantryShelfResolver(db.places,area));
+  return shelfResolvers.get(area);
+ };
  const productLink=(lot,detail='')=>{
-   const shelf=lot.shelf?' · '+pantryShelfPath(lot.shelf).join(' → '):'';
+   const shelf=lot.shelf?' · '+resolverFor(areaName(lot))(lot.shelf).join(' → '):'';
    return '<li><button type="button" class="pantry-product-link" data-pantry-jump="'+escape(lot.id)+'"><span><strong>'+escape(lot.name)+'</strong>'+escape(detail)+'</span><span class="hint">'+escape(areaName(lot)+shelf)+' · Quantità: '+Number(lot.quantity)+'</span></button></li>';
  };
  const urgentRows=soon.map(l=>{
@@ -517,7 +553,7 @@ function render(){
   (filtered.length?'<ul class="pantry-product-links">'+filtered.map(l=>productLink(l,l.expires_on?' · Scade il '+l.expires_on.split('-').reverse().join('/'):'')).join('')+'</ul>':''):'';
  renderMinimumStocks();
  const cards=arr=>arr.map(l=>{const days=dayCount(l.expires_on);const badge=days===null?'Senza scadenza':days<0?'⚠️ Scaduto da '+Math.abs(days)+' giorni':days===0?'⚠️ Scade oggi':days<=5?'🔔 Scade tra '+days+' giorni':'Scade il '+l.expires_on.split('-').reverse().join('/');
- const opened=l.opened_on?'<p class="hint">📦 Aperta il '+escape(l.opened_on.split('-').reverse().join('/'))+(l.opened_until?' · Consumare entro '+escape(l.opened_until.split('-').reverse().join('/'))+(dayCount(l.opened_until)<=5?' 🔔':''):' · Termine dopo apertura non indicato')+'</p>':'';return '<div class="panel pantry-lot-card" data-pantry-lot="'+escape(l.id)+'" tabindex="-1" style="margin:10px 0"><strong>'+escape(l.name)+'</strong>'+pantryFoodPhotoMarkup(l.photo)+(l.opened_on?' <span style="display:inline-block;margin-left:6px;padding:4px 9px;border-radius:999px;background:#f2dfff;color:#7432a6;font-weight:700;font-size:12px">📦 APERTO</span>':'')+'<p class="hint">'+escape(areaName(l))+(l.shelf?' · 📍 '+escape(pantryShelfPath(l.shelf).join(' → ')):'')+' · '+escape(badge)+'</p>'+opened+'<div class="pantry-lot-quantity">Quantità: <strong>'+l.quantity+'</strong></div><div class="pantry-lot-actions"><button type="button" class="secondary" data-consume="'+l.id+'">− 1 consumato</button>'+(l.opened_on?'':'<button type="button" class="secondary" data-open="'+l.id+'">📦 Apri 1</button>')+'<button type="button" class="secondary" data-edit="'+l.id+'">✏️ Modifica</button><button type="button" class="secondary" data-move="'+l.id+'">📍 Sposta</button><button type="button" class="secondary pantry-lot-delete" data-delete="'+l.id+'">Elimina</button><button type="button" class="secondary" data-lot-shopping="'+escape(l.id)+'">🛒 Da comprare</button></div><p class="pantry-lot-message hint" role="status"></p></div>'}).join('');
+ const opened=l.opened_on?'<p class="hint">📦 Aperta il '+escape(l.opened_on.split('-').reverse().join('/'))+(l.opened_until?' · Consumare entro '+escape(l.opened_until.split('-').reverse().join('/'))+(dayCount(l.opened_until)<=5?' 🔔':''):' · Termine dopo apertura non indicato')+'</p>':'';return '<div class="panel pantry-lot-card" data-pantry-lot="'+escape(l.id)+'" tabindex="-1" style="margin:10px 0"><strong>'+escape(l.name)+'</strong>'+pantryFoodPhotoMarkup(l.photo)+(l.opened_on?' <span style="display:inline-block;margin-left:6px;padding:4px 9px;border-radius:999px;background:#f2dfff;color:#7432a6;font-weight:700;font-size:12px">📦 APERTO</span>':'')+'<p class="hint">'+escape(areaName(l))+(l.shelf?' · 📍 '+escape(resolverFor(areaName(l))(l.shelf).join(' → ')):'')+' · '+escape(badge)+'</p>'+opened+'<div class="pantry-lot-quantity">Quantità: <strong>'+l.quantity+'</strong></div><div class="pantry-lot-actions"><button type="button" class="secondary" data-consume="'+l.id+'">− 1 consumato</button>'+(l.opened_on?'':'<button type="button" class="secondary" data-open="'+l.id+'">📦 Apri 1</button>')+'<button type="button" class="secondary" data-edit="'+l.id+'">✏️ Modifica</button><button type="button" class="secondary" data-move="'+l.id+'">📍 Sposta</button><button type="button" class="secondary pantry-lot-delete" data-delete="'+l.id+'">Elimina</button><button type="button" class="secondary" data-lot-shopping="'+escape(l.id)+'">🛒 Da comprare</button></div><p class="pantry-lot-message hint" role="status"></p></div>'}).join('');
  const priority=filtered.filter(l=>overviewFilter&&overviewFilter!=='all'?true:isPriority(l));
  const inventory=overviewFilter&&overviewFilter!=='all'?[]:filtered;
  const sections=[['frigo','<img class="pantry-real-3d-icon" src="assets/frigorifero-nuovo.png" alt="Frigo" loading="eager" decoding="sync"> Frigo'],['freezer','<img class="pantry-real-3d-icon" src="assets/freezer-nuovo.png" alt="Freezer" loading="eager" decoding="sync"> Freezer'],['dispensa','<img class="pantry-real-3d-icon" src="assets/dispensa-nuova.png" alt=""> Dispensa'],...areas.map(a=>[a.id,'<img class="pantry-real-3d-icon" src="'+escape(areaPhoto(a))+'" alt=""> '+escape(a.name)])];
@@ -531,9 +567,10 @@ function render(){
    sections.push(['senza-posizione','Senza posizione']);
  }
  const accordions=sections.map(([key,label])=>{
+   const locationName=areaName({area_id:key,zone:key});
    const group=inventory.filter(l=>sectionFor(l)===key).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base',numeric:true})||String(a.brand||'').localeCompare(String(b.brand||''),'it',{sensitivity:'base'}));
    const packages=countPackages(group);
-   return '<details class="pantry-group pantry-zone-'+key+'" style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">'+label+' · '+packages+(packages===1?' confezione':' confezioni')+'</summary><div style="margin-top:10px">'+pantryByShelf(group,q?[]:pantryShelfOptions(key),cards)+'</div></details>';
+   return '<details class="pantry-group pantry-zone-'+key+'" style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">'+label+' · '+packages+(packages===1?' confezione':' confezioni')+'</summary><div style="margin-top:10px">'+pantryByShelf(group,q?[]:pantryShelfOptions(key),cards,resolverFor(locationName))+'</div></details>';
  }).join('');
  $('pantryList').innerHTML=(overviewFilter==='all'?'<div class="pantry-filter-note">📦 Tutte le confezioni, suddivise per posizione. Scorri per vedere gli alimenti e le quantità.</div>':'')+(overviewFilter&&overviewFilter!=='all'?'<div class="pantry-filter-note">Filtro: '+({open:'Aperte',soon:'Entro 5 giorni',expired:'Scadute'}[overviewFilter]||'Tutte')+' <button type="button" id="pantryClearOverview">Mostra tutto</button></div>':'')+(q?'<p class="hint">🔎 '+filtered.length+' risultati per «'+escape(q)+'»</p>':'')+
  '<details class="pantry-group pantry-priority" style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0"><img class="pantry-real-3d-icon" src="assets/cibi-in-scadenza-3d.png" alt=""> Aperti e da consumare prima ('+priority.length+')</summary><div style="margin-top:10px">'+(priority.length?cards(priority):'<p class="hint">Nessun alimento aperto o in scadenza'+(q?' tra i risultati':'')+'.</p>')+'</div></details>'+
