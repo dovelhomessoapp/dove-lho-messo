@@ -3,7 +3,17 @@ import Foundation
 import StoreKit
 
 enum PremiumStore {
-    static let productID = "it.dovelhomesso.casadolcecasa.premium.annuale"
+    enum Plan: String {
+        case annual, monthly
+
+        var productID: String {
+            "it.dovelhomesso.casadolcecasa.premium." + (self == .annual ? "annuale" : "mensile")
+        }
+
+        var periodUnit: Product.SubscriptionPeriod.Unit {
+            self == .annual ? .year : .month
+        }
+    }
 
     enum PurchaseOutcome {
         case activated
@@ -18,19 +28,19 @@ enum PremiumStore {
         var errorDescription: String? {
             switch self {
             case .productUnavailable:
-                return "L’abbonamento annuale non è disponibile al momento."
+                return "L’abbonamento non è disponibile al momento."
             case .invalidTransaction:
                 return "Non è stato possibile verificare l’acquisto con Apple."
             }
         }
     }
 
-    static func annualProduct() async throws -> Product {
-        let products = try await Product.products(for: [productID])
+    static func product(for plan: Plan) async throws -> Product {
+        let products = try await Product.products(for: [plan.productID])
         guard let product = products.first,
               product.type == .autoRenewable,
               let period = product.subscription?.subscriptionPeriod,
-              period.unit == .year, period.value == 1 else {
+              period.unit == plan.periodUnit, period.value == 1 else {
             throw StoreError.productUnavailable
         }
         return product
@@ -39,14 +49,15 @@ enum PremiumStore {
     // The callback must verify the signed transaction on the server and
     // persist the entitlement before StoreKit is told the purchase is complete.
     static func purchase(
+        plan: Plan,
         accountToken: UUID,
         activate: (String) async throws -> Void
     ) async throws -> PurchaseOutcome {
-        let product = try await annualProduct()
+        let product = try await product(for: plan)
         switch try await product.purchase(options: [.appAccountToken(accountToken)]) {
         case .success(let result):
             guard case .verified(let transaction) = result,
-                  transaction.productID == productID,
+                  transaction.productID == plan.productID,
                   transaction.appAccountToken == accountToken else {
                 throw StoreError.invalidTransaction
             }
@@ -75,7 +86,11 @@ final class PremiumStorePlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func price(_ call: CAPPluginCall) {
         Task { @MainActor in
             do {
-                let product = try await PremiumStore.annualProduct()
+                guard let plan = PremiumStore.Plan(rawValue: call.getString("plan") ?? "") else {
+                    call.reject("Piano Premium non disponibile.")
+                    return
+                }
+                let product = try await PremiumStore.product(for: plan)
                 call.resolve(["price": product.displayPrice])
             } catch { call.reject(error.localizedDescription) }
         }
@@ -92,24 +107,33 @@ final class PremiumStorePlugin: CAPPlugin, CAPBridgedPlugin {
 
             do {
                 try await submit(homeID: homeID, token: token, signedTransaction: nil)
-                if call.getBool("restore") == true {
+                let restoring = call.getBool("restore") == true
+                let plan = PremiumStore.Plan(rawValue: call.getString("plan") ?? "")
+                if restoring {
                     try await AppStore.sync()
                 }
                 for await result in Transaction.currentEntitlements {
                     guard case .verified(let transaction) = result,
-                          transaction.productID == PremiumStore.productID,
+                          !transaction.isUpgraded,
+                          (restoring
+                            ? [PremiumStore.Plan.annual.productID, PremiumStore.Plan.monthly.productID].contains(transaction.productID)
+                            : transaction.productID == plan?.productID),
                           transaction.appAccountToken == accountID else { continue }
                     try await submit(homeID: homeID, token: token, signedTransaction: result.jwsRepresentation)
                     await transaction.finish()
                     call.resolve(["outcome": "activated"])
                     return
                 }
-                if call.getBool("restore") == true {
+                if restoring {
                     call.resolve(["outcome": "missing"])
                     return
                 }
 
-                let outcome = try await PremiumStore.purchase(accountToken: accountID) { signed in
+                guard let plan else {
+                    call.reject("Piano Premium non disponibile.")
+                    return
+                }
+                let outcome = try await PremiumStore.purchase(plan: plan, accountToken: accountID) { signed in
                     try await self.submit(homeID: homeID, token: token, signedTransaction: signed)
                 }
                 switch outcome {
