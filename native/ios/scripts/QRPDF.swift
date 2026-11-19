@@ -8,6 +8,7 @@ final class DLMBridgeViewController: CAPBridgeViewController {
         super.capacitorDidLoad()
         webView?.scrollView.isDirectionalLockEnabled = true
         bridge?.registerPluginInstance(QRPDFPlugin())
+        bridge?.registerPluginInstance(PremiumStorePlugin())
         if #available(iOS 16.0, *) {
             bridge?.registerPluginInstance(PantryBarcodePlugin())
         }
