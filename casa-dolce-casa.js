@@ -784,10 +784,6 @@ async function lookupISBN(){
  const isbn=normISBN($('#barcode').value);
  if(!checkISBN(isbn)){toast('Controlla il codice ISBN: inserisci un ISBN valido');return}
  if(!navigator.onLine){toast('Per cercare un libro serve Internet');return}
- const matchesISBN=value=>{
-  const code=normISBN(value);
-  return checkISBN(code)&&(code===isbn||code===isbn10of13(isbn)||isbn10of13(code)===isbn);
- };
  isbnLookupBtn.disabled=true;isbnLookupBtn.textContent='📚 Cerco libro e copertina…';
  coverChecks=[];
  try{
@@ -797,13 +793,10 @@ async function lookupISBN(){
   if(!verified){
    try{
     const endpoint='https://ephdnunjudbwlgbxdadm.supabase.co/functions/v1/cerca-libro-isbn?isbn='+encodeURIComponent(isbn);
-    const response=await fetch(endpoint,{
-     headers:{apikey:'sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT',Accept:'application/json'},
-     signal:AbortSignal.timeout(8000)
-    });
+    const response=await fetch(endpoint,{headers:{'apikey':'sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT'}});
     if(response.ok){
      const book=await response.json();
-     if(book?.trovato&&book?.titolo&&matchesISBN(book.isbn)){
+     if(book?.trovato&&book?.titolo){
       title=String(book.titolo).trim();
       authors=book.autore?[String(book.autore).trim()]:[];
       publisher=String(book.editore||'').trim();
@@ -889,9 +882,7 @@ async function lookupISBN(){
     try{
      const catalog=await getCatalogJSON('https://opac.sbn.it/opacmobilegw/search.json?isbn='+encodeURIComponent(isbn));
      availableSources.push('SBN');reachable=true;
-     const records=catalog?.briefRecords||[];
-     const rec=records.find(record=>record?.titolo&&matchesISBN(record.isbn))||
-      (records.length===1&&records[0]?.titolo&&!records[0].isbn?records[0]:null);
+     const rec=(catalog?.briefRecords||[]).find(x=>x?.titolo);
      if(rec){
       const raw=String(rec.titolo).replace(/[\x00-\x1f\x7f-\x9f]/g,'');
       const author=String(rec.autorePrincipale||'').trim();
