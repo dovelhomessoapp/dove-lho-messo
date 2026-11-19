@@ -44,11 +44,15 @@ Deno.serve(async (request) => {
     if (!owner) return Response.json({ error: "Owner required" }, { status: 403 });
     return Response.json({ eligible: true });
   }
-  const verified = await production.verifyTransaction(body.signedTransaction).catch(async () =>
-    sandboxUsers.has(accountToken)
-      ? await sandbox.verifyTransaction(body.signedTransaction).catch(() => null)
-      : null
-  );
+  let verified = await production.verifyTransaction(body.signedTransaction).catch(() => null);
+  if (!verified) {
+    const { data: allowed, error } = await db.from("apple_premium_sandbox_users")
+      .select("user_id").eq("user_id", accountToken).maybeSingle();
+    if (error) return Response.json({ error: "Activation unavailable" }, { status: 503 });
+    if (allowed || sandboxUsers.has(accountToken)) {
+      verified = await sandbox.verifyTransaction(body.signedTransaction).catch(() => null);
+    }
+  }
   if (!verified || verified.accountToken !== accountToken) {
     return Response.json({ error: "Invalid purchase" }, { status: 422 });
   }
