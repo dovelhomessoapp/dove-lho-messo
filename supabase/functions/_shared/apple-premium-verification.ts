@@ -73,7 +73,7 @@ export async function loadAppleRootCertificates(): Promise<Uint8Array[]> {
   if (!response.ok) throw new Error("Apple root certificate unavailable");
   const certificate = await response.arrayBuffer();
   const digest = Buffer.from(await crypto.subtle.digest("SHA-256", certificate)).toString("hex");
-  if (digest !== "bdb1b93cd5978d45c6261455f8db8c75a090292f1d8776352f4349d07d570285") {
+  if (digest !== "63343abfb89a6a03ebb57e9b3f5fa7be7c4f5c756f3017b3a8c488c3653e9179") {
     throw new Error("Unexpected Apple root certificate fingerprint");
   }
   return [new Uint8Array(certificate)];
