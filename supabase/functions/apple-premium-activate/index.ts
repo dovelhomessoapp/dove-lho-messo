@@ -32,11 +32,20 @@ Deno.serve(async (request) => {
 
   const body = await request.json().catch(() => null);
   if (typeof body?.homeId !== "string" || !uuid.test(body.homeId) ||
-      typeof body.signedTransaction !== "string" || body.signedTransaction.length > 32768) {
+      (body.signedTransaction !== undefined &&
+        (typeof body.signedTransaction !== "string" || body.signedTransaction.length > 32768))) {
     return Response.json({ error: "Invalid request" }, { status: 400 });
   }
 
   const accountToken = user.id.toLowerCase();
+  if (body.signedTransaction === undefined) {
+    const { data: owner, error } = await db.from("home_members")
+      .select("user_id").eq("home_id", body.homeId).eq("user_id", accountToken)
+      .eq("role", "owner").maybeSingle();
+    if (error) return Response.json({ error: "Activation unavailable" }, { status: 503 });
+    if (!owner) return Response.json({ error: "Owner required" }, { status: 403 });
+    return Response.json({ eligible: true });
+  }
   const verified = await production.verifyTransaction(body.signedTransaction).catch(async () =>
     sandboxUsers.has(accountToken)
       ? await sandbox.verifyTransaction(body.signedTransaction).catch(() => null)
