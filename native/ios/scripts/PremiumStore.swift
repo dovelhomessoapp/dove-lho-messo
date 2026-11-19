@@ -91,7 +91,18 @@ final class PremiumStorePlugin: CAPPlugin, CAPBridgedPlugin {
                     return
                 }
                 let product = try await PremiumStore.product(for: plan)
-                call.resolve(["price": product.displayPrice])
+                var pricing: [String: Any] = ["price": product.displayPrice]
+                if plan == .monthly,
+                   let subscription = product.subscription,
+                   let offer = subscription.introductoryOffer,
+                   offer.paymentMode == .payAsYouGo,
+                   offer.period.unit == .month,
+                   offer.period.value == 1,
+                   await subscription.isEligibleForIntroOffer {
+                    pricing["introPrice"] = offer.displayPrice
+                    pricing["introMonths"] = offer.periodCount
+                }
+                call.resolve(pricing)
             } catch { call.reject(error.localizedDescription) }
         }
     }
