@@ -47,5 +47,15 @@ export function createPremiumVerifier(
     };
   }
 
-  return { verifyTransaction };
+  async function verifyNotification(signedPayload: string) {
+    const notification = await verifier.verifyAndDecodeNotification(signedPayload);
+    const signedTransaction = notification.data?.signedTransactionInfo;
+    if (!signedTransaction) return null;
+
+    const transaction = await verifier.verifyAndDecodeTransaction(signedTransaction);
+    if (transaction.productId !== annualProductID || !transaction.appAccountToken) return null;
+    return verifyTransaction(signedTransaction);
+  }
+
+  return { verifyTransaction, verifyNotification };
 }
