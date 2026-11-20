@@ -62,7 +62,13 @@ const {webkit}=require(process.env.DLM_PLAYWRIGHT_MODULE||'playwright');
     window.familyPantryConnect('test-home',async()=> 'test-token');
    });
    await page.locator('#pantryList .pantry-group:not(.pantry-priority) .pantry-lot-card').first().waitFor({state:'attached'});
-   await page.evaluate(()=>document.querySelector('#pantryList .pantry-lot-card').closest('details').open=true);
+   await page.evaluate(()=>{
+    const list=document.querySelector('#pantryList');
+    const card=list.querySelector('.pantry-zone-tiles .pantry-lot-card');
+    for(let group=card.closest('details');group&&list.contains(group);group=group.parentElement.closest('details')){
+     group.open=true;
+    }
+   });
    await page.locator('#pantryAddDetails input[type="file"]').first().waitFor({state:'visible'});
    for(const fraction of [0,0.5,1]){
     const layout=await page.evaluate(async fraction=>{

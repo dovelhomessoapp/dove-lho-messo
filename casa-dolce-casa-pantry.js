@@ -86,10 +86,8 @@ document.head.appendChild(pantryShelfStyle);
 let pantryWasActive=root.classList.contains('active');
 new MutationObserver(()=>{
  const active=root.classList.contains('active');
- if(active&&!pantryWasActive){
-  root.querySelectorAll('details[open]').forEach(details=>{details.open=false});
-  if(access)render();
- }
+ if(!active&&pantryWasActive)root.querySelectorAll('details[open]').forEach(details=>{details.open=false});
+ if(active&&!pantryWasActive&&access)render();
  pantryWasActive=active;
 }).observe(root,{attributes:true,attributeFilter:['class']});
 const pantryBasketStyle=document.createElement('style');pantryBasketStyle.textContent='.pantry-real-3d-icon{width:43px;height:43px;object-fit:contain;vertical-align:middle;margin-right:6px;border-radius:0}.pantry-group>summary .pantry-real-3d-icon{width:52px;height:52px;box-sizing:border-box;object-fit:contain;padding:5px;vertical-align:middle;margin-right:9px;border-radius:0;overflow:visible}.pantry-group>summary{min-height:56px;line-height:1.4}.pantry-basket-icon{display:inline-block;font-size:25px;vertical-align:-3px;margin-right:3px;filter:drop-shadow(0 2px 3px #8e6d8e33)}';document.head.appendChild(pantryBasketStyle);
