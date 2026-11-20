@@ -358,10 +358,11 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
  }catch(error){console.error('PDF QR',error);toast('Non riesco a preparare il PDF. Riprova.')}
 };
 window.printQR=id=>{
- const p=db.places.find(x=>x.id===id)||db.items.find(x=>x.id===id);
+ const pantryLabel=id.startsWith('DLM-D-')?window.pantryPositionQRLabels?.().find(label=>label.id===id):null;
+ const p=pantryLabel||db.places.find(x=>x.id===id)||db.items.find(x=>x.id===id);
  if(!p)return;
  const isItem=db.items.some(x=>x.id===id);
- const code=isItem?'DLM-I-'+id:qrData(id);
+ const code=pantryLabel?.code||(isItem?'DLM-I-'+id:qrData(id));
  const svg=qrSVG(code);
  const label=safe(p.name);
  document.getElementById('dlmSingleQRModal')?.remove();
@@ -379,7 +380,12 @@ window.printQR=id=>{
  const close=()=>overlay.remove();
  overlay.querySelector('#dlmSingleQRClose').onclick=close;
  overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
- overlay.querySelector('#dlmSingleQRPDF').onclick=()=>{close();page('places');window.openQRSelection()};
+ overlay.querySelector('#dlmSingleQRPDF').onclick=()=>{
+  close();
+  if(pantryLabel){void window.downloadAllQRA4(new Set([pantryLabel.id]),false);return}
+  page('places');
+  window.openQRSelection();
+ };
  overlay.querySelector('#dlmSingleQRCopy').onclick=async()=>{
   const status=overlay.querySelector('#dlmSingleQRStatus');
   try{
