@@ -519,6 +519,9 @@ function openPantryPath(position){
   details.open=true;
  }
 }
+function pantryPositionQRButton(code){
+ return code?'<button type="button" class="secondary" data-pantry-show-qr="'+escape(code)+'">▦ Mostra QR della posizione</button>':'';
+}
 function pantryByShelf(group,shelves,cards,resolveShelf,codeForPath){
  const inventory={children:new Map(),lots:[],count:0};
  function addPath(shelf,lot){
@@ -539,7 +542,7 @@ function pantryByShelf(group,shelves,cards,resolveShelf,codeForPath){
   const locations=children.map(child=>{
    const childPath=[...path,child.name];
    const code=codeForPath(childPath);
-   return '<details class="pantry-shelf" data-pantry-position="'+escape(code)+'"><summary>📍 '+escape(child.name)+' · '+child.count+(child.count===1?' confezione':' confezioni')+'</summary><div>'+renderContents(child,childPath)+'</div></details>';
+   return '<details class="pantry-shelf" data-pantry-position="'+escape(code)+'"><summary>📍 '+escape(child.name)+' · '+child.count+(child.count===1?' confezione':' confezioni')+'</summary><div>'+pantryPositionQRButton(code)+renderContents(child,childPath)+'</div></details>';
   }).join('');
   return locations+cards(node.lots)||'<p class="hint">Nessun alimento in questa posizione.</p>';
  }
@@ -626,7 +629,7 @@ function render(){
    const areaCode=codeForPath([]);
    const group=inventory.filter(l=>sectionFor(l)===key).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base',numeric:true})||String(a.brand||'').localeCompare(String(b.brand||''),'it',{sensitivity:'base'}));
    const packages=countPackages(group);
-   return '<details class="pantry-group pantry-zone-'+escape(key)+'" data-pantry-position="'+escape(areaCode)+'" style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">'+label+' · '+packages+(packages===1?' confezione':' confezioni')+'</summary><div style="margin-top:10px">'+pantryByShelf(group,q?[]:pantryShelfOptions(key),cards,resolverFor(locationName),codeForPath)+'</div></details>';
+   return '<details class="pantry-group pantry-zone-'+escape(key)+'" data-pantry-position="'+escape(areaCode)+'" style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0">'+label+' · '+packages+(packages===1?' confezione':' confezioni')+'</summary><div style="margin-top:10px">'+pantryPositionQRButton(areaCode)+pantryByShelf(group,q?[]:pantryShelfOptions(key),cards,resolverFor(locationName),codeForPath)+'</div></details>';
  }).join('');
  $('pantryList').innerHTML=(overviewFilter==='all'?'<div class="pantry-filter-note">📦 Tutte le confezioni, suddivise per posizione. Scorri per vedere gli alimenti e le quantità.</div>':'')+(overviewFilter&&overviewFilter!=='all'?'<div class="pantry-filter-note">Filtro: '+({open:'Aperte',soon:'Entro 5 giorni',expired:'Scadute'}[overviewFilter]||'Tutte')+' <button type="button" id="pantryClearOverview">Mostra tutto</button></div>':'')+(q?'<p class="hint">🔎 '+filtered.length+' risultati per «'+escape(q)+'»</p>':'')+
  '<details class="pantry-group pantry-priority" style="margin:10px 0;border:1px solid #e6d1f5;border-radius:18px;padding:12px;background:#faf5ff"><summary style="cursor:pointer;font-weight:700;color:#7432a6;padding:5px 0"><img class="pantry-real-3d-icon" src="assets/cibi-in-scadenza-3d.png" alt=""> Aperti e da consumare prima ('+priority.length+')</summary><div style="margin-top:10px">'+(priority.length?cards(priority):'<p class="hint">Nessun alimento aperto o in scadenza'+(q?' tra i risultati':'')+'.</p>')+'</div></details>'+
@@ -963,7 +966,11 @@ printPositionQR.className='secondary full';
 printPositionQR.textContent='🖨️ Stampa QR delle posizioni';
 printPositionQR.hidden=true;
 printPositionQR.onclick=()=>window.openQRSelection(true);
-$('pantryList').before(printPositionQR);
+$('pantryOverview').before(printPositionQR);
+$('pantryList').addEventListener('click',event=>{
+ const button=event.target.closest('button[data-pantry-show-qr]');
+ if(button)window.printQR(button.dataset.pantryShowQr);
+});
 $('pantryForm').onsubmit=async e=>{e.preventDefault();if(busy||!access)return;busy=true;
  $('pantryForm').querySelectorAll('button').forEach(b=>b.disabled=true);
  const error=$('pantrySaveError');error.textContent='';
