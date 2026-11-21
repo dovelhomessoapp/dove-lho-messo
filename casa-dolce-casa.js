@@ -44,18 +44,55 @@ function dlmPlaceIconHtml(name,parentId){
  const src='assets/icone-posizioni/'+encodeURIComponent(preset[0])+'.png';
  return '<img class="dlm-place-preset-image" src="'+src+'" alt="" loading="lazy" onerror="this.onerror=null;this.replaceWith(document.createTextNode('+JSON.stringify('🏡')+'))">';
 }
+function orderedPlaceEntries(){
+ const ordered=[],seen=new Set();
+ const sorted=[...db.places].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+ const children=new Map();
+ const ids=new Set(sorted.map(p=>p.id));
+ for(const p of sorted){
+  const parent=ids.has(p.parentId)?p.parentId:'';
+  if(!children.has(parent))children.set(parent,[]);
+  children.get(parent).push(p);
+ }
+ function visit(p,depth){
+  if(seen.has(p.id))return;
+  seen.add(p.id);
+  ordered.push({p,depth});
+  for(const child of children.get(p.id)||[])visit(child,depth+1);
+ }
+ for(const root of children.get('')||[])visit(root,0);
+ for(const p of sorted)visit(p,0);
+ return ordered;
+}
+function dlmItemPlaceLabel(p,depth){
+ const parent=depth>0?placePath(p.parentId):'';
+ return '<strong>'+safe(p.name)+'</strong>'+(parent?'<small>In '+safe(parent.replaceAll(' → ',' › '))+'</small>':'');
+}
 function dlmItemPlaceRefresh(){
  const native=document.getElementById('itemPlace');
  const selected=document.getElementById('dlmItemPlaceSelected');
  const list=document.getElementById('dlmItemPlaceOptions');
  if(!native||!selected||!list)return;
  const id=native.value;
- const place=db.places.find(p=>p.id===id);
- selected.innerHTML=place?'<span class="dlm-selected-place-icon">'+dlmItemPlacePicture(place)+'</span><span class="dlm-selected-place-label">'+safe(fullPlacePath(place.id))+'</span>':'<span class="dlm-selected-place-label">Da assegnare</span>';
+ const ordered=orderedPlaceEntries();
+ const current=ordered.find(({p})=>p.id===id);
+ selected.innerHTML=current?'<span class="dlm-selected-place-icon">'+dlmItemPlacePicture(current.p)+'</span><span class="dlm-selected-place-label">'+dlmItemPlaceLabel(current.p,current.depth)+'</span>':'<span class="dlm-selected-place-label">Da assegnare</span>';
  const query=(document.getElementById('dlmItemPlaceSearch')?.value||'').trim().toLocaleLowerCase('it');
- const sorted=[...db.places].sort((a,b)=>fullPlacePath(a.id).localeCompare(fullPlacePath(b.id),'it',{sensitivity:'base'}));
- list.innerHTML='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon" aria-hidden="true">🏡</span><span class="dlm-place-option-label"><strong>Da assegnare</strong></span></span></button>'+
- sorted.filter(p=>!query||fullPlacePath(p.id).toLocaleLowerCase('it').includes(query)).map(p=>'<button type="button" class="dlm-item-place-option" data-place-choice="'+safe(p.id)+'" aria-pressed="'+(id===p.id)+'">'+'<span class="dlm-place-option-layout"><span class="dlm-place-option-icon">'+dlmItemPlacePicture(p)+'</span><span class="dlm-place-option-label"><strong>'+safe(p.name)+'</strong><small>'+safe(fullPlacePath(p.id))+'</small></span></span></button>').join('');
+ const openBranches=new Set([...list.querySelectorAll('details[open]')].map(el=>el.dataset.branch));
+ const choice=({p,depth})=>'<button type="button" class="dlm-item-place-option" data-place-choice="'+safe(p.id)+'" aria-pressed="'+(id===p.id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon">'+dlmItemPlacePicture(p)+'</span><span class="dlm-place-option-label">'+dlmItemPlaceLabel(p,depth)+'</span></span></button>';
+ const unassigned='<button type="button" class="dlm-item-place-option" data-place-choice="" aria-pressed="'+(!id)+'"><span class="dlm-place-option-layout"><span class="dlm-place-option-icon" aria-hidden="true">🏡</span><span class="dlm-place-option-label"><strong>Da assegnare</strong></span></span></button>';
+ if(query){
+  list.innerHTML=unassigned+ordered.filter(({p})=>fullPlacePath(p.id).toLocaleLowerCase('it').includes(query)).map(choice).join('');
+ }else{
+  const renderBranch=(entry,visited)=>{
+   if(visited.has(entry.p.id))return '';
+   const next=new Set(visited);next.add(entry.p.id);
+   const children=ordered.filter(({p})=>p.parentId===entry.p.id&&!next.has(p.id));
+   if(!children.length)return choice(entry);
+   return '<details class="dlm-place-branch" data-branch="'+safe(entry.p.id)+'"'+(openBranches.has(entry.p.id)?' open':'')+'><summary>'+choice(entry)+'<span class="dlm-branch-arrow" aria-hidden="true">›</span><span class="sr-only">Apri o chiudi le sottoposizioni di '+safe(entry.p.name)+'</span></summary><div class="dlm-place-children">'+children.map(child=>renderBranch(child,next)).join('')+'</div></details>';
+  };
+  list.innerHTML=unassigned+ordered.filter(({depth})=>depth===0).map(entry=>renderBranch(entry,new Set())).join('');
+ }
 }
 function dlmItemPlacePicture(p){
  let photos={};try{photos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
@@ -66,10 +103,20 @@ function dlmItemPlaceInit(){
  const button=document.getElementById('dlmItemPlaceButton');
  const panel=document.getElementById('dlmItemPlacePanel');
  if(!button||!panel)return;
- button.addEventListener('click',()=>{const opening=panel.hidden;panel.hidden=!opening;button.setAttribute('aria-expanded',String(opening));if(opening)dlmItemPlaceRefresh()});
+ button.addEventListener('click',()=>{
+  const opening=panel.hidden;
+  document.activeElement?.blur();
+  panel.hidden=!opening;button.setAttribute('aria-expanded',String(opening));
+  if(opening){
+   dlmItemPlaceRefresh();
+   // Wait for the iPhone keyboard to retract before revealing the choices.
+   setTimeout(()=>{if(!panel.hidden&&document.getElementById('add').classList.contains('active'))button.scrollIntoView({behavior:'smooth',block:'start'})},300);
+  }
+ });
  document.getElementById('dlmItemPlaceSearch').addEventListener('input',dlmItemPlaceRefresh);
  document.getElementById('dlmItemPlaceOptions').addEventListener('click',e=>{
   const choice=e.target.closest('button[data-place-choice]');if(!choice)return;
+  e.preventDefault();
   document.getElementById('itemPlace').value=choice.dataset.placeChoice;
   document.getElementById('itemPlace').dispatchEvent(new Event('change',{bubbles:true}));
   panel.hidden=true;button.setAttribute('aria-expanded','false');dlmItemPlaceRefresh();
@@ -78,7 +125,7 @@ function dlmItemPlaceInit(){
  document.getElementById('itemPlace').addEventListener('change',dlmItemPlaceRefresh);
  dlmItemPlaceRefresh();
 }
-function renderPlaces(){let locationPhotos={};try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{};for(const p of db.places){if(locationPhotos[p.id])p.photo=locationPhotos[p.id]}const ordered=[];const seen=new Set();function visit(parent,depth){for(const p of db.places.filter(x=>(x.parentId||'')===parent).sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''),'it',{sensitivity:'base'}))){if(seen.has(p.id))continue;seen.add(p.id);ordered.push({p,depth});visit(p.id,depth+1)}}visit('',0);for(const p of db.places){if(!seen.has(p.id)){seen.add(p.id);ordered.push({p,depth:0});visit(p.id,1)}}const previousItemPlace=$('#itemPlace').value;const previousParent=$('#placeParent')?.value||'';const openPlaces=new Set([...document.querySelectorAll('#placeList details[data-place-id][open]')].map(el=>el.dataset.placeId));
+function renderPlaces(){let locationPhotos={};try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{};for(const p of db.places){if(locationPhotos[p.id])p.photo=locationPhotos[p.id]}const ordered=orderedPlaceEntries();const previousItemPlace=$('#itemPlace').value;const previousParent=$('#placeParent')?.value||'';const openPlaces=new Set([...document.querySelectorAll('#placeList details[data-place-id][open]')].map(el=>el.dataset.placeId));
 const openDetails=new Set([...document.querySelectorAll('#placeList details[data-info-id][open]')].map(el=>el.dataset.infoId));
 function renderNode(p,level,visited,colorIndex=0){
  if(visited.has(p.id))return '';
@@ -155,8 +202,8 @@ document.getElementById('placePhotoPicker').addEventListener('change',async e=>{
  }catch{toast('Non riesco a leggere questa fotografia')}
 });
 
-window.openQRSelection=()=>{
- const all=[
+window.openQRSelection=(pantryOnly=false)=>{
+ const all=pantryOnly?(window.pantryPositionQRLabels?.()||[]):[
   ...db.places.map(p=>({id:'P:'+p.id,name:placePath(p.id),kind:'Posizioni'})),
   ...db.items.map(i=>({id:'I:'+i.id,name:i.name,kind:i.kind==='book'?'Libri':'Oggetti'}))
  ];
@@ -167,7 +214,7 @@ window.openQRSelection=()=>{
  overlay.innerHTML='<section role="dialog" aria-modal="true" aria-label="Seleziona QR da stampare" style="background:#fffafa;color:#51336c;border-radius:23px;width:min(100%,540px);max-height:90dvh;display:flex;flex-direction:column;padding:19px;box-sizing:border-box;box-shadow:0 12px 35px #3b225344"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h2 style="margin:0;font-size:1.24rem">🖨️ Seleziona i QR</h2><button type="button" id="dlmQRClose" class="secondary" style="width:auto;padding:8px 13px">✕</button></div><p class="hint" style="margin:8px 0">Spunta soltanto le etichette che vuoi stampare.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin:5px 0 12px"><button type="button" class="secondary" id="dlmQRAll" style="width:auto">Seleziona tutti</button><button type="button" class="secondary" id="dlmQRNone" style="width:auto">Deseleziona tutti</button></div><div id="dlmQRChoices" style="overflow:auto;flex:1;min-height:0;padding:3px"></div><p id="dlmQRCount" style="margin:12px 0;font-weight:750">0 selezionati</p><button type="button" id="dlmQRGenerate" class="primary full">📄 Crea PDF A4</button></section>';
  document.body.appendChild(overlay);
  const list=overlay.querySelector('#dlmQRChoices');
- for(const group of ['Posizioni','Oggetti','Libri']){
+ for(const group of ['Posizioni','Oggetti','Libri','Dispensa']){
   const members=all.filter(x=>x.kind===group);if(!members.length)continue;
   const heading=document.createElement('h3');heading.textContent=group;heading.style.cssText='font-size:1rem;margin:14px 0 8px';list.appendChild(heading);
   for(const item of members){
@@ -196,6 +243,7 @@ window.openQRSelection=()=>{
 };
 window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
  const labels=[
+  ...(selectedIds?(window.pantryPositionQRLabels?.()||[]).filter(label=>selectedIds.has(label.id)):[]),
   ...db.places.filter(p=>!selectedIds||selectedIds.has('P:'+p.id)).map(p=>({name:placePath(p.id),code:qrData(p.id),kind:'POSIZIONE'})),
   ...db.items.filter(i=>!selectedIds||selectedIds.has('I:'+i.id)).map(i=>({name:i.name,code:'DLM-I-'+i.id,kind:i.kind==='book'?'LIBRO':'OGGETTO'}))
  ];
@@ -204,6 +252,7 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
   const plain=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7e]/g,'?');
   const esc=v=>plain(v).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
   const imageSources=labels.map(item=>{
+   if(item.kind==='Dispensa')return '';
    const id=item.code.slice(6);
    const p=db.places.find(x=>x.id===id);
    const i=db.items.find(x=>x.id===id);
@@ -278,6 +327,16 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
   pdf+='trailer\n<< /Size '+objects.length+' /Root '+catalog+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';
   const pdfBytes=new Uint8Array(pdf.length);for(let j=0;j<pdf.length;j++)pdfBytes[j]=pdf.charCodeAt(j)&255;
   const file=new File([pdfBytes],'etichette-qr-A4.pdf',{type:'application/pdf'});
+  if(window.dlmStoreDistribution==='app-store'){
+   const dataURL=await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error);
+    reader.readAsDataURL(file);
+   });
+   await window.Capacitor.Plugins.QRPDF.preview({base64:dataURL.slice(dataURL.indexOf(',')+1)});
+   return;
+  }
   const isAndroid=/Android/i.test(navigator.userAgent);
   // On Android use the native file share/save sheet instead of opening a PDF
   // inside the installed PWA, where pull-to-refresh can leave a blank viewer.
@@ -299,10 +358,11 @@ window.downloadAllQRA4=async(selectedIds,includeImages=true)=>{
  }catch(error){console.error('PDF QR',error);toast('Non riesco a preparare il PDF. Riprova.')}
 };
 window.printQR=id=>{
- const p=db.places.find(x=>x.id===id)||db.items.find(x=>x.id===id);
+ const pantryLabel=id.startsWith('DLM-D-')?window.pantryPositionQRLabels?.().find(label=>label.id===id):null;
+ const p=pantryLabel||db.places.find(x=>x.id===id)||db.items.find(x=>x.id===id);
  if(!p)return;
  const isItem=db.items.some(x=>x.id===id);
- const code=isItem?'DLM-I-'+id:qrData(id);
+ const code=pantryLabel?.code||(isItem?'DLM-I-'+id:qrData(id));
  const svg=qrSVG(code);
  const label=safe(p.name);
  document.getElementById('dlmSingleQRModal')?.remove();
@@ -320,7 +380,12 @@ window.printQR=id=>{
  const close=()=>overlay.remove();
  overlay.querySelector('#dlmSingleQRClose').onclick=close;
  overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
- overlay.querySelector('#dlmSingleQRPDF').onclick=()=>{close();page('places');window.openQRSelection()};
+ overlay.querySelector('#dlmSingleQRPDF').onclick=()=>{
+  close();
+  if(pantryLabel){void window.downloadAllQRA4(new Set([pantryLabel.id]),false);return}
+  page('places');
+  window.openQRSelection();
+ };
  overlay.querySelector('#dlmSingleQRCopy').onclick=async()=>{
   const status=overlay.querySelector('#dlmSingleQRStatus');
   try{
@@ -518,6 +583,12 @@ $('#placeForm').addEventListener('submit',async e=>{
 }
 function renderItems(){
  const q=String($('#itemFilter')?.value||'').trim();
+ const categoryFilter=$('#objectCategoryFilter');
+ const previousCategory=categoryFilter.value;
+ const categories=categoryOptions({kind:'object',defaults:[]},[]);
+ categoryFilter.replaceChildren(new Option('Tutti gli oggetti',''),...categories.map(name=>new Option(name,categoryKey(name))));
+ categoryFilter.value=categories.some(name=>categoryKey(name)===previousCategory)?previousCategory:'';
+ const selectedCategory=categoryFilter.value;
  const normalize=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').replace(/[^a-z0-9]+/g,' ').trim();
  const terms=normalize(q).split(/\s+/).filter(Boolean);
  const matches=i=>{
@@ -525,34 +596,77 @@ function renderItems(){
   return terms.every(term=>searchable.includes(term));
  };
  const entry=i=>`<article class="entry"><div class="thumb">${i.photo?`<img class="thumb" src="${safe(i.photo)}" alt="">`:i.kind==='book'?'📖':'📦'}</div><div class="info"><strong>${safe(i.name)}</strong><small>📍 ${safe(fullPlacePath(i.place))}</small></div><button type="button" class="dlm-inline-qr" aria-label="Stampa QR di ${safe(i.name)}" onclick="printItemQR('${i.id}')">🖨️ QR</button><button aria-label="Apri" onclick="showItem('${i.id}')">›</button></article>`;
- const items=db.items.filter(i=>i.kind!=='book'&&matches(i));
- const groups=new Map();
- function itemRootPlace(id){
-  let place=db.places.find(p=>p.id===id);const seen=new Set();
-  while(place?.parentId&&!seen.has(place.id)){seen.add(place.id);const parent=db.places.find(p=>p.id===place.parentId);if(!parent)break;place=parent}
-  return place||null;
- }
- items.forEach(i=>{const root=itemRootPlace(i.place);const key=root?.id||'__unassigned__';if(!groups.has(key))groups.set(key,{root,records:[]});groups.get(key).records.push(i)});
+ const items=db.items.filter(i=>i.kind!=='book'&&(!selectedCategory||categoryKey(i.category)===selectedCategory)&&matches(i));
  const list=$('#itemList');
- const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(d=>d.dataset.category));
- let locationPhotos={};
- try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')}catch{}
- const palettes=['lavender','rose','peach','mint','sky'];
- const groupHtml=Array.from(groups.values()).sort((a,b)=>(a.root?.name||'Posizione non assegnata').localeCompare(b.root?.name||'Posizione non assegnata','it',{sensitivity:'base'})).map(({root,records},index)=>{
-  const category=root?.id||'__unassigned__';
-  const open=terms.length||previouslyOpen.has(category)||groups.size===1?' open':'';
-  const image=root&&(locationPhotos[root.id]||root.photo);
-  const label=root?.name||'Posizione non assegnata';
-  const subtitle=root?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
-  const picture=image?`<img src="${safe(image)}" alt="Foto della posizione ${safe(label)}" loading="lazy">`:dlmPlaceIconHtml(root?.name||label,root?.parentId);
-  const sortedRecords=records.sort((a,b)=>fullPlacePath(a.place).localeCompare(fullPlacePath(b.place),'it',{sensitivity:'base'})||String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
-  return `<details class="dlm-item-group dlm-location-card dlm-location-${palettes[index%palettes.length]}" data-category="${safe(category)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong><small>${safe(subtitle)}</small><span class="dlm-location-total">${records.length} ${records.length===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${sortedRecords.map(entry).join('')}</div></details>`;
- }).join('');
- list.innerHTML=(terms.length?'<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto trovato':'oggetti trovati')+' per la ricerca</p>':'')+(groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>');
+ if(selectedCategory){
+  const name=categoryFilter.selectedOptions[0].textContent;
+  items.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'}));
+  list.innerHTML='<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto':'oggetti')+' in «'+safe(name)+'»</p>'+
+   (items.map(entry).join('')||'<div class="empty">Nessun oggetto trovato. 💜</div>');
+ }else{
+  const placesById=new Map(db.places.map(place=>[place.id,place]));
+  const groups=new Map();
+  for(const item of items){
+   const path=[];
+   const seen=new Set();
+   let place=placesById.get(item.place);
+   while(place&&!seen.has(place.id)){
+    seen.add(place.id);
+    path.push(place);
+    place=placesById.get(place.parentId);
+   }
+   // Missing locations and cycles must still leave the item accessible.
+   const ancestry=place||!path.length?[null]:path.reverse();
+   let children=groups;
+   let group;
+   for(const location of ancestry){
+    const key=location?.id||'__unassigned__';
+    if(!children.has(key))children.set(key,{key,location,children:new Map(),records:[],count:0});
+    group=children.get(key);
+    group.count++;
+    children=group.children;
+   }
+   group.records.push(item);
+  }
+  const previouslyOpen=new Set(Array.from(list.querySelectorAll('details[open]')).map(details=>details.dataset.category));
+  let locationPhotos={};
+  try{locationPhotos=JSON.parse(localStorage.getItem('dlm-casa-dolce-casa-location-photos-v37')||'{}')||{}}catch{}
+  const palettes=['lavender','rose','peach','mint','sky'];
+  const groupLabel=group=>group.location?.name||'Posizione non assegnata';
+  const sortGroups=groups=>[...groups.values()].sort((a,b)=>groupLabel(a).localeCompare(groupLabel(b),'it',{sensitivity:'base'}));
+  function renderGroup(group,palette,depth=0){
+   const {key,location,children,records,count}=group;
+   const open=terms.length||previouslyOpen.has(key)?' open':'';
+   const image=location&&(locationPhotos[location.id]||location.photo);
+   const label=groupLabel(group);
+   const subtitle=depth?'':location?'Esplora gli oggetti e le sottoposizioni di questo ambiente':'Oggetti ancora senza posizione';
+   const picture=image?`<img src="${safe(image)}" alt="" loading="lazy">`:dlmPlaceIconHtml(location?.name||label,location?.parentId);
+   const nested=sortGroups(children).map(child=>renderGroup(child,palette,depth+1)).join('');
+   const direct=records.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('');
+   const cardClass=depth?' dlm-location-subcard':'';
+   return `<details class="dlm-item-group dlm-location-card dlm-location-${palette}${cardClass}" data-category="${safe(key)}"${open}><summary><span class="dlm-location-picture">${picture}</span><span class="dlm-location-info"><strong>${safe(label)}</strong>${subtitle?`<small>${safe(subtitle)}</small>`:''}<span class="dlm-location-total">${count} ${count===1?'oggetto':'oggetti'}</span></span><span class="dlm-location-chevron" aria-hidden="true">⌄</span></summary><div class="entries">${nested}${direct}</div></details>`;
+  }
+  const groupHtml=sortGroups(groups).map((group,index)=>renderGroup(group,palettes[index%palettes.length])).join('');
+  list.innerHTML=(terms.length?'<p class="hint" role="status">'+items.length+' '+(items.length===1?'oggetto trovato':'oggetti trovati')+' per la ricerca</p>':'')+(groupHtml||'<div class="empty">Nessun oggetto trovato. 💜</div>');
+ }
  const books=db.items.filter(i=>i.kind==='book');
  $('#bookList').innerHTML=books.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'it',{sensitivity:'base'})).map(entry).join('')||'<div class="empty">Nessun libro per ora. 💜</div>';
 }
-dlmItemPlaceInit();$('#itemFilter').addEventListener('input',renderItems);$('#quickSearch').addEventListener('input',e=>{$('#itemFilter').value=e.target.value;page('items')});function resetForm(){if(document.getElementById('coverChoices'))document.getElementById('coverChoices').innerHTML='';document.querySelector('#bookTitleSearchPanel')?.remove();$('#itemForm').reset();$('#editId').value='';$('#photoPreview').hidden=true;$('#photoPreview').removeAttribute('src');photoData='';for(const id of ['itemName','author','barcode','desc','itemCategory','value'])$('#'+id).value='';$('#itemPlace').value='';dlmItemPlaceRefresh();$('#formHeading').textContent='Aggiungi oggetto ✨';renderPlaces()}$('#photoCameraBtn').onclick=()=>$('#photoCamera').click();$('#photoGalleryBtn').onclick=()=>$('#photo').click();async function onPhoto(e){let f=e.target.files[0];if(!f)return;try{let img=new Image(),url=URL.createObjectURL(f);await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});let max=720,scale=Math.min(1,max/Math.max(img.width,img.height));let c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);photoData=c.toDataURL('image/jpeg',.68);lastAutoBookCover='';URL.revokeObjectURL(url);$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}catch{toast('Impossibile leggere la foto')}finally{saveDraft()}}['photo','photoCamera'].forEach(id=>$('#'+id).addEventListener('change',onPhoto));$('#itemForm').addEventListener('submit',e=>{e.preventDefault();let old=db.items.find(x=>x.id===$('#editId').value);if(!old&&freeLimitReached()){showFreeLimitModal();return}let i={id:old?.id||crypto.randomUUID(),kind:$('#kind').value,name:$('#itemName').value.trim(),author:$('#author').value.trim(),barcode:$('#barcode').value.trim(),desc:$('#desc').value.trim(),category:$('#itemCategory').value.trim(),place:$('#itemPlace').value,value:$('#value').value,photo:photoData||old?.photo||'',created:old?.created||Date.now()};if(!i.name)return; if(old) Object.assign(old,i);else db.items.unshift(i);if(save()){editing=null;localStorage.removeItem(DRAFT_KEY);renderItems();page(i.kind==='book'?'books':'items');toast('Salvato! 💜');if(old&&window.familyUpdateItem)window.familyUpdateItem(i);else if(!old&&window.familySyncQueue)window.familySyncQueue(i.id)}});window.showItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;$('#detailBody').innerHTML=`<h2>${safe(i.name)}</h2>${i.photo?`<img class="detail-photo" src="${safe(i.photo)}" alt="Foto dell'oggetto">`:'<div class="scan-box">📦</div>'}<div class="panel"><p class="pill">${i.kind==='book'?'📚 Libro':'📦 Oggetto'}</p>${i.author?`<p><b>Autore:</b> ${safe(i.author)}</p>`:''}${i.category?`<p><b>Categoria:</b> ${safe(i.category)}</p>`:''}<p>${safe(i.desc)||'Nessuna descrizione'}</p><p><b>📍 Posizione:</b> ${safe(placeName(i.place))}</p>${i.barcode?`<p><b>Codice:</b> ${safe(i.barcode)}</p>`:''}${i.value?`<p><b>Valore inserito:</b> ${safe(i.value)} €</p>`:''}<div class="row"><button class="secondary" onclick="editItem('${i.id}')">✏️ Modifica</button><button class="secondary" onclick="deleteItem('${i.id}')">🗑️ Elimina</button></div></div>`;page('detail')};window.editItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;editing=id;resetForm();editing=id;$('#editId').value=id;for(let [k,v] of [['kind',i.kind],['itemName',i.name],['author',i.author],['barcode',i.barcode],['desc',i.desc],['itemCategory',i.category],['itemPlace',i.place],['value',i.value]])$('#'+k).value=v||'';photoData=i.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}$('#formHeading').textContent='Modifica oggetto ✏️';dlmItemPlaceRefresh();updateKind();page('add');saveDraft()};window.deleteItem=async id=>{if(!confirm('Eliminare definitivamente questo elemento?'))return;if(window.familyDeleteItem){const ok=await window.familyDeleteItem(id);if(!ok)return}db.items=db.items.filter(i=>i.id!==id);save();page('items');toast('Elemento eliminato')};
+function dlmFinishItemForm(kind){
+ document.activeElement?.blur();
+ editing=null;
+ $('#itemFilter').value='';$('#objectCategoryFilter').value='';
+ document.querySelectorAll('#itemList details[open],#bookList details[open]').forEach(el=>el.open=false);
+ resetForm();
+ page(kind==='book'?'books':'items');
+ document.querySelectorAll('#itemList details[open],#bookList details[open]').forEach(el=>el.open=false);
+ localStorage.removeItem(DRAFT_KEY);
+}
+document.querySelectorAll('[data-cancel-item]').forEach(button=>button.addEventListener('click',()=>{
+ const kind=$('#kind').value;
+ dlmFinishItemForm(kind);
+}));
+dlmItemPlaceInit();$('#itemFilter').addEventListener('input',renderItems);$('#objectCategoryFilter').addEventListener('change',renderItems);$('#quickSearch').addEventListener('input',e=>{$('#itemFilter').value=e.target.value;$('#objectCategoryFilter').value='';page('items')});function resetForm(){bookLookupStatus();if(document.getElementById('coverChoices'))document.getElementById('coverChoices').innerHTML='';document.querySelector('#bookTitleSearchPanel')?.remove();$('#itemForm').reset();$('#itemForm').style.display='';$('#dlmInlinePlaceCreator').hidden=true;$('#dlmItemPlacePanel').hidden=true;$('#dlmItemPlaceButton').setAttribute('aria-expanded','false');$('#dlmItemPlaceSearch').value='';$('#dlmItemPlaceOptions').replaceChildren();$('#itemForm').querySelectorAll('details[open]').forEach(el=>el.open=false);$('#editId').value='';$('#photoPreview').hidden=true;$('#photoPreview').removeAttribute('src');photoData='';for(const id of ['itemName','author','barcode','desc','itemCategory','value'])$('#'+id).value='';$('#itemPlace').value='';dlmItemPlaceRefresh();$('#formHeading').textContent='Aggiungi oggetto ✨';renderPlaces()}$('#photoCameraBtn').onclick=()=>$('#photoCamera').click();$('#photoGalleryBtn').onclick=()=>$('#photo').click();async function onPhoto(e){let f=e.target.files[0];if(!f)return;try{let img=new Image(),url=URL.createObjectURL(f);await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});let max=720,scale=Math.min(1,max/Math.max(img.width,img.height));let c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);photoData=c.toDataURL('image/jpeg',.68);lastAutoBookCover='';URL.revokeObjectURL(url);$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}catch{toast('Impossibile leggere la foto')}finally{saveDraft()}}['photo','photoCamera'].forEach(id=>$('#'+id).addEventListener('change',onPhoto));$('#itemForm').addEventListener('submit',e=>{e.preventDefault();let old=db.items.find(x=>x.id===$('#editId').value);if(!old&&freeLimitReached()){showFreeLimitModal();return}let i={id:old?.id||crypto.randomUUID(),kind:$('#kind').value,name:$('#itemName').value.trim(),author:$('#author').value.trim(),barcode:$('#barcode').value.trim(),desc:$('#desc').value.trim(),category:$('#itemCategory').value.trim(),place:$('#itemPlace').value,value:$('#value').value,photo:photoData||old?.photo||'',created:old?.created||Date.now()};if(!i.name)return; if(old) Object.assign(old,i);else db.items.unshift(i);if(save()){dlmFinishItemForm(i.kind);toast('Salvato! 💜');if(old&&window.familyUpdateItem)window.familyUpdateItem(i);else if(!old&&window.familySyncQueue)window.familySyncQueue(i.id)}});window.showItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;$('#detailBody').innerHTML=`<h2>${safe(i.name)}</h2>${i.photo?`<img class="detail-photo" src="${safe(i.photo)}" alt="Foto dell'oggetto">`:'<div class="scan-box">📦</div>'}<div class="panel"><p class="pill">${i.kind==='book'?'📚 Libro':'📦 Oggetto'}</p>${i.author?`<p><b>Autore:</b> ${safe(i.author)}</p>`:''}${i.category?`<p><b>Categoria:</b> ${safe(i.category)}</p>`:''}<p>${safe(i.desc)||'Nessuna descrizione'}</p><p><b>📍 Posizione:</b> ${safe(placeName(i.place))}</p>${i.barcode?`<p><b>Codice:</b> ${safe(i.barcode)}</p>`:''}${i.value?`<p><b>Valore inserito:</b> ${safe(i.value)} €</p>`:''}<div class="row"><button class="secondary" onclick="editItem('${i.id}')">✏️ Modifica</button><button class="secondary" onclick="deleteItem('${i.id}')">🗑️ Elimina</button></div></div>`;page('detail')};window.editItem=id=>{let i=db.items.find(x=>x.id===id);if(!i)return;editing=id;resetForm();editing=id;$('#editId').value=id;for(let [k,v] of [['kind',i.kind],['itemName',i.name],['author',i.author],['barcode',i.barcode],['desc',i.desc],['itemCategory',i.category],['itemPlace',i.place],['value',i.value]])$('#'+k).value=v||'';photoData=i.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}$('#formHeading').textContent='Modifica oggetto ✏️';dlmItemPlaceRefresh();updateKind();page('add');saveDraft()};window.deleteItem=async id=>{if(!confirm('Eliminare definitivamente questo elemento?'))return;if(window.familyDeleteItem){const ok=await window.familyDeleteItem(id);if(!ok)return}db.items=db.items.filter(i=>i.id!==id);save();page('items');toast('Elemento eliminato')};
 
 // Ricerca ISBN: cataloghi in parallelo; nessuna copertina di opere generiche viene accettata automaticamente.
 const isbnLookupBtn=$('#lookupBook');
@@ -696,11 +810,17 @@ async function suggestBookCovers(){
 // Copertina fornita dall'utente per l'edizione italiana verificata di Ramses.
 const verifiedBooks={'9788856674347':{title:'Il sigillo del gatto',authors:['Geronimo Stilton'],publisher:'Piemme',date:'',cover:''},'9788865268001':{title:'Il Piccolo Principe',authors:['Antoine de Saint-Exupéry'],publisher:'Nord-Sud',date:'',cover:''},'9788804430308':{title:'Il romanzo di Ramses – Il figlio della luce',authors:['Christian Jacq'],publisher:'Mondadori',date:'1997',cover:'data:image/jpeg;base64,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'}};
 let lastAutoBookCover='';
+function bookLookupStatus(message=''){
+ const status=$('#bookLookupStatus');
+ status.textContent=message;
+ status.hidden=!message;
+}
 async function lookupISBN(){
  const isbn=normISBN($('#barcode').value);
  if(!checkISBN(isbn)){toast('Controlla il codice ISBN: inserisci un ISBN valido');return}
- if(!navigator.onLine){toast('Per cercare un libro serve Internet');return}
+ if(!navigator.onLine){bookLookupStatus('Per cercare un libro serve Internet');return}
  isbnLookupBtn.disabled=true;isbnLookupBtn.textContent='📚 Cerco libro e copertina…';
+ bookLookupStatus('Cerco nei cataloghi…');
  coverChecks=[];
  try{
   const verified=verifiedBooks[isbn];
@@ -709,7 +829,7 @@ async function lookupISBN(){
   if(!verified){
    try{
     const endpoint='https://ephdnunjudbwlgbxdadm.supabase.co/functions/v1/cerca-libro-isbn?isbn='+encodeURIComponent(isbn);
-    const response=await fetch(endpoint,{headers:{'apikey':'sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT'}});
+    const response=await fetch(endpoint,{signal:AbortSignal.timeout(8000),headers:{'apikey':'sb_publishable_3kcIRxESMdgXMEwvFs3_0A_0JZkJqZT'}});
     if(response.ok){
      const book=await response.json();
      if(book?.trovato&&book?.titolo){
@@ -827,9 +947,17 @@ async function lookupISBN(){
    // La miniatura di Google Books potrebbe appartenere a un'edizione differente;
    // non viene quindi scelta automaticamente.
   }
-  if(!title){showSBNLookup(isbn);const sources=[...new Set(availableSources)];toast(reachable?'Nessuna scheda ISBN trovata nelle fonti raggiunte ('+sources.join(', ')+'). Prova Cerca per titolo e autore.':'Non riesco a collegarmi ai cataloghi. Controlla la connessione e riprova.');ensureBookSearch();return}
   if(normISBN($('#barcode').value)!==isbn)return;
+  if(!title){
+   showSBNLookup(isbn);
+   bookLookupStatus(reachable
+    ? 'Nessun libro trovato per questo ISBN. Prova la ricerca per titolo e autore.'
+    : 'I cataloghi non sono raggiungibili. Riprova tra poco.');
+   ensureBookSearch();
+   return;
+  }
   $('#kind').value='book';updateKind();$('#itemName').value=title;
+  bookLookupStatus('Libro trovato: '+title);
   if(authors.length)$('#author').value=uniqueNames(authors).join(', ');
   const notes=[publisher&&'Editore: '+publisher,date&&'Pubblicazione: '+date].filter(Boolean).join(' · ');
   if(notes&&!$('#desc').value.trim())$('#desc').value=notes;
@@ -853,7 +981,7 @@ async function lookupISBN(){
    toast('📚 Libro trovato! La copertina non è disponibile automaticamente. Puoi sceglierne un’altra in «Cambia copertina».');
    console.info('Diagnostica copertine ISBN',isbn,checks);
   }
- }catch(e){console.warn('Errore ricerca ISBN:',e);toast('Ricerca non riuscita. Riprova.')}finally{isbnLookupBtn.disabled=false;isbnLookupBtn.textContent='📖 Cerca ISBN online'}
+ }catch(e){console.warn('Errore ricerca ISBN:',e);bookLookupStatus('Ricerca non riuscita. Riprova.')}finally{isbnLookupBtn.disabled=false;isbnLookupBtn.textContent='📖 Cerca ISBN online'}
 }
 // Ricerca aggiuntiva, utilizzabile anche con libri senza ISBN registrato nei cataloghi.
 // Fallback SBN: opens the national catalogue in a new browser tab.
@@ -933,18 +1061,27 @@ async function lookupEAN(){
  }catch(e){console.warn('Ricerca EAN:',e);toast('Archivio EAN non raggiungibile. Puoi inserire i dati manualmente.')}
  finally{catalogSearchBusy=false;btn.disabled=false;btn.textContent=oldText;updateCodeLookupLabel()}
 }
+function isBookISBN(code){
+ return (/^97[89]\d{10}$/.test(code)||/^\d{9}[\dX]$/.test(code))&&checkISBN(code);
+}
 async function lookupCode(){
  const code=normISBN($('#barcode').value);
  if(!code){toast('Prima scansiona o inserisci un codice');return}
  // ISBN-13: soltanto 978 / 979, non un qualsiasi EAN a 13 cifre.
- if((/^97[89]\d{10}$/.test(code)||/^(?:\d{9}[\dX])$/.test(code))&&checkISBN(code))return lookupISBN();
+ if(isBookISBN(code))return lookupISBN();
+ if($('#kind').value==='book'){bookLookupStatus('Inserisci un ISBN valido per cercare il libro');return}
  if(isEAN(code))return lookupEAN();
  toast('Codice non valido: controlla le cifre inserite');
 }
 isbnLookupBtn.addEventListener('click',lookupCode);
 
-let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;$('#scanBack').hidden=false;page('scan');void startCamera()};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){
+let scanForItem=false,scanForBook=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=true;scanForBook=$('#kind').value==='book';$('#scanBack').hidden=false;page('scan');void startCamera()};$('#scanBack').onclick=()=>{scanForItem=false;stopCamera();page('add');restoreDraft(false)};function resolveScan(code){
  code=String(code||'').trim();if(!code)return;stopCamera();
+ if(scanForItem&&scanForBook&&!isBookISBN(normISBN(code))){
+  scanStatus('Questo codice non è un ISBN valido. Avvia la scansione e inquadra il codice ISBN sul retro del libro, oppure inseriscilo qui.');
+  return;
+ }
+ if(code.startsWith('DLM-D-')){void window.openPantryPositionQR?.(code);return}
  if(code.startsWith('DLM-I-')){const item=db.items.find(i=>i.id===code.slice(6));if(item)showItem(item.id);else $('#scanResult').innerHTML='<div class="panel">Oggetto o libro non presente in questo archivio.</div>';return}
  if(code.startsWith('DLM-P-')){
   const p=db.places.find(x=>x.id===code.slice(6));
@@ -960,7 +1097,16 @@ let scanForItem=false;$('#scanForItem').onclick=()=>{saveDraft();scanForItem=tru
   focusScanResult();
   return;
  }
- if(scanForItem){scanForItem=false;page('add');restoreDraft(false);$('#barcode').value=code;saveDraft();toast('Codice inserito nel modulo');if(/^\d{13}$/.test(code)&&isEAN(code))lookupCode();return}
+ if(scanForItem){
+  scanForItem=false;
+  page('add');
+  restoreDraft(false);
+  $('#barcode').value=scanForBook?normISBN(code):code;
+  saveDraft();
+  toast('Codice inserito nel modulo');
+  if(scanForBook||isEAN(code))void lookupCode();
+  return;
+ }
  const item=db.items.find(i=>i.barcode===code);if(item)showItem(item.id);else {$('#scanResult').innerHTML='<div class="panel">Nessun oggetto associato a questo codice. Puoi aggiungerlo manualmente.</div>';focusScanResult();}
 }
 // Porta subito in vista il risultato dopo una scansione QR o codice a barre.
@@ -1102,32 +1248,140 @@ $('#scanImageFile').addEventListener('change',async e=>{
  }finally{if(url)URL.revokeObjectURL(url);e.target.value=''}
 });
 $('#startScan').onclick=startCamera;$('#stopScan').onclick=stopCamera;if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});const dlmBookCategoryDefaults=['Narrativa','Romanzi','Gialli e thriller','Fantasy e fantascienza','Libri di cucina','Bambini e ragazzi','Fumetti e manga','Storia','Scienza e natura','Manuali e hobby','Viaggi','Biografie','Saggi','Poesia','Scuola e studio','Arte e fotografia','Sport','Religione e spiritualità','Salute e benessere','Economia e lavoro','Lingue straniere','Dizionari ed enciclopedie','Altro'];
-const dlmBookCategoryStorage='dlm-custom-book-categories-v1';
-function dlmBookCategoryOptions(){
- let custom=[];try{custom=JSON.parse(localStorage.getItem(dlmBookCategoryStorage)||'[]')}catch{}
- const fromBooks=db.items.filter(i=>i.kind==='book').map(i=>i.category).filter(Boolean);
- return [...new Set([...dlmBookCategoryDefaults,...custom,...fromBooks].map(x=>String(x||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'it',{sensitivity:'base'}));
+const dlmCategoryPickers=[
+ {kind:'book',select:'dlmBookCategorySelect',add:'dlmAddBookCategory',defaults:dlmBookCategoryDefaults,
+  storageKey:()=> 'dlm-custom-book-categories-v1'},
+ {kind:'object',select:'dlmObjectCategorySelect',add:'dlmAddObjectCategory',
+  defaults:[],
+  storageKey:()=> 'dlm-custom-object-categories-v1:'+ (window.dlmCategoryOwnerId?.()||'guest')}
+];
+function readCustomCategories(storageKey){
+ try{
+  const categories=JSON.parse(localStorage.getItem(storageKey)||'[]');
+  return Array.isArray(categories)?categories:[];
+ }catch{return []}
 }
-function dlmSyncBookCategory(){
- const picker=document.getElementById('dlmBookCategorySelect');if(!picker)return;
+function categoryKey(value){return String(value||'').trim().toLocaleLowerCase('it')}
+function categoryOptions({kind,defaults},custom){
+ const used=db.items.filter(i=>(i.kind==='book'?'book':'object')===kind).map(i=>i.category)
+  .filter(name=>kind==='book'||categoryKey(name)!=='libri');
+ const distinct=new Map();
+ for(const value of [...defaults,...custom,...used]){
+  const name=String(value||'').trim();
+  const key=categoryKey(name);
+  if(name&&!distinct.has(key))distinct.set(key,name);
+ }
+ return [...distinct.values()].sort((a,b)=>a.localeCompare(b,'it',{sensitivity:'base'}));
+}
+function syncItemCategory(){
+ const config=dlmCategoryPickers.find(picker=>picker.kind===$('#kind').value);
+ const select=config&&document.getElementById(config.select);
+ if(!select)return;
  const current=$('#itemCategory').value.trim();
- picker.replaceChildren(new Option('Seleziona una categoria…',''),...dlmBookCategoryOptions().map(v=>new Option(v,v)));
- if(current&&!Array.from(picker.options).some(o=>o.value===current))picker.add(new Option(current,current));
- picker.value=current;
+ const options=categoryOptions(config,readCustomCategories(config.storageKey()));
+ select.replaceChildren(new Option('Seleziona una categoria…',''),...options.map(name=>new Option(name,name)));
+ if(config.kind==='object'){
+  const create=new Option('＋ Crea nuova categoria','');
+  create.dataset.createCategory='';
+  select.add(create,1);
+ }
+ const existing=options.find(name=>categoryKey(name)===categoryKey(current));
+ if(current&&!existing)select.add(new Option(current,current));
+ select.value=existing||current;
+ if(config.kind==='object')refreshObjectCategoryManager(options);
 }
-document.getElementById('dlmBookCategorySelect')?.addEventListener('change',e=>{$('#itemCategory').value=e.target.value;saveDraft()});
-document.getElementById('dlmAddBookCategory')?.addEventListener('click',()=>{
- const name=prompt('Come vuoi chiamare la nuova categoria di libri?')?.trim();
- if(!name)return;
- if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
- let custom=[];try{custom=JSON.parse(localStorage.getItem(dlmBookCategoryStorage)||'[]')}catch{}
- const existing=dlmBookCategoryOptions().find(x=>x.toLocaleLowerCase()===name.toLocaleLowerCase());
- const chosen=existing||name;
- if(!existing){custom.push(chosen);try{localStorage.setItem(dlmBookCategoryStorage,JSON.stringify(custom))}catch{}}
- $('#itemCategory').value=chosen;dlmSyncBookCategory();saveDraft();toast('Categoria disponibile nella tendina 💜');
-});
-function updateKind(){const isBook=$('#kind').value==='book';const bookPicker=document.getElementById('dlmBookCategoryPicker');if(bookPicker)bookPicker.hidden=!isBook;const objectCategory=document.getElementById('dlmObjectCategoryLabel');if(objectCategory)objectCategory.hidden=isBook;if(isBook)dlmSyncBookCategory();const photoAiDropdown=document.getElementById('photoAiDropdown');if(photoAiDropdown){photoAiDropdown.hidden=isBook;if(isBook)photoAiDropdown.open=false;}$('#authorWrap').hidden=!isBook;$('#lookupBook').hidden=!isBook;['bookIsbnTools','sbnDirectBox','bookCoverTools'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook});['googleCoverSearchBtn','pasteBookCoverBtn','pasteCoverHelp'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook})}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,category:$('#itemCategory').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemCategory','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=isEAN(code)&&!/^97[89]/.test(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
-$('#barcode').addEventListener('input',updateCodeLookupLabel);
+function refreshObjectCategoryManager(options){
+ const select=$('#dlmManagedObjectCategory');
+ const current=select.value;
+ select.replaceChildren(...options.map(name=>new Option(name,name)));
+ if(!options.length)select.add(new Option('Nessuna categoria da gestire',''));
+ select.value=options.includes(current)?current:options[0]||'';
+ select.disabled=$('#dlmRenameObjectCategory').disabled=$('#dlmDeleteObjectCategory').disabled=!options.length;
+}
+function manageObjectCategory(remove){
+ const oldName=$('#dlmManagedObjectCategory').value;
+ if(!oldName)return;
+ const oldKey=categoryKey(oldName);
+ const items=db.items.filter(item=>item.kind!=='book'&&categoryKey(item.category)===oldKey);
+ const count=items.length===1?'1 oggetto':items.length+' oggetti';
+ const config=dlmCategoryPickers.find(picker=>picker.kind==='object');
+ const storageKey=config.storageKey();
+ const custom=readCustomCategories(storageKey);
+ let name='';
+ if(remove){
+  const message=items.length?' La categoria sarà rimossa da '+count+'. Gli oggetti resteranno nell’inventario.':'';
+  if(!confirm('Eliminare la categoria «'+oldName+'»?'+message))return;
+ }else{
+  name=prompt('Nuovo nome per «'+oldName+'»'+(items.length?' (aggiorna '+count+')':'')+'?',oldName)?.trim();
+  if(!name||name===oldName)return;
+  if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
+  const newKey=categoryKey(name);
+  if(newKey!==oldKey&&categoryOptions(config,custom).some(value=>categoryKey(value)===newKey)){
+   toast('Esiste già una categoria con questo nome');
+   return;
+  }
+ }
+ const next=custom.filter(value=>categoryKey(value)!==oldKey);
+ if(name)next.push(name);
+ try{localStorage.setItem(storageKey,JSON.stringify(next))}
+ catch{toast('Impossibile salvare le categorie sul dispositivo');return}
+ const previous=items.map(item=>item.category);
+ for(const item of items)item.category=name;
+ if(items.length&&!save()){
+  items.forEach((item,index)=>{item.category=previous[index]});
+  localStorage.setItem(storageKey,JSON.stringify(custom));
+  return;
+ }
+ if(categoryKey($('#itemCategory').value)===oldKey){
+  $('#itemCategory').value=name;
+  saveDraft();
+ }
+ syncItemCategory();
+ if(name)$('#dlmManagedObjectCategory').value=name;
+ renderItems();
+ toast(remove?'Categoria eliminata':'Categoria rinominata');
+ window.familyUpdateObjectCategories?.(items);
+}
+$('#dlmRenameObjectCategory').onclick=()=>manageObjectCategory(false);
+$('#dlmDeleteObjectCategory').onclick=()=>manageObjectCategory(true);
+for(const config of dlmCategoryPickers){
+ document.getElementById(config.select)?.addEventListener('change',e=>{
+  if(e.target.selectedOptions[0]?.hasAttribute('data-create-category')){
+   syncItemCategory();
+   document.getElementById(config.add)?.click();
+   return;
+  }
+  $('#itemCategory').value=e.target.value;
+  saveDraft();
+ });
+ document.getElementById(config.add)?.addEventListener('click',()=>{
+  const name=prompt('Come vuoi chiamare la nuova categoria?')?.trim();
+  if(!name)return;
+  if(name.length>70){toast('Il nome della categoria è troppo lungo');return}
+  const storageKey=config.storageKey();
+  const custom=readCustomCategories(storageKey);
+  const existing=categoryOptions(config,custom).find(value=>categoryKey(value)===categoryKey(name));
+  if(!existing){
+   try{localStorage.setItem(storageKey,JSON.stringify([...custom,name]))}
+   catch{toast('Impossibile salvare la categoria sul dispositivo');return}
+  }
+  $('#itemCategory').value=existing||name;
+  syncItemCategory();
+  saveDraft();
+  toast('Categoria disponibile nella tendina 💜');
+ });
+}
+function updateKind(){
+ const isBook=$('#kind').value==='book';
+ const isEditing=Boolean($('#editId').value);
+ $('#formHeading').textContent=isBook
+  ? (isEditing?'Modifica libro ✏️':'Aggiungi libro ✨')
+  : (isEditing?'Modifica oggetto ✏️':'Aggiungi oggetto ✨');
+ $('#dlmItemNameLabel').textContent=isBook?'Titolo *':'Oggetto *';
+ $('#itemName').placeholder=isBook?'Es. Il piccolo principe':'Es. Decorazioni di Natale';
+ updateCodeLookupLabel();
+ const bookPicker=document.getElementById('dlmBookCategoryPicker');if(bookPicker)bookPicker.hidden=!isBook;const objectCategory=document.getElementById('dlmObjectCategoryLabel');if(objectCategory)objectCategory.hidden=isBook;syncItemCategory();const photoAiDropdown=document.getElementById('photoAiDropdown');if(photoAiDropdown){photoAiDropdown.hidden=isBook;if(isBook)photoAiDropdown.open=false;}$('#authorWrap').hidden=!isBook;$('#lookupBook').hidden=!isBook;['bookIsbnTools','sbnDirectBox','bookCoverTools'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook});['googleCoverSearchBtn','pasteBookCoverBtn','pasteCoverHelp'].forEach(id=>{const el=document.getElementById(id);if(el)el.hidden=!isBook})}$('#kind').addEventListener('change',()=>{updateKind();saveDraft()});function saveDraft(){if(!$('#itemName'))return;let data={editId:$('#editId').value,kind:$('#kind').value,itemName:$('#itemName').value,author:$('#author').value,category:$('#itemCategory').value,barcode:$('#barcode').value,desc:$('#desc').value,itemPlace:$('#itemPlace').value,value:$('#value').value,photo:photoData};try{localStorage.setItem(DRAFT_KEY,JSON.stringify(data))}catch{toast('Spazio insufficiente: bozza non salvata')}}function restoreDraft(notify=true){let d;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch{}if(!d)return;for(let k of ['editId','kind','itemName','author','barcode','desc','itemPlace','value'])if(d[k]!==undefined)$('#'+k).value=d[k];$('#itemCategory').value=d.category??d.itemCategory??'';photoData=d.photo||'';if(photoData){$('#photoPreview').src=photoData;$('#photoPreview').hidden=false}updateKind();if(notify)toast('Bozza recuperata 💜')}function updateCodeLookupLabel(){const code=normISBN($('#barcode').value),ean=$('#kind').value!=='book'&&isEAN(code)&&!isBookISBN(code);if(!isbnLookupBtn.disabled)isbnLookupBtn.textContent=ean?'🔎 Cerca EAN online':'📖 Cerca ISBN online'}
+$('#barcode').addEventListener('input',()=>{bookLookupStatus();updateCodeLookupLabel()});
 $('#itemForm').addEventListener('input',saveDraft);$('#itemForm').addEventListener('change',saveDraft);window.addEventListener('pagehide',()=>{if($('#add').classList.contains('active'))saveDraft()});updateKind();renderPlaces();renderStats();page('home');
 
 /* Aggiornamento PWA: conserva archivio e bozze nel localStorage. */

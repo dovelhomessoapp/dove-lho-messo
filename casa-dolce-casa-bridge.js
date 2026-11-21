@@ -103,15 +103,16 @@ let token=null,house=null,sending=false;
 let refreshToken=null;
 let familyNicknames=new Map();
 function currentFamilyUserId(){try{return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).sub||null}catch{return null}}
+window.dlmCategoryOwnerId=currentFamilyUserId;
 function showFamilyCreator(item){return item?.createdByName||familyNicknames.get(item?.createdBy)||'Non identificato'}
 const SESSION_KEY='dlm-casa-dolce-casa-family-refresh-v1';
 
-// Conserva la categoria del libro nella descrizione cloud finché la tabella items non ha una colonna dedicata.
+// Conserva la categoria nella descrizione cloud con il marcatore già supportato dalle versioni precedenti.
 // Il marcatore è rimosso dalla descrizione mostrata all'utente.
 const DLM_BOOK_CATEGORY_TAG='[DLM_BOOK_CATEGORY:';
-function dlmCloudDescription(description,category,kind){
+function dlmCloudDescription(description,category){
  const cleaned=dlmReadCloudDescription(description).desc;
- if(kind!=='book'||!String(category||'').trim())return cleaned||null;
+ if(!String(category||'').trim())return cleaned||null;
  return (cleaned?cleaned+'\n':'')+DLM_BOOK_CATEGORY_TAG+encodeURIComponent(String(category).trim())+']';
 }
 function dlmReadCloudDescription(description){
@@ -470,8 +471,9 @@ function adminDate(value){
  return new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);
 }
 async function refreshAdminPanel(){
- if(!token)return;
- let rows,summary;
+ const adminId=currentFamilyUserId();
+ if(!adminId)return;
+ let rows,summary,deletions;
  try{
   const r=await familyFetch(base+'/rest/v1/rpc/admin_dashboard',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
   if(!r.ok){const e=await r.json().catch(()=>({}));if(String(e.message||'').includes('ADMIN_ONLY'))return;throw Error(e.message||'Pannello admin non disponibile')}
@@ -479,6 +481,9 @@ async function refreshAdminPanel(){
   const s=await familyFetch(base+'/rest/v1/rpc/admin_summary',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
   summary=s.ok?await s.json():{};
  }catch(e){console.warn('Pannello amministratore:',e);return}
+ if(adminId!==currentFamilyUserId())return;
+ try{deletions=await familyRpc('dlm_admin_account_deletion_requests',{})}catch{}
+ if(adminId!==currentFamilyUserId())return;
 
  const anchor=el('familyMembersList')?.parentElement||el('familyOnline');
  if(!anchor)return;
@@ -509,6 +514,25 @@ async function refreshAdminPanel(){
  '<div style="padding:11px;border-radius:14px;background:#f5eaff"><strong style="font-size:1.35em">'+Number(sum.premium_homes||0)+'</strong><br><small>Case Premium</small></div></div>'+
  '<p class="hint">“Installata” significa aperta in modalità PWA/standalone da quando questo registro è attivo. Gli utenti che la usano solo da Safari risultano come browser.</p>'+
  '<div style="overflow:auto;-webkit-overflow-scrolling:touch"><table style="width:100%;border-collapse:collapse;font-size:.86rem"><thead><tr><th style="text-align:left;padding:9px">Utente</th><th style="text-align:left;padding:9px">Piano</th><th style="padding:9px">Installata / dispositivi</th><th style="text-align:left;padding:9px">Ultimo utilizzo</th><th style="text-align:left;padding:9px">Iscritto</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+ const requests=document.createElement('section');
+ requests.style.margin='14px 0';
+ requests.innerHTML='<h4>Richieste di eliminazione account</h4>';
+ if(!Array.isArray(deletions)||!deletions.length){
+  const status=document.createElement('p');
+  status.className='hint';
+  status.textContent=Array.isArray(deletions)?'Nessuna richiesta da gestire.':'Impossibile caricare le richieste. Tocca Aggiorna per riprovare.';
+  requests.append(status);
+ }else{
+  const list=document.createElement('ul');
+  for(const request of deletions){
+   const item=document.createElement('li');
+   item.textContent=(request.email||request.user_id)+' · '+adminDate(request.requested_at);
+   item.style.overflowWrap='anywhere';
+   list.append(item);
+  }
+  requests.append(list);
+ }
+ panel.firstElementChild.after(requests);
  panel.querySelector('#dlmAdminRefresh')?.addEventListener('click',()=>void refreshAdminPanel());
 }
 
@@ -658,6 +682,85 @@ async function familyRpc(name,args){
  if(!response.ok)throw Error(data?.message||'Funzione non ancora attiva su Supabase');
  return data;
 }
+const accountSettings=document.createElement('details');
+accountSettings.hidden=true;
+accountSettings.style.margin='12px 0';
+accountSettings.innerHTML=`
+ <summary>Gestisci account</summary>
+ <p class="hint">Puoi chiedere qui l’eliminazione definitiva del tuo account e dei dati personali associati.</p>
+ <button type="button" class="secondary" id="familyDeleteAccount">Elimina account</button>
+ <section id="familyDeleteConfirm" hidden aria-labelledby="familyDeleteTitle">
+  <h4 id="familyDeleteTitle">Eliminare definitivamente l’account?</h4>
+  <p>La richiesta avvia l’eliminazione dell’account e dei dati personali associati. Gli archivi condivisi verranno verificati per tutelare i dati degli altri membri.</p>
+  <p>La cancellazione viene gestita di norma entro un mese. Riceverai una conferma all’indirizzo email dell’account quando sarà completata.</p>
+  <p class="hint">Se hai attivato il rinnovo di Premium sul sito, puoi gestirlo dalla sezione Premium del sito.</p>
+  <button type="button" class="secondary" id="familyDeleteCancel">Annulla</button>
+  <button type="button" class="primary" id="familyDeleteSubmit">Conferma richiesta di eliminazione</button>
+ </section>
+ <p class="hint" id="familyDeleteStatus" role="status"></p>`;
+el('familyOnline').after(accountSettings);
+
+const deleteAccount=el('familyDeleteAccount');
+const deleteConfirm=el('familyDeleteConfirm');
+const deleteCancel=el('familyDeleteCancel');
+const deleteSubmit=el('familyDeleteSubmit');
+const deleteStatus=el('familyDeleteStatus');
+
+function showDeletionReceipt(){
+ deleteAccount.hidden=true;
+ deleteConfirm.hidden=true;
+ deleteStatus.textContent='Richiesta di eliminazione ricevuta. La cancellazione viene gestita di norma entro un mese. Ti avviseremo via email quando sarà completata.';
+}
+
+function updateAccountSettings(){
+ accountSettings.hidden=!token;
+ accountSettings.open=false;
+ deleteConfirm.hidden=true;
+ deleteAccount.hidden=false;
+ deleteStatus.textContent='';
+}
+
+accountSettings.addEventListener('toggle',async()=>{
+ if(!accountSettings.open||!token||deleteAccount.hidden)return;
+ const userId=currentFamilyUserId();
+ try{
+  const rows=await get('/rest/v1/dlm_account_deletion_requests?select=requested_at&user_id=eq.'+encodeURIComponent(userId),token);
+  if(userId===currentFamilyUserId()&&rows.length)showDeletionReceipt();
+ }catch{
+  // Submission returns the existing receipt if the status could not be loaded.
+ }
+});
+
+deleteAccount.onclick=()=>{
+ deleteConfirm.hidden=false;
+ deleteStatus.textContent='';
+ deleteCancel.focus();
+};
+deleteCancel.onclick=()=>{
+ deleteConfirm.hidden=true;
+ deleteStatus.textContent='';
+ deleteAccount.focus();
+};
+deleteSubmit.onclick=async()=>{
+ const userId=currentFamilyUserId();
+ if(!userId||deleteSubmit.disabled)return;
+ deleteSubmit.disabled=true;
+ deleteCancel.disabled=true;
+ deleteStatus.textContent='Invio della richiesta…';
+ try{
+  const receipt=await familyRpc('dlm_request_account_deletion',{});
+  if(typeof receipt!=='string'||!Number.isFinite(Date.parse(receipt)))throw Error('Missing receipt');
+  if(userId===currentFamilyUserId())showDeletionReceipt();
+ }catch{
+  if(userId===currentFamilyUserId()){
+   deleteStatus.textContent='Non siamo riusciti a confermare la richiesta. Controlla la connessione e riprova.';
+  }
+ }finally{
+  deleteSubmit.disabled=false;
+  deleteCancel.disabled=false;
+ }
+};
+
 const INVITE_KEY='dlm-pending-family-invite';
 const initialInvite=new URLSearchParams(location.hash.slice(1)).get('family_invite');
 if(initialInvite)sessionStorage.setItem(INVITE_KEY,initialInvite);
@@ -747,7 +850,7 @@ el('familyAcceptBtn').onclick=async()=>{
  if(!pendingFamilyInvite())return;
  if(el('familyAcceptBtn').disabled)return;
  el('familyAcceptBtn').disabled=true;
- try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});sessionStorage.removeItem(INVITE_KEY);history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];await load();await loadPremiumStatus();await syncEdits();await load();await uploadNew();await loadPremiumStatus();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;el('familyHouse').textContent='💜 '+house.name;updateFamilyAccept();notice('Benvenuto nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}finally{el('familyAcceptBtn').disabled=false}
+ try{await familyRpc('family_accept_invite',{p_token:pendingFamilyInvite()});sessionStorage.removeItem(INVITE_KEY);history.replaceState(null,'',location.pathname+location.search);updateFamilyAccept();const houses=await get('/rest/v1/homes?select=id,name',token);if(houses.length!==1)throw Error('Casa non disponibile');house=houses[0];void activateFamilyHome();el('familyHouse').textContent='💜 '+house.name;updateFamilyAccept();notice('Benvenuto nella casa condivisa!')}catch(e){notice('Invito: '+e.message)}finally{el('familyAcceptBtn').disabled=false}
 };
 el('familySignup').onsubmit=async e=>{
  e.preventDefault();
@@ -778,7 +881,7 @@ el('familyForm').onsubmit=async e=>{
  try{
  const r=await fetch(base+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({email:el('familyEmail').value.trim(),password:el('familyPass').value})});
  const d=await r.json();if(!r.ok)throw Error(d.error_description||d.msg||d.message||d.error||'Accesso non riuscito');el('familyPass').value='';
- token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);
+ token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);updateAccountSettings();
  const houses=await get('/rest/v1/homes?select=id,name',d.access_token);
  if(houses.length!==1){
   if(houses.length===0){
@@ -791,7 +894,7 @@ el('familyForm').onsubmit=async e=>{
   throw Error('Questo account risulta collegato a più case: contatta il proprietario.');
  }
  token=d.access_token;refreshToken=d.refresh_token;localStorage.setItem(SESSION_KEY,refreshToken);house=houses[0];el('familyHouse').textContent='💜 '+house.name;
- await load();await loadPremiumStatus();await syncEdits();await load();await uploadNew();await loadPremiumStatus();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;updateFamilyAccept();
+ void activateFamilyHome();updateFamilyAccept();
  }catch(err){notice('Errore: '+err.message)}finally{btn.disabled=false}
 };
 async function uploadNew(){
@@ -803,7 +906,7 @@ async function uploadNew(){
    let imagePath=null;
    if(i.photo){try{imagePath=await uploadPhoto(i)}catch(e){notice('Foto ancora sul telefono: '+e.message);continue}}
    if(i.place&&!cloudPlaceIds.has(i.place)){notice('Posizione locale da sincronizzare prima dell’oggetto.');continue}
-   const row={id:i.id,home_id:house.id,title:i.name,kind:i.kind==='book'?'book':'object',author:i.kind==='book'?(i.author||null):null,isbn:i.kind==='book'?(i.barcode||null):null,barcode:i.kind==='book'?null:(i.barcode||null),description:dlmCloudDescription(i.desc,i.category,i.kind),location_id:i.place||null,estimated_value:i.value===''?null:Number(i.value),created_by:i.createdBy||currentFamilyUserId(),image_url:imagePath};
+   const row={id:i.id,home_id:house.id,title:i.name,kind:i.kind==='book'?'book':'object',author:i.kind==='book'?(i.author||null):null,isbn:i.kind==='book'?(i.barcode||null):null,barcode:i.kind==='book'?null:(i.barcode||null),description:dlmCloudDescription(i.desc,i.category),location_id:i.place||null,estimated_value:i.value===''?null:Number(i.value),created_by:i.createdBy||currentFamilyUserId(),image_url:imagePath};
    const res=await familyFetch(base+'/rest/v1/items?on_conflict=id',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(row)});
    if(!res.ok){const err=await res.json().catch(()=>({}));if(err.message==='FREE_PLAN_ITEM_LIMIT_REACHED'){notice('Hai raggiunto il limite gratuito di 30 elementi. Attiva Premium per aggiungerne altri. 💜');window.dlmRefreshLimits?.();throw Error('Limite gratuito raggiunto')}throw Error(err.message||'Errore salvataggio')}
    cloudIds.add(i.id);seenIds.add(i.id);saveSeen();pendingCreates.delete(i.id);saveCreates();
@@ -814,19 +917,44 @@ async function uploadNew(){
  }catch(e){notice('Sincronizzazione da riprovare: '+e.message)}
  finally{sending=false}
 }
-async function syncEdits(){
+let activeEditSync=null;
+function syncEdits(){
+ if(!activeEditSync)activeEditSync=flushEdits().finally(()=>{activeEditSync=null});
+ return activeEditSync;
+}
+async function flushEdits(){
  if(!token||!house||!navigator.onLine)return;
- for(const [id,edit] of pendingEdits){
+ while(pendingEdits.size){
+  const [id,edit]=pendingEdits.entries().next().value;
   try{
-   const r=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({title:edit.name,kind:edit.kind==='book'?'book':'object',author:edit.kind==='book'?(edit.author||null):null,isbn:edit.kind==='book'?(edit.barcode||null):null,barcode:edit.kind==='book'?null:(edit.barcode||null),description:dlmCloudDescription(edit.desc,edit.category,edit.kind),location_id:edit.place||null,estimated_value:edit.value===''?null:Number(edit.value),updated_by:edit.updatedBy||null})});
+   const payload=edit.categoryOnly
+    ? {description:dlmCloudDescription(edit.desc,edit.category),updated_by:edit.updatedBy||null}
+    : {title:edit.name,kind:edit.kind==='book'?'book':'object',author:edit.kind==='book'?(edit.author||null):null,isbn:edit.kind==='book'?(edit.barcode||null):null,barcode:edit.kind==='book'?null:(edit.barcode||null),description:dlmCloudDescription(edit.desc,edit.category),location_id:edit.place||null,estimated_value:edit.value===''?null:Number(edit.value),updated_by:edit.updatedBy||null};
+   const r=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(id)+'&home_id=eq.'+encodeURIComponent(house.id),{method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload)});
    const rows=await r.json();
    if(!r.ok||!Array.isArray(rows)||rows.length!==1)throw Error(rows?.message||'Aggiornamento non confermato');
-   pendingEdits.delete(id);saveEdits();notice('Modifica offline sincronizzata.');
+   if(pendingEdits.get(id)===edit){pendingEdits.delete(id);saveEdits();}
+   notice('Modifica sincronizzata.');
   }catch(e){notice('Modifica in attesa: '+e.message);break}
  }
 }
 window.familySyncQueue=id=>{if(id&&!cloudIds.has(id)&&!pendingCreates.has(id)){pendingCreates.add(id);saveCreates()}if(token&&house){if(navigator.onLine)void syncEdits().then(uploadNew);else notice('Oggetto salvato sul telefono: sarà sincronizzato quando torni online.')}};
 window.addEventListener('online',()=>{if(token&&house){void syncEdits().then(uploadNew)}});
+window.familyUpdateObjectCategories=items=>{
+ if(!token||!house)return;
+ const editorId=currentFamilyUserId();
+ let queued=false;
+ for(const item of items){
+  if(!cloudIds.has(item.id)&&!seenIds.has(item.id))continue;
+  const pending=pendingEdits.get(item.id)||{categoryOnly:true,desc:item.desc};
+  pendingEdits.set(item.id,{...pending,category:item.category,updatedBy:editorId});
+  queued=true;
+ }
+ if(!queued)return;
+ saveEdits();
+ if(navigator.onLine)void syncEdits();
+ else notice('Categorie salvate sul telefono: saranno sincronizzate quando torni online.');
+};
 window.familyUpdateItem=async item=>{
  const editorId=currentFamilyUserId();
  if(editorId){item.updatedBy=editorId;item.updatedByName=familyNicknames.get(editorId)||null;}
@@ -836,7 +964,7 @@ window.familyUpdateItem=async item=>{
  try{
   const res=await familyFetch(base+'/rest/v1/items?id=eq.'+encodeURIComponent(item.id)+'&home_id=eq.'+encodeURIComponent(house.id),{
    method:'PATCH',headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},
-   body:JSON.stringify({title:item.name,kind:item.kind==='book'?'book':'object',author:item.kind==='book'?(item.author||null):null,isbn:item.kind==='book'?(item.barcode||null):null,barcode:item.kind==='book'?null:(item.barcode||null),description:dlmCloudDescription(item.desc,item.category,item.kind),location_id:item.place&&cloudPlaceIds.has(item.place)?item.place:null,estimated_value:item.value===''?null:Number(item.value),updated_by:editorId})
+   body:JSON.stringify({title:item.name,kind:item.kind==='book'?'book':'object',author:item.kind==='book'?(item.author||null):null,isbn:item.kind==='book'?(item.barcode||null):null,barcode:item.kind==='book'?null:(item.barcode||null),description:dlmCloudDescription(item.desc,item.category),location_id:item.place&&cloudPlaceIds.has(item.place)?item.place:null,estimated_value:item.value===''?null:Number(item.value),updated_by:editorId})
   });
   const result=await res.json().catch(()=>null);
   if(!res.ok||!Array.isArray(result)||result.length!==1)throw Error(result?.message||'Conferma server non ricevuta');
@@ -927,7 +1055,36 @@ window.familyDeleteItem=async id=>{
  finally{setTimeout(()=>deletingIds.delete(id),1500)}
 };
 el('familyReload').onclick=()=>syncEdits().then(load).then(loadPremiumStatus).then(uploadNew).then(loadPremiumStatus).catch(err=>notice(err.message));
-el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);localStorage.setItem('dlm-premium-enabled-v1','false');document.documentElement.dataset.premium='false';window.dlmRefreshLimits?.();refreshToken=null;token=null;house=null;el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;firstObjectGuide.hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano disponibili su questo dispositivo.')};
+el('familyExit').onclick=()=>{window.familyPantryDisconnect?.();localStorage.removeItem(SESSION_KEY);localStorage.setItem('dlm-premium-enabled-v1','false');document.documentElement.dataset.premium='false';window.dlmRefreshLimits?.();refreshToken=null;token=null;house=null;updateAccountSettings();el('dlmAdminPanel')?.remove();el('familyForm').hidden=false;el('familySignupBox').hidden=false;el('familyOnline').hidden=true;firstObjectGuide.hidden=true;updateFamilyAccept();notice('Disconnessa. I dati già caricati restano disponibili su questo dispositivo.')};
+// Expose the authenticated household before downloading inventory, photos and optional settings.
+let homeWarmup=null;
+function activateFamilyHome(){
+ const activeHouse=house,userId=currentFamilyUserId();
+ el('familyHouse').textContent='💜 '+activeHouse.name;
+ el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
+ el('familyCount').textContent='Aggiornamento archivio in corso…';
+ updateAccountSettings();updateFamilyAccept();updateCreateHomeVisibility();
+ if(homeWarmup?.house===activeHouse)return homeWarmup.promise;
+ notice('Accesso riuscito. Sto aggiornando l’archivio…');
+ if(window.familyPantryConnect)window.familyPantryConnect(activeHouse.id,async()=>{if(needsRenewal())await refreshOnce();return token});
+ const current=()=>house===activeHouse&&currentFamilyUserId()===userId;
+ const warmup={house:activeHouse};
+ homeWarmup=warmup;
+ warmup.promise=(async()=>{
+  // Optional subscription lookup must not hold up the inventory or access screen.
+  void loadPremiumStatus().catch(err=>{if(current())console.warn('Stato abbonamento da aggiornare',err)});
+  await load();
+  if(!current())return;
+  const hadEdits=pendingEdits.size>0;
+  await syncEdits();
+  if(!current())return;
+  if(pendingCreates.size)await uploadNew();
+  else if(hadEdits)await load();
+ })().catch(err=>{
+  if(current())notice('Account collegato. Archivio da aggiornare: '+(err?.message||'errore di connessione')+'. Riprova con «Aggiorna inventario».');
+ }).finally(()=>{if(homeWarmup===warmup)homeWarmup=null});
+ return warmup.promise;
+}
 async function restoreSession(){
  const saved=localStorage.getItem(SESSION_KEY);
  if(!saved)return;
@@ -935,6 +1092,7 @@ async function restoreSession(){
  if(!navigator.onLine){notice('Sei offline: puoi consultare gli oggetti già salvati. L’accesso familiare riprenderà quando torna Internet.');return}
  try{
   await renew();
+  updateAccountSettings();
   const houses=await get('/rest/v1/homes?select=id,name',token);
   if(houses.length!==1){
    if(houses.length===0){
@@ -943,8 +1101,8 @@ async function restoreSession(){
    throw Error('Casa non disponibile');
   }
   house=houses[0];el('familyHouse').textContent='💜 '+house.name;
-  await load();await loadPremiumStatus();await syncEdits();await load();await uploadNew();await loadPremiumStatus();if(window.familyPantryConnect)window.familyPantryConnect(house.id,async()=>{if(needsRenewal())await refreshOnce();return token});el('familyForm').hidden=true;el('familySignupBox').hidden=true;el('familyOnline').hidden=false;
-  notice('Accesso ripristinato.');
+  void activateFamilyHome();
+
  }catch(e){
   if(!navigator.onLine||e instanceof TypeError){notice('Connessione non disponibile: gli oggetti salvati restano consultabili. Riprova quando torni online.');return}
   // Non cancellare la sessione per errori temporanei di rete, RLS o caricamento delle impostazioni.
