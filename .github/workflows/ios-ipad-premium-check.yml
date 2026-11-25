@@ -1,0 +1,57 @@
+name: iPad Premium purchase test
+on:
+  push:
+    branches: [test/ipad-premium-44-1]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  storekit:
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: native/ios
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Select Xcode
+        run: |
+          xcode_path=$(find /Applications -maxdepth 1 -name 'Xcode_2*.app' | sort -V | tail -1)
+          test -n "$xcode_path"
+          echo "DEVELOPER_DIR=$xcode_path/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Prepare unsigned app and local StoreKit fixtures
+        run: |
+          npm ci --no-audit --no-fund
+          npm run prepare:ios
+          npm run check
+          gem install --user-install xcodeproj --no-document
+          export GEM_HOME="$(ruby -e 'puts Gem.user_dir')"
+          ruby scripts/add-screenshot-tests.rb
+          mkdir -p ios/App/StoreScreenshots
+          cp scripts/iPadPremiumTests.swift ios/App/StoreScreenshots/StoreScreenshots.swift
+          python3 scripts/prepare-ipad-premium-test.py
+          ruby -rxcodeproj <<'RUBY'
+          project = Xcodeproj::Project.open('ios/App/App.xcodeproj')
+          target = project.targets.find { |target| target.name == 'StoreScreenshots' }
+          group = project.main_group['StoreScreenshots']
+          target.resources_build_phase.add_file_reference(group.new_file('Premium.storekit'))
+          project.save
+          RUBY
+          xcodebuild -version
+      - name: Buy each subscription with local StoreKit on iPad
+        run: |
+          xcrun simctl list devices available
+          device_id=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; devices=[d for r,g in json.load(sys.stdin)["devices"].items() if ".iOS-" in r for d in g if "iPad" in d["name"]]; print(max(devices,key=lambda d:("Air" in d["name"] and "11" in d["name"], "M3" in d["name"]))["udid"])')
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme StoreScreenshots -configuration Debug -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath "$RUNNER_TEMP/dlm-ipad-build" -resultBundlePath "$RUNNER_TEMP/Premium.xcresult" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO test | tee "$RUNNER_TEMP/ipad-premium.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipad-premium-test-result
+          path: |
+            ${{ runner.temp }}/ipad-premium.log
+            ${{ runner.temp }}/Premium.xcresult
+          if-no-files-found: ignore
