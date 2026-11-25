@@ -1,6 +1,7 @@
 import Capacitor
 import Foundation
 import StoreKit
+import UIKit
 
 enum PremiumStore {
     enum Plan: String {
@@ -24,6 +25,7 @@ enum PremiumStore {
     enum StoreError: LocalizedError {
         case productUnavailable
         case invalidTransaction
+        case purchaseWindowUnavailable
 
         var errorDescription: String? {
             switch self {
@@ -31,6 +33,8 @@ enum PremiumStore {
                 return "L’abbonamento non è disponibile al momento."
             case .invalidTransaction:
                 return "Non è stato possibile verificare l’acquisto con Apple."
+            case .purchaseWindowUnavailable:
+                return "Torna alla schermata Premium e riprova ad aprire l’acquisto Apple."
             }
         }
     }
@@ -48,13 +52,24 @@ enum PremiumStore {
 
     // The callback must verify the signed transaction on the server and
     // persist the entitlement before StoreKit is told the purchase is complete.
-    static func purchase(
+    @MainActor static func purchase(
         plan: Plan,
         accountToken: UUID,
+        presenter: UIViewController?,
         activate: (String) async throws -> Void
     ) async throws -> PurchaseOutcome {
         let product = try await product(for: plan)
-        switch try await product.purchase(options: [.appAccountToken(accountToken)]) {
+        let options: Set<Product.PurchaseOption> = [.appAccountToken(accountToken)]
+        let result: Product.PurchaseResult
+        if #available(iOS 17.0, *) {
+            guard let scene = presenter?.viewIfLoaded?.window?.windowScene else {
+                throw StoreError.purchaseWindowUnavailable
+            }
+            result = try await product.purchase(confirmIn: scene, options: options)
+        } else {
+            result = try await product.purchase(options: options)
+        }
+        switch result {
         case .success(let result):
             guard case .verified(let transaction) = result,
                   transaction.productID == plan.productID,
@@ -144,7 +159,9 @@ final class PremiumStorePlugin: CAPPlugin, CAPBridgedPlugin {
                     call.reject("Piano Premium non disponibile.")
                     return
                 }
-                let outcome = try await PremiumStore.purchase(plan: plan, accountToken: accountID) { signed in
+                let outcome = try await PremiumStore.purchase(
+                    plan: plan, accountToken: accountID, presenter: self.bridge?.viewController
+                ) { signed in
                     try await self.submit(homeID: homeID, token: token, signedTransaction: signed)
                 }
                 switch outcome {
