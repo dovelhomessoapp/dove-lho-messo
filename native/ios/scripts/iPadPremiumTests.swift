@@ -27,14 +27,17 @@ final class iPadPremiumTests: XCTestCase {
 
         let premium = web.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Scopri Premium")).firstMatch
         XCTAssertTrue(premium.waitForExistence(timeout: 10))
+        web.swipeUp()
         premium.tap()
 
         let purchase = web.buttons[buttonTitle].firstMatch
+        if !purchase.waitForExistence(timeout: 3), premium.isHittable { premium.tap() }
         XCTAssertTrue(purchase.waitForExistence(timeout: 15))
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: purchase)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 20), .completed)
         purchase.tap()
-        XCTAssertTrue(web.staticTexts["Premium attivato per la tua famiglia."].waitForExistence(timeout: 30))
+        let activated = web.staticTexts["Premium attivato per la tua famiglia."].waitForExistence(timeout: 30)
+        XCTAssertTrue(activated, "Expected Premium activation. Visible text: \(web.staticTexts.allElementsBoundByIndex.map(\.label))")
         XCTAssertTrue(session.allTransactions().contains {
             $0.productIdentifier == "it.dovelhomesso.casadolcecasa.premium." + plan
         })
